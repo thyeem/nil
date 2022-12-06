@@ -1,0 +1,61 @@
+cabal-version:      3.6
+name:               nil
+version:            0.1.0.0
+
+synopsis:           Generalized zk-SNARKs Framework in Haskell
+description:        .
+                    .
+category:           Crypto, Cryptography
+author:             Francis Lim
+maintainer:         thyeem@gmail.com
+license:            MIT
+license-file:       LICENSE
+build-type:         Simple
+
+extra-source-files: README.md
+
+library
+  hs-source-dirs:
+      src
+  build-depends:
+      base
+    , base16-bytestring
+    , base64-bytestring
+    , blake2
+    , bytestring
+    , containers
+    , cryptohash-sha256
+    , cryptohash-sha512
+    , deepseq
+    , docopt >=0.7.0.6
+    , filepath
+    , parallel
+    , pretty-simple
+    , process
+    , random
+    , raw-strings-qq
+    , store
+    , tasty-quickcheck
+  -- exposed-modules:
+  default-language: Haskell2010
+
+executable nil
+    hs-source-dirs:
+        app
+    main-is:
+        Main.hs
+    -- build-depends:
+    default-language: Haskell2010
+
+test-suite test
+    type:
+        exitcode-stdio-1.0
+    hs-source-dirs:
+        test
+    main-is:
+        Spec.hs
+    build-tool-depends:
+        hspec-discover:hspec-discover >=2.0 && <3.0
+    ghc-options:
+        -threaded
+    default-language: Haskell2010
