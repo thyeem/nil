@@ -1,8 +1,7 @@
 cabal-version:      3.6
 name:               nil
 version:            0.1.0.0
-
-synopsis:           Generalized zk-SNARKs Framework in Haskell
+synopsis:           Zero-Knowledge Suite in parallelism
 description:        .
                     .
 category:           Crypto, Cryptography
@@ -19,6 +18,7 @@ library
       src
   build-depends:
       base
+    , aeson
     , base16-bytestring
     , base64-bytestring
     , blake2
@@ -33,10 +33,15 @@ library
     , pretty-simple
     , process
     , random
-    , raw-strings-qq
     , store
-    , tasty-quickcheck
-  -- exposed-modules:
+    , cmdargs
+    , text
+  exposed-modules:
+      Nil
+  other-modules:
+      Paths_nil
+      Nil.Base
+      Nil.Utils
   default-language: Haskell2010
 
 executable nil
@@ -44,7 +49,9 @@ executable nil
         app
     main-is:
         Main.hs
-    -- build-depends:
+    build-depends:
+        base
+      , nil
     default-language: Haskell2010
 
 test-suite test
@@ -58,4 +65,12 @@ test-suite test
         hspec-discover:hspec-discover >=2.0 && <3.0
     ghc-options:
         -threaded
+    build-depends:
+        base
+      , hspec
+      , hspec-discover
+      , QuickCheck
+      , nil
+    other-modules:
+        NilSpec
     default-language: Haskell2010

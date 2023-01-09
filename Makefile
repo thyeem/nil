@@ -1,9 +1,10 @@
 bin := nil
 ghc := --with-compiler=ghc-8.10.7
-opts := --ghc-options="-Wall -Wno-name-shadowing -Wno-orphans -feager-blackholing -threaded -rtsopts -with-rtsopts=-N"
-fast := $(ghc) --ghc-options=-O0 $(opts)
-release := $(ghc) --ghc-options="-O2 -fexpose-all-unfoldings -dynamic" $(opts)
+opts := "--ghc-options=-Wall -threaded -rtsopts -with-rtsopts=-N -feager-blackholing"
+fast := $(ghc) $(opts) "--ghc-options=-O0"
+release := $(ghc) $(opts) "--ghc-options=-O2 -fexpose-all-unfoldings -dynamic"
 test-opts := $(fast) --test-show-details=direct
+path := ${HOME}/.local/bin
 
 .PHONY: build
 build:
@@ -14,7 +15,13 @@ build:
 release:
 	cabal build $(release)
 	cp -f $(shell cabal list-bin $(bin)) app
+
+.PHONY: install
+install:
+	make release
 	/usr/bin/strip app/$(bin)
+	mkdir -p $(path)
+	cp -f app/$(bin) $(path)
 
 .PHONY: run
 run:
@@ -36,3 +43,7 @@ doc:
 .PHONY: opendoc
 opendoc:
 	open $(shell /usr/bin/find dist-newstyle -name "index.html")
+
+.PHONY: guide
+guide:
+	jupyter nbconvert --to html notebook/tutorial.ipynb

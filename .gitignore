@@ -1,0 +1,52 @@
+# mac
+.DS_Store
+
+# windows
+Thumbs.db
+
+# emacs
+[#]*[#]
+
+# vim
+*~
+*.sw?
+
+# haskell
+.stack-work/
+dist-newstyle/
+dist/
+newdist/
+*.hi
+*.o
+cabal.project.local
+.hspec-failures
+
+# haskell-stack
+dist-newstyle/
+.stack-work/
+stack.yaml
+stack.yaml.lock
+
+# jupyter
+*.ipynb_checkpoints
+
+# python
+__pycache__
+
+# rocksdb-zkface
+*.db
+
+# zk-SNARKs/zksign
+*.ekey
+*.vkey
+*.pf
+*.circ
+*.sig
+
+*.pdf
+
+# ignore-test-things
+tmp.*
+
+# bin
+app/nil
