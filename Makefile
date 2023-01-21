@@ -9,23 +9,26 @@ path := ${HOME}/.local/bin
 .PHONY: build
 build:
 	cabal build $(fast)
-	cp -f $(shell cabal list-bin $(bin)) app
 
 .PHONY: release
 release:
 	cabal build $(release)
-	cp -f $(shell cabal list-bin $(bin)) app
 
 .PHONY: install
 install:
 	make release
-	/usr/bin/strip app/$(bin)
-	mkdir -p $(path)
-	cp -f app/$(bin) $(path)
+	make deploy
 
-.PHONY: run
-run:
-	cabal run $(fast)
+.PHONY: dev
+dev:
+	make build
+	make deploy
+
+.PHONY: deploy
+deploy:
+	mkdir -p $(path)
+	rm -f $(path)/$(bin)
+	cp -f $(shell cabal list-bin $(bin)) $(path)
 
 .PHONY: clean
 clean:
