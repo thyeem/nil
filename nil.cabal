@@ -27,10 +27,12 @@ library
     , cryptohash-sha256
     , cryptohash-sha512
     , deepseq
+    , entropy
     , filepath
     , parallel
     , pretty-simple
     , process
+    , QuickCheck
     , random
     , store
     , text
@@ -39,6 +41,9 @@ library
   other-modules:
       Paths_nil
       Nil.Base
+      Nil.Field
+      Nil.Poly
+      Nil.PolyS
       Nil.Utils
   default-language: Haskell2010
 
