@@ -43,6 +43,8 @@ library
       Nil.Base
       Nil.Circuit
       Nil.Curve
+      Nil.Ecdata
+      Nil.Evaluator
       Nil.Field
       Nil.Graph
       Nil.Lexer

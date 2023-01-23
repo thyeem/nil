@@ -1,6 +1,8 @@
 module Nil
   ( module Nil.Circuit
   , module Nil.Curve
+  , module Nil.Ecdata
+  , module Nil.Evaluator
   , module Nil.Field
   , module Nil.Graph
   , module Nil.Lexer
@@ -15,6 +17,8 @@ where
 
 import Nil.Circuit
 import Nil.Curve
+import Nil.Ecdata
+import Nil.Evaluator
 import Nil.Field
 import Nil.Graph
 import Nil.Lexer
