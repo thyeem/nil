@@ -6,6 +6,7 @@ module Nil
   , module Nil.Lexer
   , module Nil.Parser
   , module Nil.Poly
+  , module Nil.Qap
   , module Nil.Reorg
   , module Nil.Shamir
   , module Nil.Utils
@@ -19,6 +20,7 @@ import Nil.Graph
 import Nil.Lexer
 import Nil.Parser
 import Nil.Poly
+import Nil.Qap
 import Nil.Reorg
 import Nil.Shamir
 import Nil.Utils

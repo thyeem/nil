@@ -49,6 +49,7 @@ library
       Nil.Parser
       Nil.Poly
       Nil.PolyS
+      Nil.Qap
       Nil.Reorg
       Nil.Shamir
       Nil.Utils
