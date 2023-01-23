@@ -41,7 +41,10 @@ library
   other-modules:
       Paths_nil
       Nil.Base
+      Nil.Curve
       Nil.Field
+      Nil.Lexer
+      Nil.Parser
       Nil.Poly
       Nil.PolyS
       Nil.Shamir
