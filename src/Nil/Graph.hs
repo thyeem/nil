@@ -1,0 +1,108 @@
+{-# LANGUAGE RecordWildCards #-}
+
+module Nil.Graph
+  ( write'dot
+  , export'graph
+  , dot'header
+  )
+where
+
+import Control.Monad (when)
+import Nil.Circuit
+  ( Circuit (..)
+  , Gate (..)
+  , Gateop (..)
+  , Wire (..)
+  , const'wirep
+  , out'wirep
+  )
+import Nil.Utils (die)
+import System.Exit (ExitCode (ExitSuccess))
+import System.Process (readProcessWithExitCode)
+
+-- | Export a given dot script to a graph file as pdf
+export'graph :: FilePath -> String -> IO ()
+export'graph file script = do
+  (e, _, err) <-
+    readProcessWithExitCode
+      "dot"
+      ["-Tpdf", "-o" ++ file]
+      script
+  when
+    (e /= ExitSuccess)
+    (die $ "Failed to convert - " ++ err)
+
+-- | Convert a circuit into a dot-language script
+write'dot :: Eq f => String -> Circuit f -> String
+write'dot header circuit =
+  unwords
+    ["digraph G {", header, write'gates circuit, "}"]
+
+dot'header :: String
+dot'header = "size=\"32,32\"; rankdir=LR;"
+
+write'gates :: Eq f => Circuit f -> String
+write'gates Circuit {..} =
+  unwords $ uncurry write'gate c'symbols <$> c'gates
+
+write'gate :: Eq f => [String] -> [String] -> Gate f -> String
+write'gate instances witnesses Gate {..}
+  | key g'lwire == "return" =
+      unwords [edge g'rwire g'lwire, style g'lwire]
+  | otherwise =
+      unwords
+        [ edge g'lwire g'owire
+        , style g'lwire
+        , edge g'rwire g'owire
+        , style g'rwire
+        , key g'owire
+        , "["
+        , "shape=doublecircle,"
+        , "style=filled,"
+        , "fontsize=18,"
+        , "fillcolor=" ++ color ++ ","
+        , "label=\"" ++ show g'op ++ "\"];"
+        ]
+ where
+  key wire
+    | out'wirep wire = tail (w'key wire)
+    | const'wirep wire && wire == g'lwire = "_" ++ key g'owire ++ "L"
+    | const'wirep wire && wire == g'rwire = "_" ++ key g'owire ++ "R"
+    | otherwise = w'key wire
+
+  edge from to =
+    unwords
+      [ key from
+      , "->"
+      , key to
+      , "[color=" ++ edge'color from ++ "];"
+      ]
+
+  edge'color Wire {..}
+    | w'flag == 1 = "blue"
+    | w'flag > 1 = "red"
+    | otherwise = "black"
+
+  color
+    | g'op == Add = "ivory"
+    | g'op == Mul = "lavender"
+    | otherwise = "white"
+
+  style wire
+    | const'wirep wire =
+        unwords
+          [ key wire
+          , "[shape=egg, style=dashed, label=Const, fontsize=18];"
+          ]
+    | w'key wire `elem` instances =
+        unwords
+          [ key wire
+          , "[shape=egg, style=filled, fillcolor=lightgreen, fontsize=30];"
+          ]
+    | w'key wire `elem` witnesses =
+        unwords
+          [ key wire
+          , "[shape=egg, style=filled, fillcolor=pink, fontsize=30];"
+          ]
+    | otherwise =
+        mempty

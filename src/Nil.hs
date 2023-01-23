@@ -2,6 +2,7 @@ module Nil
   ( module Nil.Circuit
   , module Nil.Curve
   , module Nil.Field
+  , module Nil.Graph
   , module Nil.Lexer
   , module Nil.Parser
   , module Nil.Poly
@@ -14,6 +15,7 @@ where
 import Nil.Circuit
 import Nil.Curve
 import Nil.Field
+import Nil.Graph
 import Nil.Lexer
 import Nil.Parser
 import Nil.Poly

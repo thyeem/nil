@@ -44,6 +44,7 @@ library
       Nil.Circuit
       Nil.Curve
       Nil.Field
+      Nil.Graph
       Nil.Lexer
       Nil.Parser
       Nil.Poly
