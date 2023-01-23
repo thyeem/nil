@@ -1,0 +1,155 @@
+#  Language: A domain-specific language (DSL) designed for the use of nil
+#
+#  * Introduced intuitive simple syntax with only three kinds of statements
+#      language | IO declaration (required) -> input description
+#           let | binding expressions (optional) -> descriptive bindings
+#           return | returns expressions (required) -> output description
+#
+#  * All elements defined over prime field Fr (characteristic of BN-254)
+#                              and elliptic curve BN-254
+#
+#  * During AST construction, parser checks if all expressions are evaluable.
+#
+#  * "return" is a final circuit evaluation result that a prover can use to prove it.
+#
+#  * All lines starting with "#" are comments.
+#
+#  * Operators available
+#
+#    |--------+--------+-------------------------------------------------------------|
+#    | Arity  | Symbol | Description                                                 |
+#    |--------+--------+-------------------------------------------------------------|
+#    | unary  |   -    | negation such that -(-a) = a                                |
+#    |--------+--------+-------------------------------------------------------------|
+#    | unary  |   !    | Blake2b hash operator such that                             |
+#    |        |        | -> !e := fieldFr(blake2b(bytes(e)))                         |
+#    |--------+--------+-------------------------------------------------------------|
+#    | unary  |   ~    | field coercion such that (e in Fr) -> (e' in Fq)            |
+#    |--------+--------+-------------------------------------------------------------|
+#    | unary  |   []   | EC Point from G, where G = base point of BN-254             |
+#    |        |        | -> [k] := k * G, where * = scalar multiplication            |
+#    |--------+--------+-------------------------------------------------------------|
+#    | unary  |   :    | get x-coordinate from EC Point                              |
+#    |        |        | -> :[x,y] == x                                              |
+#    |--------+--------+-------------------------------------------------------------|
+#    | unary  |   ;    | get y-coordinate from EC Point                              |
+#    |        |        | -> ;[x,y] == y                                              |
+#    |--------+--------+-------------------------------------------------------------|
+#    | binary |   +    | addition such that                                          |
+#    |        |        | (Field element sum) => a + b = a + b  (mod fr)              |
+#    |        |        | (the Group Law: Point addition) =>  A + B = A +: B (Point)  |
+#    |--------+--------+-------------------------------------------------------------|
+#    | binary |   -    | substraction such that a - b = a + (-b) = a + (negate b)    |
+#    |--------+--------+-------------------------------------------------------------|
+#    | binary |   *    | multiplication such that                                    |
+#    |        |        | (Field element multiplication) => a * b = a * b  (mod fr)   |
+#    |        |        | (Point scalar multiplication) => A * k = A *: k (Point)     |
+#    |--------+--------+-------------------------------------------------------------|
+#    | bianry |   /    | division over Field Fr such that                            |
+#    |        |        | a / b = a * (recip b) = a * b^(-1) = a * b^(fr-2)  (mod fr) |
+#    |--------+--------+-------------------------------------------------------------|
+#    | bianry |   ^    | exponentiation in Field Fr such that                        |
+#    |        |        | a ^ b = a * a * ... (b-times) = a ^ b  (mod fr)             |
+#    |--------+--------+-------------------------------------------------------------|
+#    | bianry |   %    | modulo operation such that                                  |
+#    |        |        | a % n = a % (n mod fr)  (mod fr)                            |
+#    |--------+--------+-------------------------------------------------------------|
+#    | binary |   []   | EC Point from x and y coordinate, where x and y in Fr       |
+#    |        |        | -> [x,y] := P, Point on BN-254                              |
+#    |--------+--------+-------------------------------------------------------------|
+#    | binary |        | Relational Binary Operators (RBO) below:                    |
+#    |        |        |                                                             |
+#    |        |   >    | greater than                                                |
+#    |        |   >=   | greater than or equal to                                    |
+#    |        |   <    | less than                                                   |
+#    |        |   <=   | less than or equal to                                       |
+#    |        |   ==   | equal to                                                    |
+#    |        |   /=   | not equal to                                                |
+#    |        |        |                                                             |
+#    |        |        | RBOs are also binary operators, but are NOT evaluable.      |
+#    |        |        | They are converted into if-expressions every time,          |
+#    |        |        | since there is NO Boolean primitive.                        |
+#    |--------+--------+-------------------------------------------------------------|
+#
+
+
+
+# Input declaration
+language (pub z, priv v, priv w)
+
+    # let binding: let (L-value) = (R-value)
+    let a = z + w * v^4
+
+    # if-expression like Haskell and Rust
+    # IF (cond Expr) THEN (Expr) ELSE (Expr)
+    # if-then-else, not statement but expression
+    let b = if a > 10 then 3v^2 else w
+
+    # if-expression
+    let c = 100 + if w == 10 then 20 else 30
+
+    # Expression parts can be nested as many times as you like
+    let d = if z >= 10 then if v /= 0 then -w else w else v + w
+
+    # Line continuation for clarity
+    let e = if z >= 10 \
+            then if v /= 0 \
+                 then -w \
+                 else w \
+            else v + w
+
+
+    # -----------------------------------------------------
+    # Strong one-way or trapdoor-like functionality
+    # -----------------------------------------------------
+
+    # Introduced Blake2 hash functiion
+    # 0) Hash any values with one-way function
+    #    use operator '!'
+    #    !e == Blake2b(32-byte, e)
+
+    let f = !e
+
+
+    # Here directly provides arithmetics of elliptic curve
+    # 1) Construct EC point using G (base point)
+    #    use operator '[]' as unary
+    #    [k] == k * G
+
+    let g = [f]
+
+
+    # 2) Construct EC scalar using X and Y coordinate
+    #    use operator '[]' as binary
+    #    [x,y] == ECpoint(x,y)
+
+    let h = [e,z]
+
+
+    # 3) EC scalar multiplication at P (any point on curve)
+    #    operator -> simply '*'
+    #    number * number -> allowed, surely
+    #    number * [..]   -> allowed
+    #    [..] * number   -> allowed
+    #    [..] * [..]     -> NOT allowed by definition
+
+    let j = [e] * b
+    let k = [e,100] * c
+
+
+    # 4) get a number (x or y-coordinate) from a given EC point
+    #    use operator ':' for x
+    #    :[x,y] == x
+    #
+    #    or use operator ';' for y
+    #    ;[x,y] == y
+
+    let o = :k
+
+
+    # returns evaluable expression
+    # 'return' can only be called once
+    return o
+
+    # or can return any expression like:
+    return 3z^3 + 4w + 5
