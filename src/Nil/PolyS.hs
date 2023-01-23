@@ -1,25 +1,25 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Nil.PolyS where
-
--- ( poly
--- , poly'
--- , nilpoly
--- , atmostc
--- , nilc
--- , nil
--- , shiftp
--- , addpoly
--- , subpoly
--- , scalepoly
--- , (|*)
--- , mulpoly
--- , divpoly
--- , (|/)
--- , powpoly
--- , evalpoly
--- , (|=)
--- ) where
+module Nil.PolyS
+  ( poly
+  , poly'
+  , nilpoly
+  , atmostc
+  , nilc
+  , nil
+  , shiftp
+  , addpoly
+  , subpoly
+  , scalepoly
+  , (|*)
+  , mulpoly
+  , divpoly
+  , (|/)
+  , powpoly
+  , evalpoly
+  , (|=)
+  )
+where
 
 import Control.Exception
   ( ArithException (..)
@@ -34,7 +34,7 @@ import Nil.Utils (die)
  The least significant coefficient is at leftmost in the coeffs-list
  f(x) := c0 + c1*x + ... + ck*x^k = [c0,c1,..,ck]
 
- The same as 'Zkbang.Poly, but this is for sparse polymonials
+ The same as 'Nil.Poly, but this is for sparse polymonials
  'coeff' hashmap traces only non-zero coefficients with 'degree' Int key
 -}
 data Poly p = Poly
