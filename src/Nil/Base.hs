@@ -14,7 +14,7 @@ import Nil.Utils (die)
    x = a^(-1)  (can be negative, but the same in modular arithmetic)
 -}
 (~%) :: Integral a => a -> a -> a
--- a /% p = modpow a (p - 2) p
+-- a ~% p = modpow a (p - 2) p
 a ~% p = fst $ egcd a p
 {-# INLINE (~%) #-}
 

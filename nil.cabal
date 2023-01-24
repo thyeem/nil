@@ -49,6 +49,7 @@ library
       Nil.Field
       Nil.Graph
       Nil.Lexer
+      Nil.Pairing
       Nil.Parser
       Nil.Poly
       Nil.PolyS

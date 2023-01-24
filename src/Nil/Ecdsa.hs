@@ -27,13 +27,13 @@ import Nil.Utils
 import System.Random (randomRIO)
 
 -- | Private key (e) as a field element
-type PrivateKey = Integer
+type Privatekey = Integer
 
 -- | Public key (eG) as a point on elliptic curve
-type PublicKey f = Point f
+type Publickey f = Point f
 
 -- | Cryptographic hash function
-type HashFunc = ByteString -> ByteString
+type Hashfunc = ByteString -> ByteString
 
 -- | Message to prove/verify
 type Message = ByteString
@@ -42,31 +42,31 @@ type Message = ByteString
 type Signature = (Integer, Integer)
 
 -- | ECDSA signature generation algorithm
-ecdsaSign
+ecdsa'sign
   :: (Eq f, Fractional f, Integral f, Field f, NFData f)
   => Curve f
-  -> HashFunc
-  -> PrivateKey
+  -> Hashfunc
+  -> Privatekey
   -> Message
   -> IO Signature
-ecdsaSign curve hashFunc e msg = do
+ecdsa'sign curve hashFunc e msg = do
   let n = c'n curve
   k <- randomRIO (1, pred n)
   let r = fromIntegral . fromJust . p'x . mulg curve $ k
       z = int'from'bytes . hashFunc $ msg
       s = ((z + r * e) * (k ~% n)) `mod` n
-  if s == 0 then ecdsaSign curve hashFunc e msg else return (r, s)
+  if s == 0 then ecdsa'sign curve hashFunc e msg else return (r, s)
 
 -- | ECDSA verification algorithm
-ecdsaVerify
+ecdsa'verify
   :: (Eq f, Fractional f, Integral f, Field f, NFData f)
   => Curve f
-  -> HashFunc
-  -> PublicKey f
+  -> Hashfunc
+  -> Publickey f
   -> Signature
   -> Message
   -> Bool
-ecdsaVerify curve hashFunc eG (r, s) msg
+ecdsa'verify curve hashFunc eG (r, s) msg
   | r < 1 || r >= n = False
   | s < 1 || s >= n = False
   | otherwise = r == r'
@@ -78,17 +78,17 @@ ecdsaVerify curve hashFunc eG (r, s) msg
   z = int'from'bytes . hashFunc $ msg
 
 -- | ECDSA-sign using BN128 curve and Blake2b 32-byte hash function
-bn128Sign :: PrivateKey -> Message -> IO Signature
-bn128Sign = ecdsaSign bn128G1 (blake2b 32 mempty)
+bn128'sign :: Privatekey -> Message -> IO Signature
+bn128'sign = ecdsa'sign bn128G1 (blake2b 32 mempty)
 
 -- | ECDSA-verify using BN128 curve and Blake2b 32-byte hash function
-bn128Verify :: PublicKey G1 -> Signature -> Message -> Bool
-bn128Verify = ecdsaVerify bn128G1 (blake2b 32 mempty)
+bn128'verify :: Publickey G1 -> Signature -> Message -> Bool
+bn128'verify = ecdsa'verify bn128G1 (blake2b 32 mempty)
 
 -- | ECDSA-sign using secp256k1 curve and Blake2b 32-byte hash function
-secp256k1Sign :: PrivateKey -> Message -> IO Signature
-secp256k1Sign = ecdsaSign secp256k1 (blake2b 32 mempty)
+secp256k1'sign :: Privatekey -> Message -> IO Signature
+secp256k1'sign = ecdsa'sign secp256k1 (blake2b 32 mempty)
 
 -- | ECDSA-verify using secp256k1 curve and Blake2b 32-byte hash function
-secp256k1Verify :: PublicKey Fp256k1 -> Signature -> Message -> Bool
-secp256k1Verify = ecdsaVerify secp256k1 (blake2b 32 mempty)
+secp256k1'verify :: Publickey Fp256k1 -> Signature -> Message -> Bool
+secp256k1'verify = ecdsa'verify secp256k1 (blake2b 32 mempty)
