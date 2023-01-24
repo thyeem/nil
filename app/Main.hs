@@ -1,4 +1,22 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Main where
 
+import Cli
+import Nil (ok)
+
+-- | Entry point of this program
 main :: IO ()
-main = undefined
+main = execParser opts'parser >>= nil
+
+-- | main program
+nil :: Opts -> IO ()
+nil opts@Opts {..} = do
+  case o'command of
+    Setup {} -> ok "setup"
+    Prove {} -> ok "prove"
+    Verify {} -> ok "verify"
+    Sign {} -> ok "sign"
+    Check {} -> ok "check"
+    View {} -> ok "view"
+    Test {} -> ok "test"

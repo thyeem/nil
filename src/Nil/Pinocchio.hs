@@ -5,7 +5,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Nil.Pinocchio where
@@ -81,6 +80,7 @@ import Nil.Qap
 import Nil.Utils
   ( Pretty (..)
   , die
+  , ok
   , slice
   , (<%>)
   , (|&|)
@@ -428,39 +428,39 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
 zktest :: String -> Table Fr -> Table Fr -> IO Bool
 zktest language witnesses instances = do
   -- Language
-  putStrLn mempty
+  ok mempty
   pp language
 
   -- circuit
   let circuit = compile'language language
-  putStrLn mempty
+  ok mempty
   pp circuit
 
   -- QAP
   let qap = qap'from'circuit circuit
-  putStrLn mempty
+  ok mempty
   pp qap
 
   -- zk-setup
-  putStrLn mempty
-  putStrLn "Creating Evaluation/Verification keys: zk-setup..."
+  ok mempty
+  ok "Creating Evaluation/Verification keys: zk-setup..."
   randos <- toxicwaste
   let (ekey, vkey) = zksetup qap randos
 
   -- zk-prove
-  putStrLn mempty
-  putStrLn "Generating zk-proof..."
+  ok mempty
+  ok "Generating zk-proof..."
   let out = statement def'curve witnesses circuit
       vec'wit = wire'vals def'curve witnesses circuit
       proof = zkprove qap ekey vec'wit
-  putStrLn ("Prover returns: " ++ show out)
+  ok ("Prover returns: " ++ show out)
 
   -- zk-verify
-  putStrLn mempty
-  putStrLn "Verifying zk-proof..."
+  ok mempty
+  ok "Verifying zk-proof..."
   let verified = zkverify proof vkey (vec'from'table instances)
-  putStrLn ("Statement:   " ++ show (instances ! "return"))
-  putStrLn ("Verified: " ++ show verified)
+  ok ("Statement:   " ++ show (instances ! "return"))
+  ok ("Verified: " ++ show verified)
   pure verified
 {-# INLINEABLE zktest #-}
 

@@ -305,7 +305,7 @@ nprints :: Show a => [a] -> IO ()
 nprints xs =
   mapM_
     putStrLn
-    [printf "%4s  %s" (show n) (show x) | n <- ([1 ..] :: [Int]) | x <- xs]
+    [printf "%4s  %s" (show n) (show x) | n <- [1 :: Int ..] | x <- xs]
 
 -- | Peel off line feed and blanks at rightmost
 rstrip :: String -> String
