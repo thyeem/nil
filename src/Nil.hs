@@ -12,12 +12,14 @@ module Nil
   , module Nil.Reorg
   , module Nil.Shamir
   , module Nil.Utils
+  , module Nil.Ecdsa
   )
 where
 
 import Nil.Circuit
 import Nil.Curve
 import Nil.Ecdata
+import Nil.Ecdsa
 import Nil.Evaluator
 import Nil.Field
 import Nil.Graph

@@ -44,6 +44,7 @@ library
       Nil.Circuit
       Nil.Curve
       Nil.Ecdata
+      Nil.Ecdsa
       Nil.Evaluator
       Nil.Field
       Nil.Graph
