@@ -51,6 +51,7 @@ library
       Nil.Lexer
       Nil.Pairing
       Nil.Parser
+      Nil.Pinocchio
       Nil.Poly
       Nil.PolyS
       Nil.Qap
