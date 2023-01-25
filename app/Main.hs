@@ -1,6 +1,8 @@
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module Main where
+module Main (main) where
 
 import Cli
 import Nil (ok)
