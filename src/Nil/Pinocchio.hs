@@ -24,6 +24,7 @@ module Nil.Pinocchio where
 -- ) where
 
 import Control.DeepSeq (NFData)
+import Control.Monad (when)
 import Control.Parallel
   ( par
   , pseq
@@ -80,8 +81,8 @@ import Nil.Qap
 import Nil.Utils
   ( Pretty (..)
   , die
-  , ok
   , slice
+  , stderr
   , (<%>)
   , (|&|)
   , (|*|)
@@ -425,42 +426,45 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
 {-# INLINEABLE zkverify #-}
 
 -- | Examine the prepared zero-knowledge suite
-zktest :: String -> Table Fr -> Table Fr -> IO Bool
-zktest language witnesses instances = do
+zktest :: Bool -> String -> Table Fr -> Table Fr -> IO Bool
+zktest verbose language witnesses instances = do
   -- Language
-  ok mempty
-  pp language
+  when verbose $ do
+    stderr mempty
+    stderr language
 
-  -- circuit
+  -- circuit / Qap
   let circuit = compile'language language
-  ok mempty
-  pp circuit
-
-  -- QAP
-  let qap = qap'from'circuit circuit
-  ok mempty
-  pp qap
+      qap = qap'from'circuit circuit
+  when verbose $ do
+    stderr mempty
+    stderr (pretty circuit)
+    stderr mempty
+    stderr (pretty qap)
 
   -- zk-setup
-  ok mempty
-  ok "Creating Evaluation/Verification keys: zk-setup..."
+  when verbose $ do
+    stderr mempty
+    stderr "Creating Evaluation/Verification keys: zk-setup..."
   randos <- toxicwaste
   let (ekey, vkey) = zksetup qap randos
 
   -- zk-prove
-  ok mempty
-  ok "Generating zk-proof..."
+  when verbose $ do
+    stderr mempty
+    stderr "Generating zk-proof..."
   let out = statement def'curve witnesses circuit
       vec'wit = wire'vals def'curve witnesses circuit
       proof = zkprove qap ekey vec'wit
-  ok ("Prover returns: " ++ show out)
+  when verbose $ stderr ("Prover returns: " ++ show out)
 
   -- zk-verify
-  ok mempty
-  ok "Verifying zk-proof..."
   let verified = zkverify proof vkey (vec'from'table instances)
-  ok ("Statement:   " ++ show (instances ! "return"))
-  ok ("Verified: " ++ show verified)
+  when verbose $ do
+    stderr mempty
+    stderr "Verifying zk-proof..."
+    stderr ("Statement:   " ++ show (instances ! "return"))
+    stderr ("Verified: " ++ show verified)
   pure verified
 {-# INLINEABLE zktest #-}
 

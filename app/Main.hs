@@ -1,12 +1,63 @@
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Main (main) where
+module Main where
 
 import Cli
-import Nil (ok)
+  ( Command (..)
+  , Opts (..)
+  , opts'parser
+  )
+import Control.Monad (unless, when)
+import Control.Monad.Extra (unlessM)
+import qualified Data.ByteString as B
+import Data.Functor ((<&>))
+import Data.List (intercalate)
+import Data.Store
+  ( PeekException
+  , Store
+  , decode
+  , encode
+  )
+import Nil
+  ( Circuit
+  , EvaluationKey
+  , Fr
+  , Pretty (..)
+  , Proof
+  , Table
+  , VerificationKey
+  , compile'language
+  , decode'file
+  , def'curve
+  , die
+  , dot'header
+  , err
+  , export'graph
+  , hex'from'bytes
+  , info
+  , qap'from'circuit
+  , read'table
+  , sha256
+  , statement
+  , stderr
+  , str'from'bytes
+  , table'from'list
+  , toxicwaste
+  , vec'from'table
+  , wire'vals
+  , write'dot
+  , zkprove
+  , zksetup
+  , zktest
+  , zkverify
+  , (!)
+  )
 import Options.Applicative (execParser)
+import System.Directory (doesFileExist)
+import System.FilePath.Posix (takeDirectory)
 
 -- | Entry point of this program
 main :: IO ()
@@ -16,10 +67,146 @@ main = execParser opts'parser >>= nil
 nil :: Opts -> IO ()
 nil opts@Opts {..} = do
   case o'command of
-    Setup {} -> ok "setup"
-    Prove {} -> ok "prove"
-    Verify {} -> ok "verify"
-    Sign {} -> ok "sign"
-    Check {} -> ok "check"
-    View {} -> ok "view"
-    Test {} -> ok "test"
+    Setup {} -> setup opts
+    Prove {} -> prove opts
+    Verify {} -> verify opts
+    Sign {} -> print "sign"
+    Check {} -> print "check"
+    View {} -> print "view"
+    Test {} -> print "test"
+    Demo {} -> demo opts
+
+setup :: Opts -> IO ()
+setup Opts {..} = do
+  let Setup graph language = o'command
+  unlessM
+    (doesFileExist language)
+    (err $ "Error, language file does not exist: " ++ language)
+  crs <- toxicwaste
+  circuit <- readFile language <&> compile'language
+  let qap = qap'from'circuit circuit
+      (ekey, vkey) = zksetup qap crs
+      zkID = hex'from'bytes . sha256 . encode $ circuit
+      path = takeDirectory language
+      file'circ = zkID ++ ".circ"
+      file'ekey = zkID ++ ".ekey"
+      file'vkey = zkID ++ ".vkey"
+  B.writeFile (path ++ "/" ++ file'circ) . encode $ circuit
+  B.writeFile (path ++ "/" ++ file'ekey) . encode $ ekey
+  B.writeFile (path ++ "/" ++ file'vkey) . encode $ vkey
+
+  -- dump setup result (3 files: circuit, evaluation key, verification key),
+  -- and their SHA-256 hashes as fingerprints
+  unless o'quite $ do
+    info
+      [ "filepath"
+      , "Circuit"
+      , "(hash)"
+      , "E-key"
+      , "(hash)"
+      , "V-key"
+      , "(hash)" :: String
+      ]
+      [ path
+      , file'circ
+      , zkID
+      , file'ekey
+      , hex'from'bytes . sha256 . encode $ ekey
+      , file'vkey
+      , hex'from'bytes . sha256 . encode $ vkey
+      ]
+  -- dump graph when provided -g
+  when graph $ do
+    let dagfile = zkID ++ ".pdf"
+    export'graph dagfile (write'dot dot'header circuit)
+    unless o'quite $ do
+      putStrLn mempty
+      info ["Graph"] [dagfile]
+
+prove :: Opts -> IO ()
+prove Opts {..} = do
+  let Prove circuit ekey wit = o'command
+  circuit_ <- decode'file circuit :: IO (Circuit Fr)
+  ekey_ <- decode'file ekey :: IO EvaluationKey
+  witness_ <- read'table wit :: IO (Table Fr)
+  let qap = qap'from'circuit circuit_
+      out = statement def'curve witness_ circuit_
+      vec'wit = wire'vals def'curve witness_ circuit_
+      proof = zkprove qap ekey_ vec'wit
+      path = takeDirectory ekey
+      pfID = hex'from'bytes . sha256 . encode $ proof
+      file'proof = pfID ++ ".pf"
+  B.writeFile (path ++ "/" ++ file'proof) . encode $ proof
+  unless o'quite $ do
+    info
+      ["Eval (out)", "filepath", "Proof" :: String]
+      [show (toInteger out), path, file'proof]
+
+verify :: Opts -> IO ()
+verify Opts {..} = do
+  let Verify proof vkey inst = o'command
+  proof_ <- decode'file proof :: IO Proof
+  vkey_ <- decode'file vkey :: IO VerificationKey
+  instance_ <- read'table inst :: IO (Table Fr)
+  let claim = instance_ ! "return"
+      verified = zkverify proof_ vkey_ (vec'from'table instance_)
+  unless o'quite $ do
+    info
+      ["Statement", "Verified" :: String]
+      [show (toInteger claim), show verified]
+
+test :: IO ()
+test = undefined
+
+demo :: Opts -> IO ()
+demo Opts {..} = do
+  let Demo list item = o'command
+  when list $ stderr "francis"
+  when (item == "zkp") $ demo'zkp (not o'quite)
+
+demo'zkp :: Bool -> IO ()
+demo'zkp verbose =
+  zktest
+    verbose
+    ( intercalate
+        "\n\t"
+        [ "language (priv e, priv r, priv s, pub z)"
+        , "let k = (z + r * e) / s"
+        , "let P = [e]"
+        , "let R = [k]"
+        , "let o = if (:R - r) == 0 then :P else :R"
+        , "return o"
+        ]
+    )
+    ( table'from'list
+        [
+          ( "e"
+          , 8464813805670834410435113564993955236359239915934467825032129101731355555480
+          )
+        ,
+          ( "r"
+          , 13405614924655214385005113554925375156635891943694728320775177413191146574283
+          )
+        ,
+          ( "s"
+          , 13078933289364958062289426192340813952257377699664878821853496586753686181509
+          )
+        ,
+          ( "z"
+          , 4025919241471660438673811488519877818316526842848831811191175453074037299584
+          )
+        ]
+        :: Table Fr
+    )
+    ( table'from'list
+        [
+          ( "return"
+          , 20546328083791890245710917085664594543309426573230401055874323960053340664311
+          )
+        ,
+          ( "z"
+          , 4025919241471660438673811488519877818316526842848831811191175453074037299584
+          )
+        ]
+    )
+    >>= print

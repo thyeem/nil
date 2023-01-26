@@ -135,7 +135,7 @@ tokenize language = f [] (normalize language)
     | isKeyword = f (k : tokens) ks
     | isAlpha x = f (v : tokens) vs
     | isNumber x = f (n : tokens) ns
-    | otherwise = die $ "Unexpected char: " ++ [x]
+    | otherwise = die $ "Error, unexpected char: " ++ [x]
    where
     (v, vs) = tokenize'var c
     (n, ns) = tokenize'num c
@@ -224,7 +224,7 @@ instance Pretty Token where
     Sym Comma -> ","
     Sym LF -> "\n"
     Nil -> mempty
-    a -> die $ "undefined token: " ++ show a
+    a -> die $ "Error, unexpected token: " ++ show a
 
 instance Pretty Ops where
   pretty = \case
@@ -243,4 +243,6 @@ instance Pretty Ops where
     Colon -> ":"
     Semicolon -> ";"
     Bang -> "!"
-    a -> die $ "undefined operator: " ++ show a
+    PointXY -> "[,]"
+    PointkG -> "[]"
+    a -> die $ "Error, unexpected operator: " ++ show a

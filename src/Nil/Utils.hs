@@ -32,10 +32,7 @@ import Data.Word (Word8)
 import Numeric (showHex)
 import System.Entropy (getEntropy)
 import System.Exit (exitFailure, exitSuccess)
-import System.IO
-  ( hPutStrLn
-  , stderr
-  )
+import qualified System.IO
 import System.Random (randomRIO)
 import Text.Pretty.Simple
   ( OutputOptions (..)
@@ -284,17 +281,21 @@ shuffle xs = sample xs (length xs)
 die :: String -> a
 die = errorWithoutStackTrace
 
--- | stdout
-ok :: String -> IO ()
-ok msg = do
-  putStrLn msg
-  exitSuccess
+-- | Print to stdout (hPutStrLn stdout)
+stdout :: String -> IO ()
+stdout = putStrLn
 
--- | stderr
+-- | Print to stderr
+stderr :: String -> IO ()
+stderr = System.IO.hPutStrLn System.IO.stderr
+
+-- | stdout and exit(0)
+ok :: String -> IO ()
+ok msg = stdout msg >> exitSuccess
+
+-- | stdout and exit(1)
 err :: String -> IO ()
-err msg = do
-  hPutStrLn stderr msg
-  exitFailure
+err msg = stderr msg >> exitFailure
 
 -- | print each of [a] on a separate line
 prints :: Show a => [a] -> IO ()

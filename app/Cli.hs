@@ -19,7 +19,8 @@ data Command
   | Sign String String
   | Check String String
   | View Bool Bool String
-  | Test Bool String String String
+  | Test String String String
+  | Demo Bool String
   deriving (Show)
 
 type Command' = Mod CommandFields Command
@@ -41,7 +42,16 @@ opts'parser = info (helper <*> ver <*> global'opts) mempty
         , help "Decrease verbosity"
         ]
       <*> (hsubparser . mconcat)
-        [setup, prove, verify, sign, check, view, test]
+        [ setup
+        , prove
+        , verify
+        , sign
+        , check
+        , view
+        , test
+        , demo
+        , metavar "Command"
+        ]
 
 setup :: Command'
 setup =
@@ -57,7 +67,7 @@ setup =
         , help "Export a circuit as graph"
         ]
       <*> (strArgument . mconcat)
-        [ metavar "LANGUAGE"
+        [ metavar "FILE"
         , help "Language file"
         ]
 
@@ -188,11 +198,7 @@ test =
  where
   options =
     Test
-      <$> (switch . mconcat)
-        [ long "demo"
-        , help "Run a sample demo"
-        ]
-      <*> (strOption . mconcat)
+      <$> (strOption . mconcat)
         [ long "lang"
         , short 'l'
         , metavar "FILE"
@@ -209,4 +215,24 @@ test =
         , short 'x'
         , metavar "FILE"
         , help "Instance file in JSON"
+        ]
+
+demo :: Command'
+demo =
+  command
+    "demo"
+    $ info options (progDesc "Run sample demos prepared")
+ where
+  options =
+    Demo
+      <$> (switch . mconcat)
+        [ long "list"
+        , short 'l'
+        , help "List demos available"
+        ]
+      <*> (strArgument . mconcat)
+        [ metavar "ITEM"
+        , help "Choose one from the available demos"
+        , value "zkp"
+        , showDefault
         ]

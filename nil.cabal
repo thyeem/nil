@@ -67,10 +67,16 @@ executable nil
         Main.hs
     build-depends:
         base
+      , bytestring
+      , directory
+      , filepath
       , gitrev
-      , nil
+      , extra
+      , store
       , optparse-applicative
+      , nil
     other-modules:
+        Paths_nil
         Cli
     default-language: Haskell2010
 
