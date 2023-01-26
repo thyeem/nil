@@ -59,7 +59,8 @@ import Nil.Utils
  'c'symbols' == ( { symbols for @instance@ }, { symbols for @witness@ } )
 -}
 data Circuit f = Circuit
-  { c'symbols :: ([String], [String])
+  { c'hash :: String
+  , c'symbols :: ([String], [String])
   , c'gates :: [Gate f]
   }
   deriving (Eq, Show, Generic, NFData)
@@ -227,7 +228,8 @@ recip'wirep wire = w'flag wire == 1
 circuit'from'ast :: Num f => AST -> Circuit f
 circuit'from'ast ast =
   Circuit
-    { c'symbols = symbols
+    { c'hash = mempty
+    , c'symbols = symbols
     , c'gates = gates'from'ast (init'state symbols) ast
     }
  where
@@ -402,19 +404,6 @@ wire'keys Circuit {..} =
     : concat
       [sort (fst c'symbols), sort (snd c'symbols), w'key . g'owire <$> c'gates]
 {-# INLINE wire'keys #-}
-
--- | Clean up all of wire exprs in circuit
-clean'circuit :: Circuit f -> Circuit f
-clean'circuit circuit@Circuit {..} =
-  let clean'wire = set'expr mempty
-      clean'gate gate@Gate {..} =
-        gate
-          { g'lwire = clean'wire g'lwire
-          , g'rwire = clean'wire g'rwire
-          , g'owire = clean'wire g'owire
-          }
-   in circuit {c'gates = clean'gate <$> c'gates}
-{-# INLINE clean'circuit #-}
 
 -- | Pretty printer for Circuit f
 instance Show f => Pretty (Circuit f)

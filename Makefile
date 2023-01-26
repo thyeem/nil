@@ -1,8 +1,13 @@
 bin := nil
 ghc := --with-compiler=ghc-8.10.7
-opts := "--ghc-options=-Wall -threaded -rtsopts -with-rtsopts=-N -feager-blackholing"
+opts := "--ghc-options=-Wall \
+                       -threaded \
+                       -rtsopts \
+                       -with-rtsopts=-N \
+                       -feager-blackholing \
+                       -dynamic"
 fast := $(ghc) $(opts) "--ghc-options=-O0"
-release := $(ghc) $(opts) "--ghc-options=-O2 -fexpose-all-unfoldings -dynamic"
+release := $(ghc) $(opts) "--ghc-options=-O2 -fexpose-all-unfoldings"
 test-opts := $(fast) --test-show-details=direct
 path := ${HOME}/.local/bin
 
@@ -26,9 +31,11 @@ dev:
 
 .PHONY: deploy
 deploy:
+	cp -f $(shell cabal list-bin $(bin)) app
+	/usr/bin/strip app/$(bin)
 	mkdir -p $(path)
 	rm -f $(path)/$(bin)
-	cp -f $(shell cabal list-bin $(bin)) $(path)
+	cp -f app/$(bin) $(path)
 
 .PHONY: clean
 clean:

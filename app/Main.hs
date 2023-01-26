@@ -1,5 +1,4 @@
 {-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -13,11 +12,10 @@ import Cli
 import Control.Monad (unless, when)
 import Control.Monad.Extra (unlessM)
 import qualified Data.ByteString as B
-import Data.Functor ((<&>))
+import Data.Either (fromRight, isRight)
 import Data.List (intercalate)
 import Data.Store
   ( PeekException
-  , Store
   , decode
   , encode
   )
@@ -40,6 +38,7 @@ import Nil
   , info
   , qap'from'circuit
   , read'table
+  , reorg'circuit
   , sha256
   , statement
   , stderr
@@ -72,7 +71,7 @@ nil opts@Opts {..} = do
     Verify {} -> verify opts
     Sign {} -> print "sign"
     Check {} -> print "check"
-    View {} -> print "view"
+    View {} -> view opts
     Test {} -> print "test"
     Demo {} -> demo opts
 
@@ -83,14 +82,14 @@ setup Opts {..} = do
     (doesFileExist language)
     (err $ "Error, language file does not exist: " ++ language)
   crs <- toxicwaste
-  circuit <- readFile language <&> compile'language
+  circuit <- compile'language <$> readFile language
   let qap = qap'from'circuit circuit
       (ekey, vkey) = zksetup qap crs
-      zkID = hex'from'bytes . sha256 . encode $ circuit
+      circ'id = hex'from'bytes . sha256 . encode $ circuit
       path = takeDirectory language
-      file'circ = zkID ++ ".circ"
-      file'ekey = zkID ++ ".ekey"
-      file'vkey = zkID ++ ".vkey"
+      file'circ = circ'id ++ ".circ"
+      file'ekey = circ'id ++ ".ekey"
+      file'vkey = circ'id ++ ".vkey"
   B.writeFile (path ++ "/" ++ file'circ) . encode $ circuit
   B.writeFile (path ++ "/" ++ file'ekey) . encode $ ekey
   B.writeFile (path ++ "/" ++ file'vkey) . encode $ vkey
@@ -109,16 +108,16 @@ setup Opts {..} = do
       ]
       [ path
       , file'circ
-      , zkID
+      , circ'id
       , file'ekey
       , hex'from'bytes . sha256 . encode $ ekey
       , file'vkey
       , hex'from'bytes . sha256 . encode $ vkey
       ]
-  -- dump graph when provided -g
+  -- dump graph
   when graph $ do
-    let dagfile = zkID ++ ".pdf"
-    export'graph dagfile (write'dot dot'header circuit)
+    let dagfile = circ'id ++ ".pdf"
+    export'graph (path ++ "/" ++ dagfile) (write'dot dot'header circuit)
     unless o'quite $ do
       putStrLn mempty
       info ["Graph"] [dagfile]
@@ -154,6 +153,42 @@ verify Opts {..} = do
     info
       ["Statement", "Verified" :: String]
       [show (toInteger claim), show verified]
+
+type Encoded a = Either PeekException a
+
+view :: Opts -> IO ()
+view Opts {..} = do
+  let View graph reorg file = o'command
+      dump :: Pretty b => Either a b -> IO ()
+      dump = pp . fromRight (die "Error,")
+  unlessM
+    (doesFileExist file)
+    (err $ "Error, file file does not exist: " ++ file)
+
+  bytes <- B.readFile file
+  let circuit = decode bytes :: Encoded (Circuit Fr)
+      ekey = decode bytes :: Encoded EvaluationKey
+      vkey = decode bytes :: Encoded VerificationKey
+      proof = decode bytes :: Encoded Proof
+  if
+      | isRight circuit -> do
+          let circuit_ = fromRight (die "Error,") circuit
+          reorged <-
+            if reorg then reorg'circuit circuit_ else pure circuit_
+          if graph
+            then do
+              let circ'id = hex'from'bytes . sha256 . encode $ reorged
+              let dagfile = circ'id ++ ".pdf"
+                  path = takeDirectory file
+              export'graph
+                (path ++ "/" ++ dagfile)
+                (write'dot dot'header reorged)
+              unless o'quite $ info ["Graph"] [dagfile]
+            else pp reorged
+      | isRight ekey -> dump ekey
+      | isRight vkey -> dump vkey
+      | isRight proof -> dump proof
+      | otherwise -> putStrLn . str'from'bytes $ bytes
 
 test :: IO ()
 test = undefined

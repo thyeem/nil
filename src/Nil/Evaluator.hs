@@ -4,6 +4,7 @@
 module Nil.Evaluator where
 
 import Control.DeepSeq (NFData)
+import Data.ByteString (append)
 import Data.List (foldl')
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
@@ -14,6 +15,7 @@ import Nil.Circuit
   , Wire (..)
   , const'wirep
   , ext'wirep
+  , set'expr
   , set'flag
   , set'key
   , set'unit'key
@@ -37,8 +39,11 @@ import Nil.Field (Field)
 import Nil.Utils
   ( blake2b
   , bytes'from'int'len
+  , bytes'from'str
   , die
+  , hex'from'bytes
   , int'from'bytes
+  , sha256
   )
 
 --------------------------------------------------------------------------------
@@ -381,6 +386,32 @@ eval'exy curve table g@Gate {..}
   | otherwise = err'operands g "[x,y]"
 {-# INLINEABLE eval'exy #-}
 
+-- | Clean up all of wire exprs in circuit
+clean'circuit :: Circuit f -> Circuit f
+clean'circuit circuit@Circuit {..} =
+  let clean'wire = set'expr mempty
+      clean'gate gate@Gate {..} =
+        gate
+          { g'lwire = clean'wire g'lwire
+          , g'rwire = clean'wire g'rwire
+          , g'owire = clean'wire g'owire
+          }
+   in circuit {c'gates = clean'gate <$> c'gates}
+{-# INLINE clean'circuit #-}
+
+-- | Get a hash value from a given circuit
+hash'circuit :: String -> Circuit f -> String
+hash'circuit salt Circuit {..} =
+  let from'str = sha256 . bytes'from'str
+      from'ba = foldl1 ((sha256 .) . append)
+      hash'wire Wire {..} = from'str (w'key ++ salt)
+      hash'gate Gate {..} =
+        case g'op of
+          Add -> from'ba $ hash'wire <$> [g'lwire, g'rwire, g'owire]
+          Mul -> from'ba $ hash'wire <$> [g'rwire, g'lwire, g'owire]
+          _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
+   in hex'from'bytes . from'ba $ hash'gate <$> c'gates
+
 --------------------------------------------------------------------------------
 --- [mpc] zksign evaluator: partially evaluate circuit with secrets
 --------------------------------------------------------------------------------
@@ -389,7 +420,7 @@ eval'exy curve table g@Gate {..}
  Partially evaluate Circuit with @Priv@ secret value -> 'Signed Circuit'.
 -}
 sign'circuit
-  :: (Integral f, Fractional f) => Circuit f -> Table f -> f -> Circuit f
+  :: (Integral f, Fractional f) => Circuit f -> Table f -> Circuit f
 sign'circuit = undefined
 
 -- sign'circuit circuit@Circuit {..} secrets g = circuit
