@@ -43,11 +43,11 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv a, priv b, priv c, priv d, priv e)"
-    , "let o = 10a + b * -8c + d / e"
+    , "let o = 10a + b * c * d / e"
     , "let p = o + b / c"
-    , "let q = (a + 3b + p * d + e)^2"
+    , "let q = a + 3b + p * d / e"
     , "let r = a * b * c * d * e"
-    , "return o * o^2 / r^8 + p * q"
+    , "return o * o^2 / r^3 + p * q"
     ]
 
 c = compile'language lang

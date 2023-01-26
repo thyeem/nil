@@ -92,17 +92,17 @@ write'gate instances witnesses Gate {..}
     | const'wirep wire =
         unwords
           [ key wire
-          , "[shape=egg, style=dashed, label=Const, fontsize=18];"
+          , "[shape=egg,style=dashed,label=Const,fontsize=18];"
           ]
     | w'key wire `elem` instances =
         unwords
           [ key wire
-          , "[shape=egg, style=filled, fillcolor=lightgreen, fontsize=30];"
+          , "[shape=egg,style=filled,fillcolor=lightgreen,fontsize=30];"
           ]
     | w'key wire `elem` witnesses =
         unwords
           [ key wire
-          , "[shape=egg, style=filled, fillcolor=pink, fontsize=30];"
+          , "[shape=egg,style=filled,fillcolor=pink,fontsize=30];"
           ]
     | otherwise =
         mempty

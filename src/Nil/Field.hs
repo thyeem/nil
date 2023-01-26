@@ -275,4 +275,5 @@ instance (Eq f, Fractional f, Field f) => Fractional (Extensionfield f i) where
 
 -- instance KnownNat p => Arbitrary (Primefield p) where
 
-deriving instance Show f => Pretty (Extensionfield f i)
+instance Show f => Pretty (Extensionfield f i) where
+  pretty (E _ fx) = pretty fx

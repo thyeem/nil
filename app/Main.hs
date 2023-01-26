@@ -6,6 +6,7 @@ module Main (main) where
 
 import Cli
 import Nil (ok)
+import Options.Applicative (execParser)
 
 -- | Entry point of this program
 main :: IO ()

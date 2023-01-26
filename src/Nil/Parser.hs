@@ -97,7 +97,7 @@ parse'args t = die $ "Error, syntax error of: " ++ show t
 -- | Parse return-statement
 parse'return :: Parser AST
 parse'return tokens
-  | next ts /= Nil = die $ "Syntax error of: " ++ show ts
+  | next ts /= Nil = die $ "Error, syntax error of: " ++ show ts
   | otherwise = (Out Return ast, ts)
  where
   (ast, ts) = expr tokens
@@ -105,11 +105,11 @@ parse'return tokens
 -- | Parse statement of let-binding
 parse'assign :: Parser AST
 parse'assign (Prim v@(V _) : Op Assign : ts)
-  | next ts' /= Nil = die $ "Syntax error of " <> show ts'
+  | next ts' /= Nil = die $ "Error, syntax error of " <> show ts'
   | otherwise = (Bind (Value v) expr', ts')
  where
   (expr', ts') = expr ts
-parse'assign ts = die $ "Syntax error of " <> show ts
+parse'assign ts = die $ "Error, syntax error of " <> show ts
 
 -- | Parse all of the evaluable/relational expressions
 expr :: Parser Expr
@@ -126,12 +126,12 @@ factor tokens = case next tokens of
   Sym LParen -> parseParens (munch tokens)
   Sym LBracket -> parseECpoint (munch tokens)
   Kwd If -> parse'if (munch tokens)
-  _ -> die "Syntax error of Expr factor"
+  _ -> die "Error, syntax error of Expr factor"
 
 -- | Generate 'Parser Expr' using given unary operators
 parse'uop :: Ops -> Parser Expr
 parse'uop op tokens
-  | next tokens == Op op = die $ "Wrong use of: " ++ show op
+  | next tokens == Op op = die $ "Error, wrong use of: " ++ show op
   | otherwise = (Euna op expr', ts)
  where
   (expr', ts) = factor tokens
@@ -155,7 +155,8 @@ parse'hash = parse'uop Bang
 -- | Parse expr of parentheses
 parseParens :: Parser Expr
 parseParens tokens
-  | next ts /= Sym RParen = die "Not balanced parentheses"
+  | next ts /= Sym RParen =
+      die $ "Error, not balanced parentheses: " ++ pretty (Sym LParen)
   | otherwise = (expr', munch ts)
  where
   (expr', ts) = expr tokens
@@ -165,14 +166,15 @@ parseECpoint :: Parser Expr
 parseECpoint tokens
   | next ts == Sym Comma = parsePointFromXY (expr', munch ts)
   | next ts == Sym RBracket = parsePointFromG (expr', munch ts)
-  | otherwise = die $ "Syntax error of: " ++ show (next ts)
+  | otherwise = die $ "Error, syntax error of: " ++ show (next ts)
  where
   (expr', ts) = expr tokens
 
 -- | Expr parser extention: EC Point format in [x, y]
 parsePointFromXY :: ParserX Expr
 parsePointFromXY (expr', ts)
-  | next ts' /= Sym RBracket = die "Not balanced square brackets"
+  | next ts' /= Sym RBracket =
+      die $ "Error, not balanced square brackets: " ++ pretty (Sym LBracket)
   | otherwise = (Ebin PointXY expr' expr'', munch ts')
  where
   (expr'', ts') = expr ts
@@ -184,7 +186,7 @@ parsePointFromG (expr', ts) = (Euna PointkG expr', ts)
 -- | Parse If-Expression
 parse'if :: Parser Expr
 parse'if tokens
-  | next ts /= Kwd Then = die $ "Syntax error of: " ++ show (next ts)
+  | next ts /= Kwd Then = die $ "Error, syntax error of: " ++ show (next ts)
   | otherwise = then' (Eif exprIf Void Void, munch ts)
  where
   (exprIf, ts) = expr tokens
@@ -192,7 +194,7 @@ parse'if tokens
 -- | Expr parser extension: then
 then' :: ParserX Expr
 then' (expr', ts)
-  | next ts' /= Kwd Else = die $ "Syntax error of: " ++ show (next ts')
+  | next ts' /= Kwd Else = die $ "Error, syntax error of: " ++ show (next ts')
   | otherwise = else' (Eif exprIf exprThen Void, munch ts')
  where
   (exprThen, ts') = expr ts
@@ -228,7 +230,7 @@ expr'parser priority = case priority of
   3 -> mul'div . exp' . factor
   2 -> exp' . factor
   1 -> factor
-  _ -> die $ "No such op precedence: " ++ show priority
+  _ -> die $ "Error, no such op precedence: " ++ show priority
 
 -- | Choose an expr parser with higher precedence than a given operator
 expr'parser'from'op :: Ops -> Parser Expr
@@ -245,7 +247,7 @@ expr'parser'from'op op = case op of
   LessEq -> expr'parser 5
   Equal -> expr'parser 5
   NEqual -> expr'parser 5
-  _ -> die $ "Unexpected op: " ++ show op
+  _ -> die $ "Error, unexpected op: " ++ show op
 
 -- | Expr parser extension: Exp (^)
 exp' :: ParserX Expr
@@ -318,7 +320,7 @@ next (t : _) = t
 
 -- | Consume the very next token
 munch :: [Token] -> [Token]
-munch [] = die "Nothing to consume"
+munch [] = die "Error, nothing to consume"
 munch (_ : ts) = ts
 
 deriving instance Pretty Expr

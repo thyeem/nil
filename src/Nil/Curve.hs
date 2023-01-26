@@ -72,7 +72,8 @@ import System.Random (randomRIO)
  @
 -}
 data Curve f = Curve
-  { c'p :: Integer
+  { c'name :: String
+  , c'p :: Integer
   , c'a :: f
   , c'b :: f
   , c'gx :: f
@@ -348,10 +349,6 @@ randp curve = do
   k <- randomRIO (1, c'n curve - 1)
   return $ mulg curve k
 
-instance (Show f, Pretty f) => Pretty (Curve f)
-
-instance (Show f, Pretty f) => Pretty (Point f)
-
 -- | Point addition (Affine Point)
 addap :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f
 addap p O = p
@@ -452,7 +449,7 @@ yfromx curve x = case a of
  where
   a = sqrt'zpz (toInteger $ (x * x + c'a curve) * x + c'b curve) (char x)
 
--- | Find all Affine points on a given curve using brute-force method
+-- | Find all points on a given curve using brute-force method
 findp
   :: (Integral f, Bounded f, Fractional f, Field f, NFData f)
   => Curve f
@@ -470,3 +467,12 @@ findp curve =
   split (x, y, y')
     | y == zero y = [A curve x y]
     | otherwise = [A curve x y, A curve x y']
+
+instance (Show f, Pretty f) => Pretty (Curve f) where
+  pretty = c'name
+
+instance (Show f, Pretty f) => Pretty (Point f) where
+  pretty = \case
+    O -> "Point at Infinity"
+    A c x y -> unlines [pretty c, pretty x, pretty y]
+    J c x y z -> unlines [pretty c, pretty x, pretty y, pretty z]

@@ -14,11 +14,11 @@ data Opts = Opts
 
 data Command
   = Setup Bool String
-  | Prove
-  | Verify
-  | Sign
-  | Check
-  | View String
+  | Prove String String String
+  | Verify String String String
+  | Sign String String
+  | Check String String
+  | View Bool Bool String
   | Test Bool String String String
   deriving (Show)
 
@@ -65,25 +65,97 @@ prove :: Command'
 prove =
   command
     "prove"
-    (info (pure Prove) (progDesc "(zkp) Generate zk-proofs"))
+    (info options (progDesc "(zkp) Generate zk-proofs"))
+ where
+  options =
+    Prove
+      <$> (strOption . mconcat)
+        [ long "circ"
+        , short 'c'
+        , metavar "FILE"
+        , help "Circuit file"
+        ]
+      <*> (strOption . mconcat)
+        [ long "key"
+        , short 'k'
+        , metavar "FILE"
+        , help "Evaluation key file"
+        ]
+      <*> (strOption . mconcat)
+        [ long "wit"
+        , short 'w'
+        , metavar "FILE"
+        , help "Witness file in JSON"
+        ]
 
 verify :: Command'
 verify =
   command
     "verify"
-    (info (pure Verify) (progDesc "(zkp) Verify zk-proofs"))
+    (info options (progDesc "(zkp) Verify zk-proofs"))
+ where
+  options =
+    Verify
+      <$> (strOption . mconcat)
+        [ long "proof"
+        , short 'p'
+        , metavar "FILE"
+        , help "Proof file"
+        ]
+      <*> (strOption . mconcat)
+        [ long "key"
+        , short 'k'
+        , metavar "FILE"
+        , help "Verification key file"
+        ]
+      <*> (strOption . mconcat)
+        [ long "inst"
+        , short 'x'
+        , metavar "FILE"
+        , help "Instance file in JSON"
+        ]
 
 sign :: Command'
 sign =
   command
     "sign"
-    (info (pure Sign) (progDesc "(mpc) Partially evaluate circuit with secrets"))
+    (info options (progDesc "(mpc) Partially evaluate circuit with secrets"))
+ where
+  options =
+    Sign
+      <$> (strOption . mconcat)
+        [ long "secrets"
+        , short 's'
+        , metavar "FILE"
+        , help "Secret file"
+        ]
+      <*> (strOption . mconcat)
+        [ long "key"
+        , short 'k'
+        , metavar "FILE"
+        , help "key file"
+        ]
 
 check :: Command'
 check =
   command
     "check"
-    (info (pure Check) (progDesc "(mpc) Fully evaluate circuit and check validity"))
+    (info options (progDesc "(mpc) Fully evaluate circuit and check validity"))
+ where
+  options =
+    Check
+      <$> (strOption . mconcat)
+        [ long ""
+        , short 's'
+        , metavar "FILE"
+        , help "Proof file"
+        ]
+      <*> (strOption . mconcat)
+        [ long "key"
+        , short 'k'
+        , metavar "FILE"
+        , help "key file"
+        ]
 
 view :: Command'
 view =
@@ -93,7 +165,17 @@ view =
  where
   options =
     View
-      <$> (strArgument . mconcat)
+      <$> (switch . mconcat)
+        [ long "graph"
+        , short 'g'
+        , help "(circuit-only) Export a circuit as graph"
+        ]
+      <*> (switch . mconcat)
+        [ long "reorg"
+        , short 'r'
+        , help "(circuit-only) Reorg a circuit"
+        ]
+      <*> (strArgument . mconcat)
         [ metavar "FILE"
         , help "Any types of files involved in this program"
         ]
@@ -124,7 +206,7 @@ test =
         ]
       <*> (strOption . mconcat)
         [ long "inst"
-        , short 'i'
+        , short 'x'
         , metavar "FILE"
-        , help "Instance file"
+        , help "Instance file in JSON"
         ]
