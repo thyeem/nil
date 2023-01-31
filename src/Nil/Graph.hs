@@ -16,6 +16,7 @@ import Nil.Circuit
   , const'wirep
   , out'wirep
   )
+import Nil.Reorg (delta'wirep)
 import Nil.Utils (die)
 import System.Exit (ExitCode (ExitSuccess))
 import System.Process (readProcessWithExitCode)
@@ -66,8 +67,10 @@ write'gate instances witnesses Gate {..}
  where
   key wire
     | out'wirep wire = tail (w'key wire)
-    | const'wirep wire && wire == g'lwire = "_" ++ key g'owire ++ "L"
-    | const'wirep wire && wire == g'rwire = "_" ++ key g'owire ++ "R"
+    | (const'wirep wire || delta'wirep wire) && wire == g'lwire =
+        "_" ++ key g'owire ++ "L"
+    | (const'wirep wire || delta'wirep wire) && wire == g'rwire =
+        "_" ++ key g'owire ++ "R"
     | otherwise = w'key wire
 
   edge from to =
@@ -89,6 +92,11 @@ write'gate instances witnesses Gate {..}
     | otherwise = "white"
 
   style wire
+    | delta'wirep wire =
+        unwords
+          [ key wire
+          , "[shape=egg,label=\"&delta;-shift\",color=orange,fontsize=18];"
+          ]
     | const'wirep wire =
         unwords
           [ key wire

@@ -13,8 +13,10 @@ import Nil.Circuit
   , Gateop (..)
   , Table
   , Wire (..)
+  , and'ext'wirep
   , const'wirep
   , ext'wirep
+  , nor'ext'wirep
   , set'expr
   , set'flag
   , set'key
@@ -23,6 +25,7 @@ import Nil.Circuit
   , set'val
   , unit'wire
   , wire'keys
+  , xor'ext'wirep
   , (!)
   , (!~)
   , (<~)
@@ -120,26 +123,6 @@ eval'gate curve table gate@Gate {..} =
               die . unwords $
                 ["Error, illegal wire to evaluate:", w'key ++ ",", w'expr]
 {-# INLINE (=~) #-}
-
--- | Check if both gate input wires are extended wires
-and'ext'wirep :: Integral f => Table f -> Gate f -> Bool
-and'ext'wirep table Gate {..} =
-  ext'wirep (table !~ g'lwire) && ext'wirep (table !~ g'rwire)
-{-# INLINEABLE and'ext'wirep #-}
-
--- | Check if one of gate input wires is an extended wire
-xor'ext'wirep :: Integral f => Table f -> Gate f -> Bool
-xor'ext'wirep table Gate {..} = (left && not right) || (not left && right)
- where
-  left = ext'wirep $ table !~ g'lwire
-  right = ext'wirep $ table !~ g'rwire
-{-# INLINEABLE xor'ext'wirep #-}
-
--- | Check if none of gate input wires is an extended wire
-nor'ext'wirep :: Integral f => Table f -> Gate f -> Bool
-nor'ext'wirep table Gate {..} =
-  not $ ext'wirep (table !~ g'lwire) || ext'wirep (table !~ g'rwire)
-{-# INLINEABLE nor'ext'wirep #-}
 
 -- | Evaluate gate when both gate input wires are extended
 eval'and'ext'wire

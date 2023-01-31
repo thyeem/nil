@@ -7,6 +7,7 @@ module Nil.Reorg where
 import Control.Applicative (liftA2)
 import Data.Bifunctor (bimap)
 import Data.Bits (xor)
+import Data.Functor ((<&>))
 import Data.List (foldl', nub)
 import Data.Map (Map, insert, member, (!?))
 import Data.Maybe (fromMaybe)
@@ -15,10 +16,16 @@ import Nil.Circuit
   , Gate (..)
   , Gateop (..)
   , Wire (..)
+  , and'
+  , nor'
   , out'wirep
   , recip'wirep
   , set'expr
+  , set'key
   , set'unit'key
+  , set'unit'val
+  , unit'wire
+  , xor'
   )
 import Nil.Utils (die, random'hex)
 
@@ -35,6 +42,15 @@ type O'table f = Map String (Gate f, Int)
 (+++) = liftA2 (++)
 {-# INLINE (+++) #-}
 
+-- | The name prepared wire representing delta-shift
+delta'expr :: String
+delta'expr = ">>"
+{-# INLINE delta'expr #-}
+
+-- | Predicate for a delta-shifter
+delta'wirep :: Wire f -> Bool
+delta'wirep Wire {..} = w'expr == delta'expr
+
 -- | Inspect operators
 valid'operator :: Gate f -> Bool
 valid'operator Gate {..} = g'op `elem` [Mul, Add, End]
@@ -42,7 +58,9 @@ valid'operator Gate {..} = g'op `elem` [Mul, Add, End]
 
 -- | When merge happens
 needs'merge :: Gate f -> Bool
-needs'merge Gate {..} = out'wirep g'lwire && out'wirep g'rwire && g'op == Mul
+needs'merge g@Gate {..} =
+  recip'wirep g'rwire
+    || (and' out'wirep g && g'op == Mul)
 {-# INLINE needs'merge #-}
 
 -- | Create a helper knot wire having a hashed unique key
@@ -57,7 +75,6 @@ rand'wire =
 -- | Toggle the reciprocal flag
 recip' :: Wire f -> Wire f
 recip' wire@Wire {..} = wire {w'flag = 1 `xor` w'flag}
--- recip' = set'flag 1
 {-# INLINE recip' #-}
 
 -- | Determine which wire will be cut: in forms of (survived, killed)
@@ -79,7 +96,9 @@ reorg'circuit circuit@Circuit {..} = do
     reorg
       (gen'table c'gates)
       (w'key . g'owire . last $ c'gates)
-  pure $ circuit {c'gates = nub gates}
+      >>= mapM shift'entries
+      <&> nub . concat
+  pure $ circuit {c'gates = gates}
 {-# INLINE reorg'circuit #-}
 
 -- | Generate a lookup table used in circuit reorg process.
@@ -146,3 +165,22 @@ merge'add table out tip cut = do
         +++ merge table tie'b tip cut_
         +++ pure [Gate Add tie'a tie'b out]
 {-# INLINEABLE merge'add #-}
+
+shift'entries :: Num f => Gate f -> IO [Gate f]
+shift'entries g@Gate {..}
+  | g'op == End = pure [g]
+  | xor' out'wirep g = shift g'op g'lwire g'rwire g'owire
+  | nor' out'wirep g = do
+      tie <- rand'wire
+      shift Mul g'lwire unit'wire tie +++ shift g'op g'rwire tie g'owire
+  | otherwise = pure [g]
+{-# INLINEABLE shift'entries #-}
+
+shift :: Num f => Gateop -> Wire f -> Wire f -> Wire f -> IO [Gate f]
+shift op lwire rwire owire = do
+  tie'a <- rand'wire
+  tie'b <- rand'wire
+  pure [Gate op lwire rwire tie'a]
+    +++ pure [Gate Mul tie'a (set'expr delta'expr $ set'unit'val 0) tie'b]
+    +++ pure [Gate Add tie'a tie'b owire]
+{-# INLINEABLE shift #-}

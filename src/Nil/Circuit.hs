@@ -216,10 +216,54 @@ out'wirep Wire {..} = case w'key of
   _ -> False
 {-# INLINE out'wirep #-}
 
+-- | Predicate for a pub-wire
+priv'wirep :: Wire f -> Bool
+priv'wirep Wire {..} = w'expr == "%priv"
+{-# INLINE priv'wirep #-}
+
+-- | Predicate for a priv-wire
+pub'wirep :: Wire f -> Bool
+pub'wirep Wire {..} = w'expr == "%pub"
+{-# INLINE pub'wirep #-}
+
 -- | Predicate if reciprocal flag is on
 recip'wirep :: Wire f -> Bool
 recip'wirep wire = w'flag wire == 1
 {-# INLINE recip'wirep #-}
+
+-- | Check if both gate input wires are extended wires
+and'ext'wirep :: Integral f => Table f -> Gate f -> Bool
+and'ext'wirep table Gate {..} =
+  ext'wirep (table !~ g'lwire) && ext'wirep (table !~ g'rwire)
+{-# INLINE and'ext'wirep #-}
+
+-- | Check if one of gate input wires is an extended wire
+xor'ext'wirep :: Integral f => Table f -> Gate f -> Bool
+xor'ext'wirep table g =
+  not (and'ext'wirep table g)
+    && not (nor'ext'wirep table g)
+{-# INLINE xor'ext'wirep #-}
+
+-- | Check if none of gate input wires is an extended wire
+nor'ext'wirep :: Integral f => Table f -> Gate f -> Bool
+nor'ext'wirep table Gate {..} =
+  not $ ext'wirep (table !~ g'lwire) || ext'wirep (table !~ g'rwire)
+{-# INLINE nor'ext'wirep #-}
+
+-- | Builder for predicate to check gate input wires: AND
+and' :: (Wire f -> Bool) -> Gate f -> Bool
+and' p Gate {..} = p g'lwire && p g'rwire
+{-# INLINE and' #-}
+
+-- | Builder for predicate to check gate input wires: XOR
+xor' :: (Wire f -> Bool) -> Gate f -> Bool
+xor' p g = not (and' p g) && not (nor' p g)
+{-# INLINE xor' #-}
+
+-- | Builder for predicate to check gate input wires: NOR
+nor' :: (Wire f -> Bool) -> Gate f -> Bool
+nor' p Gate {..} = not $ p g'lwire || p g'rwire
+{-# INLINE nor' #-}
 
 {- | Construct a 'circuit' from 'AST'
 
@@ -252,7 +296,10 @@ symbols'from'ast = \case
 -- | Initialize circuit parser state
 init'state :: Num f => ([String], [String]) -> State f
 init'state (pub, priv) =
-  ([], fromList $ (\wire -> (w'key wire, wire)) . set'unit'key <$> (pub ++ priv))
+  ([], fromList $ (\wire -> (w'key wire, wire)) <$> (pub' ++ priv'))
+ where
+  priv' = set'flag 5 . set'unit'key <$> priv
+  pub' = set'flag 6 . set'unit'key <$> pub
 {-# INLINE init'state #-}
 
 -- | Construct Gates by traversing AST
