@@ -22,6 +22,7 @@ import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as L
 import Data.Char (isSpace)
+import Data.Function (on)
 import Data.List
   ( dropWhileEnd
   , intercalate
@@ -145,6 +146,10 @@ pfold f xs = as `par` bs `pseq` f as bs
 pthenIO :: Monad m => m a -> m b -> m b
 pthenIO ma mb = ma `par` mb `pseq` (ma *> mb)
 {-# INLINE pthenIO #-}
+
+-- | Map a function over a 2-elem tuple
+tmap :: (a -> b) -> (a, a) -> (b, b)
+tmap = uncurry . on (,)
 
 -- | Explicitly convert [u8] into string
 str'from'u8 :: [Word8] -> String
