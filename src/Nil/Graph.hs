@@ -95,7 +95,7 @@ write'gate instances witnesses Gate {..}
     | delta'wirep wire =
         unwords
           [ key wire
-          , "[shape=egg,label=\"&delta;-shift\",color=orange,fontsize=18];"
+          , "[shape=egg,label=\"&#8209;&delta;&epsilon;\",color=orange,fontsize=18];"
           ]
     | const'wirep wire =
         unwords

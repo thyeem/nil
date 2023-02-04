@@ -169,7 +169,11 @@ merge'add table out tip cut = do
 shift'entries :: Num f => Gate f -> IO [Gate f]
 shift'entries g@Gate {..}
   | g'op == End = pure [g]
-  | xor' out'wirep g = shift g'op g'lwire g'rwire g'owire
+  | xor' out'wirep g = do
+      let (scalar, ext)
+            | out'wirep g'lwire = (g'rwire, g'lwire)
+            | otherwise = (g'lwire, g'rwire)
+      shift g'op scalar ext g'owire
   | nor' out'wirep g = do
       tie <- rand'wire
       shift Mul g'lwire unit'wire tie +++ shift g'op g'rwire tie g'owire
@@ -177,10 +181,10 @@ shift'entries g@Gate {..}
 {-# INLINEABLE shift'entries #-}
 
 shift :: Num f => Gateop -> Wire f -> Wire f -> Wire f -> IO [Gate f]
-shift op lwire rwire owire = do
+shift op scalar ext out = do
   tie'a <- rand'wire
   tie'b <- rand'wire
-  pure [Gate op lwire rwire tie'a]
-    +++ pure [Gate Mul tie'a (set'expr delta'expr $ set'unit'val 0) tie'b]
-    +++ pure [Gate Add tie'a tie'b owire]
+  pure [Gate op scalar ext tie'a]
+    +++ pure [Gate Mul ext (set'expr delta'expr $ set'unit'val 0) tie'b]
+    +++ pure [Gate Add tie'a tie'b out]
 {-# INLINEABLE shift #-}

@@ -51,7 +51,7 @@ lang =
     -- ]
 
     [ "language (priv a, priv b, priv c)"
-    , "return 5a * 7b + c"
+    , "return a^2 + a*b + a + b"
     ]
 
 c = compile'language lang
