@@ -16,7 +16,7 @@ import Nil.Circuit
   , const'wirep
   , out'wirep
   )
-import Nil.Reorg (delta'wirep)
+import Nil.Reorg (delta'wirep, rho'wirep)
 import Nil.Utils (die)
 import System.Exit (ExitCode (ExitSuccess))
 import System.Process (readProcessWithExitCode)
@@ -95,7 +95,14 @@ write'gate instances witnesses Gate {..}
     | delta'wirep wire =
         unwords
           [ key wire
-          , "[shape=egg,label=\"&#8209;&delta;&epsilon;\",color=orange,fontsize=18];"
+          , "[shape=egg,color=salmon,fontsize=18,"
+              ++ "label=<-&delta;<sub>j</sub>&epsilon;<sub>j</sub>>];"
+          ]
+    | rho'wirep wire =
+        unwords
+          [ key wire
+          , "[shape=egg,color=orange,fontsize=18,"
+              ++ "label=<1/&kappa;<sub>j</sub>&rho;<sub>j</sub>>];"
           ]
     | const'wirep wire =
         unwords

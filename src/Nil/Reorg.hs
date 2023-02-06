@@ -17,6 +17,7 @@ import Nil.Circuit
   , Gateop (..)
   , Wire (..)
   , and'
+  , inp'wirep
   , nor'
   , out'wirep
   , recip'wirep
@@ -47,9 +48,18 @@ delta'expr :: String
 delta'expr = ">>"
 {-# INLINE delta'expr #-}
 
+-- | The name prepared wire representing rho-norm
+rho'expr :: String
+rho'expr = "//"
+{-# INLINE rho'expr #-}
+
 -- | Predicate for a delta-shifter
 delta'wirep :: Wire f -> Bool
 delta'wirep Wire {..} = w'expr == delta'expr
+
+-- | Predicate for a rho-norm
+rho'wirep :: Wire f -> Bool
+rho'wirep Wire {..} = w'expr == rho'expr
 
 -- | Inspect operators
 valid'operator :: Gate f -> Bool
@@ -92,12 +102,13 @@ tip'cut table key =
 -- | reorg-circuit
 reorg'circuit :: (Eq f, Num f, Show f) => Circuit f -> IO (Circuit f)
 reorg'circuit circuit@Circuit {..} = do
-  gates <-
-    reorg
-      (gen'table c'gates)
-      (w'key . g'owire . last $ c'gates)
-      >>= mapM shift'entries
-      <&> nub . concat
+  reorged <-
+    nub
+      <$> reorg
+        (gen'table c'gates)
+        (w'key . g'owire . last $ c'gates)
+  shifted <- concat <$> mapM shift'entries reorged
+  gates <- concat <$> mapM (splice'rhos (gen'table shifted)) shifted
   pure $ circuit {c'gates = gates}
 {-# INLINE reorg'circuit #-}
 
@@ -170,13 +181,12 @@ shift'entries :: Num f => Gate f -> IO [Gate f]
 shift'entries g@Gate {..}
   | g'op == End = pure [g]
   | xor' out'wirep g = do
-      let (scalar, ext)
-            | out'wirep g'lwire = (g'rwire, g'lwire)
-            | otherwise = (g'lwire, g'rwire)
+      let (scalar, ext) = scalar'ext g
       shift g'op scalar ext g'owire
   | nor' out'wirep g = do
       tie <- rand'wire
-      shift Mul g'lwire unit'wire tie +++ shift g'op g'rwire tie g'owire
+      pure [Gate Add g'lwire (set'expr delta'expr $ set'unit'val 0) tie]
+        +++ shift g'op g'rwire tie g'owire
   | otherwise = pure [g]
 {-# INLINEABLE shift'entries #-}
 
@@ -184,7 +194,63 @@ shift :: Num f => Gateop -> Wire f -> Wire f -> Wire f -> IO [Gate f]
 shift op scalar ext out = do
   tie'a <- rand'wire
   tie'b <- rand'wire
-  pure [Gate op scalar ext tie'a]
-    +++ pure [Gate Mul ext (set'expr delta'expr $ set'unit'val 0) tie'b]
-    +++ pure [Gate Add tie'a tie'b out]
+  case op of
+    Mul ->
+      pure [Gate op scalar ext tie'a]
+        +++ pure [Gate Mul ext (set'expr delta'expr $ set'unit'val 0) tie'b]
+        +++ pure [Gate Add tie'a tie'b out]
+    Add ->
+      -- pure [Gate op scalar ext tie'a]
+      -- +++ pure [Gate Add (set'expr delta'expr $ set'unit'val 0) tie'a out]
+      pure [Gate Add (set'expr delta'expr $ set'unit'val 0) ext tie'a]
+        +++ pure [Gate op scalar tie'a out]
+    _ -> die "Error,"
 {-# INLINEABLE shift #-}
+
+scalar'ext :: Gate f -> (Wire f, Wire f)
+scalar'ext Gate {..}
+  | out'wirep g'lwire = (g'rwire, g'lwire)
+  | otherwise = (g'lwire, g'rwire)
+
+from'addp :: O'table f -> Wire f -> Bool
+from'addp table Wire {..}
+  | member w'key table && (g'op . fst $ table <!> w'key) == Add = True
+  | otherwise = False
+
+splice'rhos :: Num f => O'table f -> Gate f -> IO [Gate f]
+splice'rhos table g@Gate {..}
+  | g'op /= Add = pure [g]
+  | and' out'wirep g
+      && from'addp table g'lwire
+      && from'addp table g'rwire =
+      do
+        tie'a <- rand'wire
+        tie'b <- rand'wire
+        splice g'lwire tie'a
+          +++ splice g'rwire tie'b
+          +++ pure [Gate g'op tie'a tie'b g'owire]
+  | xor' out'wirep g = do
+      let (scalar, ext) = scalar'ext g
+      if from'addp table ext && not (delta'wirep scalar)
+        then do
+          tie <- rand'wire
+          pure [Gate g'op scalar ext tie] +++ splice tie g'owire
+        else -- splice scalar tie +++ pure [Gate g'op ext tie g'owire]
+          pure [g]
+  | otherwise = pure [g]
+
+splice :: Num f => Wire f -> Wire f -> IO [Gate f]
+splice inp out = pure [Gate Mul inp (set'expr rho'expr $ set'unit'val 1) out]
+
+{- | member key table = do
+ let (g@Gate {..}, _) = table <!> key
+ (tip, cut) = tip'cut table key
+ if
+ | not . valid'operator $ g ->
+ die $ "Error, found invalid op during reorg: " ++ show g'op
+ | needs'merge g ->
+ reorg table (w'key tip) +++ merge table g'owire tip cut
+ | otherwise ->
+ reorg table (w'key tip) +++ reorg table (w'key cut) +++ pure [g]
+ | otherwise = pure []
+-}

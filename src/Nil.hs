@@ -46,12 +46,13 @@ lang =
     -- , "let o = 10a + b * c * d / e"
     -- , "let p = o^3 + b / c"
     -- , "let q = a + 3b + p * d / e"
-    -- , "let r = a * b * c * d * e"
+    -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
     -- ]
 
     [ "language (priv a, priv b, priv c)"
-    , "return a^2 + a*b + a + b"
+    , "return a^3 + (a*b) + a + b + 10"
+    -- , "return 5*7 + 10"
     ]
 
 c = compile'language lang

@@ -216,15 +216,10 @@ out'wirep Wire {..} = case w'key of
   _ -> False
 {-# INLINE out'wirep #-}
 
--- | Predicate for a pub-wire
-priv'wirep :: Wire f -> Bool
-priv'wirep Wire {..} = w'expr == "%priv"
-{-# INLINE priv'wirep #-}
-
 -- | Predicate for a priv-wire
-pub'wirep :: Wire f -> Bool
-pub'wirep Wire {..} = w'expr == "%pub"
-{-# INLINE pub'wirep #-}
+inp'wirep :: Wire f -> Bool
+inp'wirep wire = not (out'wirep wire) && not (const'wirep wire)
+{-# INLINE inp'wirep #-}
 
 -- | Predicate if reciprocal flag is on
 recip'wirep :: Wire f -> Bool
