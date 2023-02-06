@@ -102,7 +102,7 @@ write'gate instances witnesses Gate {..}
         unwords
           [ key wire
           , "[shape=egg,color=orange,fontsize=18,"
-              ++ "label=<1/&kappa;<sub>j</sub>&rho;<sub>j</sub>>];"
+              ++ "label=<&kappa;<sub>j</sub>/&rho;<sub>j</sub>>];"
           ]
     | const'wirep wire =
         unwords

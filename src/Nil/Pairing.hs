@@ -5,6 +5,7 @@ module Nil.Pairing
   ( miller'loop
   , twist
   , pairing
+  , from'fq
   )
 where
 

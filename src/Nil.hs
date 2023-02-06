@@ -13,6 +13,7 @@ module Nil
   , module Nil.Graph
   , module Nil.Lexer
   , module Nil.Parser
+  , module Nil.Pairing
   , module Nil.Pinocchio
   , module Nil.Poly
   , module Nil.Qap
@@ -32,6 +33,7 @@ import Nil.Evaluator
 import Nil.Field
 import Nil.Graph
 import Nil.Lexer
+import Nil.Pairing
 import Nil.Parser
 import Nil.Pinocchio
 import Nil.Poly
