@@ -16,7 +16,7 @@ import Nil.Circuit
   , const'wirep
   , out'wirep
   )
-import Nil.Reorg (delta'wirep, rho'wirep)
+import Nil.Reorg (amp'wirep, shift'wirep)
 import Nil.Utils (die)
 import System.Exit (ExitCode (ExitSuccess))
 import System.Process (readProcessWithExitCode)
@@ -67,9 +67,9 @@ write'gate instances witnesses Gate {..}
  where
   key wire
     | out'wirep wire = tail (w'key wire)
-    | (const'wirep wire || delta'wirep wire) && wire == g'lwire =
+    | (const'wirep wire || shift'wirep wire) && wire == g'lwire =
         "_" ++ key g'owire ++ "L"
-    | (const'wirep wire || delta'wirep wire) && wire == g'rwire =
+    | (const'wirep wire || shift'wirep wire) && wire == g'rwire =
         "_" ++ key g'owire ++ "R"
     | otherwise = w'key wire
 
@@ -92,17 +92,17 @@ write'gate instances witnesses Gate {..}
     | otherwise = "white"
 
   style wire
-    | delta'wirep wire =
+    | shift'wirep wire =
         unwords
           [ key wire
           , "[shape=egg,color=salmon,fontsize=18,"
-              ++ "label=<-&delta;<sub>j</sub>&epsilon;<sub>j</sub>>];"
+              ++ "label=<-&delta;<sub>i</sub>&epsilon;<sub>i</sub>>];"
           ]
-    | rho'wirep wire =
+    | amp'wirep wire =
         unwords
           [ key wire
           , "[shape=egg,color=orange,fontsize=18,"
-              ++ "label=<&kappa;<sub>j</sub>/&rho;<sub>j</sub>>];"
+              ++ "label=<&Pi;<sub>ij</sub>&kappa;<sub>j</sub>/&rho;<sub>ij</sub>>];"
           ]
     | const'wirep wire =
         unwords

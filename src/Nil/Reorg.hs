@@ -5,6 +5,7 @@
 module Nil.Reorg where
 
 import Control.Applicative (liftA2)
+import Control.Monad ((<=<))
 import Data.Bifunctor (bimap)
 import Data.Bits (xor)
 import Data.Functor ((<&>))
@@ -42,24 +43,6 @@ type O'table f = Map String (Gate f, Int)
 (+++) :: Applicative f => f [a] -> f [a] -> f [a]
 (+++) = liftA2 (++)
 {-# INLINE (+++) #-}
-
--- | The name prepared wire representing delta-shift
-delta'expr :: String
-delta'expr = ">>"
-{-# INLINE delta'expr #-}
-
--- | The name prepared wire representing rho-norm
-rho'expr :: String
-rho'expr = "//"
-{-# INLINE rho'expr #-}
-
--- | Predicate for a delta-shifter
-delta'wirep :: Wire f -> Bool
-delta'wirep Wire {..} = w'expr == delta'expr
-
--- | Predicate for a rho-norm
-rho'wirep :: Wire f -> Bool
-rho'wirep Wire {..} = w'expr == rho'expr
 
 -- | Inspect operators
 valid'operator :: Gate f -> Bool
@@ -102,13 +85,10 @@ tip'cut table key =
 -- | reorg-circuit
 reorg'circuit :: (Eq f, Num f, Show f) => Circuit f -> IO (Circuit f)
 reorg'circuit circuit@Circuit {..} = do
-  reorged <-
-    nub
-      <$> reorg
-        (gen'table c'gates)
-        (w'key . g'owire . last $ c'gates)
-  shifted <- concat <$> mapM shift'entries reorged
-  gates <- concat <$> mapM (splice'rhos (gen'table shifted)) shifted
+  let key = w'key . g'owire . last $ c'gates
+  reorged <- nub <$> reorg (gen'table c'gates) key
+  shifted <- concat <$> mapM shift'gate reorged
+  gates <- concat <$> mapM (amplify'gate (gen'table shifted)) shifted
   pure $ circuit {c'gates = gates}
 {-# INLINE reorg'circuit #-}
 
@@ -177,18 +157,37 @@ merge'add table out tip cut = do
         +++ pure [Gate Add tie'a tie'b out]
 {-# INLINEABLE merge'add #-}
 
-shift'entries :: Num f => Gate f -> IO [Gate f]
-shift'entries g@Gate {..}
+-- | The name prepared wire representing delta-shift
+shift'expr :: String
+shift'expr = ">>"
+{-# INLINE shift'expr #-}
+
+-- | The name prepared wire representing amplifier-knot
+amp'expr :: String
+amp'expr = "*/"
+{-# INLINE amp'expr #-}
+
+-- | Predicate for a delta-shifter
+shift'wirep :: Wire f -> Bool
+shift'wirep Wire {..} = w'expr == shift'expr
+
+-- | Predicate for a amplifier-knot
+amp'wirep :: Wire f -> Bool
+amp'wirep Wire {..} = w'expr == amp'expr
+
+-- | Randomize entry gates by shifting wires
+shift'gate :: Num f => Gate f -> IO [Gate f]
+shift'gate g@Gate {..}
   | g'op == End = pure [g]
   | xor' out'wirep g = do
       let (scalar, ext) = scalar'ext g
       shift g'op scalar ext g'owire
   | nor' out'wirep g = do
       tie <- rand'wire
-      pure [Gate Add g'lwire (set'expr delta'expr $ set'unit'val 0) tie]
+      pure [Gate Add g'lwire (set'expr shift'expr $ set'unit'val 0) tie]
         +++ shift g'op g'rwire tie g'owire
   | otherwise = pure [g]
-{-# INLINEABLE shift'entries #-}
+{-# INLINEABLE shift'gate #-}
 
 shift :: Num f => Gateop -> Wire f -> Wire f -> Wire f -> IO [Gate f]
 shift op scalar ext out = do
@@ -197,12 +196,10 @@ shift op scalar ext out = do
   case op of
     Mul ->
       pure [Gate op scalar ext tie'a]
-        +++ pure [Gate Mul ext (set'expr delta'expr $ set'unit'val 0) tie'b]
+        +++ pure [Gate Mul ext (set'expr shift'expr $ set'unit'val 0) tie'b]
         +++ pure [Gate Add tie'a tie'b out]
     Add ->
-      -- pure [Gate op scalar ext tie'a]
-      -- +++ pure [Gate Add (set'expr delta'expr $ set'unit'val 0) tie'a out]
-      pure [Gate Add (set'expr delta'expr $ set'unit'val 0) ext tie'a]
+      pure [Gate Add (set'expr shift'expr $ set'unit'val 0) ext tie'a]
         +++ pure [Gate op scalar tie'a out]
     _ -> die "Error,"
 {-# INLINEABLE shift #-}
@@ -211,46 +208,35 @@ scalar'ext :: Gate f -> (Wire f, Wire f)
 scalar'ext Gate {..}
   | out'wirep g'lwire = (g'rwire, g'lwire)
   | otherwise = (g'lwire, g'rwire)
+{-# INLINE scalar'ext #-}
 
-from'addp :: O'table f -> Wire f -> Bool
-from'addp table Wire {..}
-  | member w'key table && (g'op . fst $ table <!> w'key) == Add = True
-  | otherwise = False
-
-splice'rhos :: Num f => O'table f -> Gate f -> IO [Gate f]
-splice'rhos table g@Gate {..}
+-- | Create and add an amplifier gate when amplifier knots are found
+amplify'gate :: Num f => O'table f -> Gate f -> IO [Gate f]
+amplify'gate table g@Gate {..}
   | g'op /= Add = pure [g]
-  | and' out'wirep g
-      && from'addp table g'lwire
-      && from'addp table g'rwire =
-      do
-        tie'a <- rand'wire
-        tie'b <- rand'wire
-        splice g'lwire tie'a
-          +++ splice g'rwire tie'b
-          +++ pure [Gate g'op tie'a tie'b g'owire]
+  | and' out'wirep g && from'addp g'lwire && from'addp g'rwire = do
+      tie'a <- rand'wire
+      tie'b <- rand'wire
+      amplify g'lwire tie'a
+        +++ amplify g'rwire tie'b
+        +++ pure [Gate g'op tie'a tie'b g'owire]
   | xor' out'wirep g = do
       let (scalar, ext) = scalar'ext g
-      if from'addp table ext && not (delta'wirep scalar)
+      if from'addp ext && not (shift'wirep scalar)
         then do
           tie <- rand'wire
-          pure [Gate g'op scalar ext tie] +++ splice tie g'owire
-        else -- splice scalar tie +++ pure [Gate g'op ext tie g'owire]
-          pure [g]
+          pure [Gate g'op scalar ext tie] +++ amplify tie g'owire
+        else pure [g]
   | otherwise = pure [g]
+ where
+  from'addp Wire {..}
+    | member w'key table =
+        let (Gate {g'op = op}, _) = table <!> w'key
+         in op == Add
+    | otherwise = False
+{-# INLINEABLE amplify'gate #-}
 
-splice :: Num f => Wire f -> Wire f -> IO [Gate f]
-splice inp out = pure [Gate Mul inp (set'expr rho'expr $ set'unit'val 1) out]
-
-{- | member key table = do
- let (g@Gate {..}, _) = table <!> key
- (tip, cut) = tip'cut table key
- if
- | not . valid'operator $ g ->
- die $ "Error, found invalid op during reorg: " ++ show g'op
- | needs'merge g ->
- reorg table (w'key tip) +++ merge table g'owire tip cut
- | otherwise ->
- reorg table (w'key tip) +++ reorg table (w'key cut) +++ pure [g]
- | otherwise = pure []
--}
+-- | Create an amplifier gate with the given in/out wires
+amplify :: Num f => Wire f -> Wire f -> IO [Gate f]
+amplify in' out = pure [Gate Mul in' (set'expr amp'expr $ set'unit'val 1) out]
+{-# INLINE amplify #-}

@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Nil.Evaluator where
@@ -6,6 +7,7 @@ module Nil.Evaluator where
 import Control.DeepSeq (NFData)
 import Data.ByteString (append)
 import Data.List (foldl')
+import Data.Map (Map, insert, member)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
   ( Circuit (..)
@@ -17,6 +19,7 @@ import Nil.Circuit
   , const'wirep
   , ext'wirep
   , nor'ext'wirep
+  , out'wirep
   , set'expr
   , set'flag
   , set'key
@@ -38,7 +41,9 @@ import Nil.Curve
   , toA
   , (.*)
   )
+import Nil.Ecdata (G1, G2)
 import Nil.Field (Field)
+import Nil.Reorg (O'table, gen'table, (<!>))
 import Nil.Utils
   ( blake2b
   , bytes'from'int'len
@@ -396,67 +401,41 @@ hash'circuit salt Circuit {..} =
    in hex'from'bytes . from'ba $ hash'gate <$> c'gates
 
 --------------------------------------------------------------------------------
---- [mpc] zksign evaluator: partially evaluate circuit with secrets
+--- [mpc] nil-sign evaluator: partially evaluate circuit with secrets
 --------------------------------------------------------------------------------
 
-{- | Homomorphically ecrypt secrets based on a circuit and a random field generator.
- Partially evaluate Circuit with @Priv@ secret value -> 'Signed Circuit'.
+-- | Multiple-signature object for nil-sign
+data NilSig f = NilSig
+  { n'keys :: (Point G1, Point G2)
+  , n'hash :: String
+  , n'sig :: Circuit f
+  }
+  deriving (Eq, Show)
+
+-- | Initialize nil-signature
+init'sig :: Circuit f -> NilSig f
+init'sig = NilSig (O, O) mempty
+
+{- | Homomorphically ecrypt secrets based on a reorged circuit.
+ @Sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets
 -}
-sign'circuit
-  :: (Integral f, Fractional f) => Circuit f -> Table f -> Circuit f
-sign'circuit = undefined
+sign'sig
+  :: (Integral f, Fractional f) => NilSig f -> Table f -> IO (NilSig f)
+sign'sig NilSig {..} table = undefined
 
--- sign'circuit circuit@Circuit {..} secrets g = circuit
--- { c'gates = [ valid'sign'gate c'witness $ signGate gate secrets g
+gate'key :: Gate f -> String
+gate'key Gate {..} = concat $ w'key <$> [g'lwire, g'rwire, g'owire]
 
-{- | gate <- c'gates
- ]
- }
- where g = fromIntegral . (=| fromInteger gamma) . fst . unEF $ eG1G2
--}
-
-{- | Signing each gate by partially evaluating with secrets and a field generator
- signGate :: (Integral f, Fractional f) => Gate f -> Table f -> f -> Gate f
- signGate gate@Gate {..} secrets g = case g'op of
- Mul -> gate { g'op    = Exp'
- , g'lwire = signWire g'lwire secrets g
- , g'rwire = signWire g'rwire secrets g
- }
- Add -> gate { g'op    = Mul
- , g'lwire = signWire g'lwire secrets g
- , g'rwire = signWire g'rwire secrets g
- }
- Exp' -> gate { g'op    = Exp'
- , g'lwire = signWire g'lwire secrets 1
- , g'rwire = signWire g'rwire secrets 1
- }
- gop -> die $ "Not allowed Gate operator: " <> show gop
--}
-
-{- | Signing each wire by partially evaluating with secrets and a field generator
- signWire :: (Integral f, Fractional f) => Wire f -> Table f -> f -> Wire f
- signWire w@Wire {..} secrets g
- | M.member w'key secrets = Wire { w'key    = const'key
- , w'val    = finish (secrets ! w'key)
- , w'flag = 0
- }
- | otherwise = w
+gen'ftable :: Circuit f -> Map String (Gate f)
+gen'ftable Circuit {..} =
+  let end = last c'gates
+   in go end (gen'table c'gates) (g'rwire end) mempty
  where
- finish val | g == 1             = val
- | g /= 1 && val == 0 = g
- | otherwise          = g ^ val
--}
+  go'wire gate o'tab wire f'tab
+    | member (w'key wire) o'tab && out'wirep wire =
+        let (g@Gate {..}, _) = o'tab <!> w'key wire
+         in go g o'tab wire (insert (gate'key g) gate f'tab)
+    | otherwise = f'tab
 
-{- | Validate a hased circuit
- valid'sign'gate
- :: (Integral f, Fractional f) => Table (Wire f) -> Gate f -> Gate f
- valid'sign'gate filter' gate@Gate { g'lwire, g'rwire }
- | M.member (w'key g'lwire) filter'
- = die $ "Error, not assigned secret variable: " ++ w'key g'lwire
- | M.member (w'key g'rwire) filter'
- = die $ "Error, not assigned secret variable: " ++ w'key g'rwire
- | otherwise
- = gate
--}
-
---------------------------------------------------------------------------------
+  go gate@Gate {..} o'tab wire f'tab =
+    foldr (go'wire gate o'tab) f'tab [g'lwire, g'rwire]

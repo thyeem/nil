@@ -50,11 +50,11 @@ lang =
     -- , "let q = a + 3b + p * d / e"
     -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
-    -- ]
-
-    [ "language (priv a, priv b, priv c)"
-    , "return a^3 + (a*b) + a + b + 10"
-    -- , "return 5*7 + 10"
+    -- [ "language (priv a, priv b, priv c)"
+    -- , "return a^3 + a*b + a + b + 10"
+    -- , "return a + (5*7) + 10"
+    [ "language (priv w)"
+    , "return w^3 + w + 5"
     ]
 
 c = compile'language lang
@@ -68,6 +68,7 @@ t =
     , ("c", -3333333)
     , ("d", -4444444)
     , ("e", -5555555)
+    , ("w", 3)
     ]
     :: Table Fr
 
@@ -84,3 +85,5 @@ er = eval'circuit def'curve t <$> rc
 retc = ec ! "return"
 
 retr = (! "return") <$> er
+
+sig = init'sig <$> rc
