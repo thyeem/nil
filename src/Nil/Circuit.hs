@@ -225,37 +225,41 @@ recip'wirep wire = w'flag wire == 1
 
 -- | Check if both gate input wires are extended wires
 and'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
-and'ext'wirep table Gate {..} =
-  ext'wirep (table ~~> g'lwire) && ext'wirep (table ~~> g'rwire)
+and'ext'wirep table = and' $ ext'wirep . (table ~~>)
 {-# INLINE and'ext'wirep #-}
 
 -- | Check if one of gate input wires is an extended wire
 xor'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
-xor'ext'wirep table g =
-  not (and'ext'wirep table g)
-    && not (nor'ext'wirep table g)
+xor'ext'wirep table = xor' $ ext'wirep . (table ~~>)
 {-# INLINE xor'ext'wirep #-}
 
 -- | Check if none of gate input wires is an extended wire
 nor'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
-nor'ext'wirep table Gate {..} =
-  not $ ext'wirep (table ~~> g'lwire) || ext'wirep (table ~~> g'rwire)
+nor'ext'wirep table = nor' $ ext'wirep . (table ~~>)
 {-# INLINE nor'ext'wirep #-}
 
--- | Builder for predicate to check gate input wires: AND
+-- | Test logical operator (AND) with a predicate and input wires
 and' :: (Wire f -> Bool) -> Gate f -> Bool
 and' p Gate {..} = p g'lwire && p g'rwire
 {-# INLINE and' #-}
 
--- | Builder for predicate to check gate input wires: XOR
+-- | Test logical operator (XOR) with a predicate and input wires
 xor' :: (Wire f -> Bool) -> Gate f -> Bool
 xor' p g = not (and' p g) && not (nor' p g)
 {-# INLINE xor' #-}
 
--- | Builder for predicate to check gate input wires: NOR
+-- | Test logical operator (NOR) with a predicate and input wires
 nor' :: (Wire f -> Bool) -> Gate f -> Bool
 nor' p Gate {..} = not $ p g'lwire || p g'rwire
 {-# INLINE nor' #-}
+
+{- | Classfy input wires satisfying the given predicate: (pass, fail)
+   The result is valid only when applied input wires hold XOR
+-}
+either'by :: (Wire f -> Bool) -> Gate f -> (Wire f, Wire f)
+either'by p Gate {..}
+  | p g'lwire = (g'lwire, g'rwire)
+  | otherwise = (g'rwire, g'lwire)
 
 {- | Construct a 'circuit' from 'AST'
 
@@ -319,7 +323,7 @@ conv state = \case
             End
             (set'unit'key "return")
             (g'owire . head $ gates)
-            (out'wire gates)
+            (set'unit'key $ out'prefix : "end")
             : gates
         , table
         )

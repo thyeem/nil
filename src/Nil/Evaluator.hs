@@ -6,8 +6,8 @@ module Nil.Evaluator where
 
 import Control.DeepSeq (NFData)
 import Data.ByteString (append)
-import Data.List (foldl')
-import Data.Map (Map, member)
+import Data.List (foldl', nub, sortOn)
+import Data.Map (Map, assocs, elems, keys, member)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
   ( Circuit (..)
@@ -17,8 +17,10 @@ import Nil.Circuit
   , Wire (..)
   , and'ext'wirep
   , const'wirep
+  , either'by
   , ext'wirep
   , nor'ext'wirep
+  , out'prefix
   , out'wirep
   , set'expr
   , set'flag
@@ -28,7 +30,9 @@ import Nil.Circuit
   , set'val
   , unit'wire
   , wire'keys
+  , xor'
   , xor'ext'wirep
+  , (<~)
   , (<~~)
   , (~>)
   , (~~>)
@@ -43,7 +47,7 @@ import Nil.Curve
   )
 import Nil.Ecdata (G1, G2)
 import Nil.Field (Field)
-import Nil.Reorg (O'table, gen'table)
+import Nil.Reorg (O'table, amp'wirep, gen'otable)
 import Nil.Utils
   ( blake2b
   , bytes'from'int'len
@@ -153,20 +157,12 @@ eval'xor'ext'wire
   -> W'table f
   -> Gate f
   -> W'table f
-eval'xor'ext'wire curve op table Gate {..} =
-  let wire
-        | ext'wirep (table ~~> g'lwire) =
-            wire'from'p $
-              p'from'wire
-                curve
-                (table ~~> g'lwire)
-                `op` (table ~~~> g'rwire)
-        | otherwise =
-            wire'from'p $
-              p'from'wire
-                curve
-                (table ~~> g'rwire)
-                `op` (table ~~~> g'lwire)
+eval'xor'ext'wire curve op table g@Gate {..} =
+  let (ext, scalar) = either'by (ext'wirep . (table ~~>)) g
+      wire =
+        wire'from'p $
+          p'from'wire curve (table ~~> ext)
+            `op` (table ~~~> scalar)
    in table <~~ set'key (w'key g'owire) wire
 {-# INLINEABLE eval'xor'ext'wire #-}
 
@@ -408,19 +404,25 @@ data NilSig f = NilSig
   }
   deriving (Eq, Show)
 
+-- | Lookup table describing a circuit as DAG
 type G'table f = Map String [Gate f]
 
-{- | Put a graph-unit to the graph-table
- (<~~) :: G'table f -> (String, Gate f) -> G'table f
- (<~~) table (key, gate)
- | member key table = undefined -- uncurry insert (key, gate) table
- | otherwise = uncurry insert (key, [gate]) table
- {\-# INLINE (<~~) #-\}
+{- | Put an edge record to the graph-table
+ key -> out-wire of [FROM gate]
+ gate -> [TO gate]
 -}
+(<<~) :: Eq f => G'table f -> (String, Gate f) -> G'table f
+(<<~) table (key, gate)
+  | member key table =
+      let gates = table ~> key
+       in table <~ (key, nub $ gate : gates)
+  | otherwise = table <~ (key, [gate])
+{-# INLINE (<<~) #-}
 
 -- | Initialize nil-signature
 init'sig :: Circuit f -> NilSig f
 init'sig = NilSig (O, O) mempty
+{-# INLINE init'sig #-}
 
 {- | Homomorphically ecrypt secrets based on a reorged circuit.
  @Sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets
@@ -428,20 +430,39 @@ init'sig = NilSig (O, O) mempty
 sign'sig
   :: (Integral f, Fractional f) => NilSig f -> W'table f -> IO (NilSig f)
 sign'sig NilSig {..} table = undefined
+{-# INLINE sign'sig #-}
 
-gate'key :: Gate f -> String
-gate'key Gate {..} = concat $ w'key <$> [g'lwire, g'rwire, g'owire]
+gen'gtable :: Eq f => O'table f -> G'table f
+gen'gtable o'tab =
+  let gates = fst <$> sortOn (negate . snd) (elems o'tab)
+      go'wire gate g'tab wire
+        | out'wirep wire = g'tab <<~ (w'key wire, gate)
+        | otherwise = g'tab
+      update g'tab gate@Gate {..} =
+        foldl' (go'wire gate) g'tab [g'lwire, g'rwire]
+   in foldl' update mempty gates
+{-# INLINEABLE gen'gtable #-}
 
--- gen'ftable :: Circuit f -> Map String (Gate f)
--- gen'ftable Circuit {..} =
--- let end = last c'gates
--- in go end (gen'table c'gates) (g'rwire end) mempty
--- where
--- go'wire gate o'tab wire f'tab
--- \| member (w'key wire) o'tab && out'wirep wire =
--- let (g@Gate {..}, _) = o'tab ~> w'key wire
--- in go g o'tab wire (insert (gate'key g) gate f'tab)
--- \| otherwise = f'tab
+-- | Find the amplifier-knot gate related to the given gate
+find'paired'amp :: G'table f -> Gate f -> Gate f
+find'paired'amp = undefined
 
--- go gate@Gate {..} o'tab wire f'tab =
--- foldr (go'wire gate o'tab) f'tab [g'lwire, g'rwire]
+-- | Find the shift-knot gate related to the given gate
+find'paired'shift :: G'table f -> Gate f -> Gate f
+find'paired'shift = undefined
+
+-- | Get a list of keys of amplifier gates
+get'amp'keys :: O'table f -> [String]
+get'amp'keys table = foldl' get [] (assocs table)
+ where
+  get keys (key, (gate, _))
+    | xor' amp'wirep gate = key : keys
+    | otherwise = keys
+
+-- | Overwrite/replace previous gate with the new evaluated one
+(<~!) :: Eq f => O'table f -> (String, Gate f) -> O'table f
+(<~!) table (key, gate)
+  | member key table =
+      let (_, height) = table ~> key
+       in table <~ (key, (gate, height))
+  | otherwise = die $ "Error, not found gate-key: " ++ key
