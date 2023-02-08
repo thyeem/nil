@@ -28,17 +28,12 @@ import Nil.Circuit
   , set'unit'val
   , unit'wire
   , xor'
+  , (~>)
   )
 import Nil.Utils (die, random'hex)
 
 -- | Lookup table used in reorg process
 type O'table f = Map String (Gate f, Int)
-
--- | Get a record from O'table
-(<!>) :: O'table f -> String -> (Gate f, Int)
-(<!>) table key =
-  fromMaybe (die $ "Error, not found key: " ++ key) $ table !? key
-{-# INLINE (<!>) #-}
 
 (+++) :: Applicative f => f [a] -> f [a] -> f [a]
 (+++) = liftA2 (++)
@@ -73,9 +68,9 @@ recip' wire@Wire {..} = wire {w'flag = 1 `xor` w'flag}
 -- | Determine which wire will be cut: in forms of (survived, killed)
 tip'cut :: O'table f -> String -> (Wire f, Wire f)
 tip'cut table key =
-  let (Gate {g'lwire, g'rwire}, _) = table <!> key
+  let (Gate {g'lwire, g'rwire}, _) = table ~> key
       height wire
-        | member (w'key wire) table = snd (table <!> w'key wire)
+        | member (w'key wire) table = snd (table ~> w'key wire)
         | otherwise = -1
    in if recip'wirep g'rwire || (height g'lwire > height g'rwire)
         then (g'lwire, g'rwire)
@@ -99,7 +94,7 @@ gen'table = foldl' update mempty
   update table g@Gate {..} =
     let height = max (find g'lwire) (find g'rwire)
         find wire
-          | member (w'key wire) table = 1 + snd (table <!> w'key wire)
+          | member (w'key wire) table = 1 + snd (table ~> w'key wire)
           | otherwise = 1
      in insert (w'key g'owire) (g, height) table
 {-# INLINE gen'table #-}
@@ -108,7 +103,7 @@ gen'table = foldl' update mempty
 reorg :: (Eq f, Num f, Show f) => O'table f -> String -> IO [Gate f]
 reorg table key
   | member key table = do
-      let (g@Gate {..}, _) = table <!> key
+      let (g@Gate {..}, _) = table ~> key
           (tip, cut) = tip'cut table key
       if
           | not . valid'operator $ g ->
@@ -124,7 +119,7 @@ reorg table key
 merge :: (Eq f, Num f) => O'table f -> Wire f -> Wire f -> Wire f -> IO [Gate f]
 merge table out tip cut
   | member (w'key cut) table = do
-      let (Gate {g'op}, _) = table <!> w'key cut
+      let (Gate {g'op}, _) = table ~> w'key cut
       case g'op of
         Mul -> merge'mul table out tip cut
         Add -> merge'add table out tip cut
@@ -231,7 +226,7 @@ amplify'gate table g@Gate {..}
  where
   from'addp Wire {..}
     | member w'key table =
-        let (Gate {g'op = op}, _) = table <!> w'key
+        let (Gate {g'op = op}, _) = table ~> w'key
          in op == Add
     | otherwise = False
 {-# INLINEABLE amplify'gate #-}

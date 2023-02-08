@@ -25,8 +25,9 @@ import Nil
   , Fr
   , Pretty (..)
   , Proof
-  , Table
   , VerificationKey
+  , W'table
+  , Wire (w'val)
   , compile'language
   , decode'file
   , def'curve
@@ -52,7 +53,7 @@ import Nil
   , zksetup
   , zktest
   , zkverify
-  , (!)
+  , (~>)
   )
 import Options.Applicative (execParser)
 import System.Directory (doesFileExist)
@@ -127,7 +128,7 @@ prove Opts {..} = do
   let Prove circuit ekey wit = o'command
   circuit_ <- decode'file circuit :: IO (Circuit Fr)
   ekey_ <- decode'file ekey :: IO EvaluationKey
-  witness_ <- read'table wit :: IO (Table Fr)
+  witness_ <- read'table wit :: IO (W'table Fr)
   let qap = qap'from'circuit circuit_
       out = statement def'curve witness_ circuit_
       vec'wit = wire'vals def'curve witness_ circuit_
@@ -146,8 +147,8 @@ verify Opts {..} = do
   let Verify proof vkey inst = o'command
   proof_ <- decode'file proof :: IO Proof
   vkey_ <- decode'file vkey :: IO VerificationKey
-  instance_ <- read'table inst :: IO (Table Fr)
-  let claim = instance_ ! "return"
+  instance_ <- read'table inst :: IO (W'table Fr)
+  let claim = w'val $ instance_ ~> "return"
       verified = zkverify proof_ vkey_ (vec'from'table instance_)
   unless o'quite $ do
     info
@@ -231,7 +232,7 @@ demo'zkp verbose =
           , 4025919241471660438673811488519877818316526842848831811191175453074037299584
           )
         ]
-        :: Table Fr
+        :: W'table Fr
     )
     ( table'from'list
         [

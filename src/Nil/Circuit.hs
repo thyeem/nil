@@ -10,7 +10,7 @@ module Nil.Circuit where
 -- , Wire(..)
 -- , Gate(..)
 -- , Gateop(..)
--- , Table
+-- , W'table
 -- , circuit'from'ast
 -- , vec'from'table
 -- , table'from'list
@@ -110,49 +110,46 @@ data Wire f = Wire
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
 -- | Look-up table for wires
-type Table f = Map String (Wire f)
+type W'table f = Map String (Wire f)
 
 -- | Data type for collecting gates while traversing AST
-type State f = ([Gate f], Table f)
+type State f = ([Gate f], W'table f)
 
--- | Get the normalized vector from Table f
-vec'from'table :: Table f -> [f]
-vec'from'table table = (table !) <$> keys table
+-- | Get the normalized vector from W'table f
+vec'from'table :: W'table f -> [f]
+vec'from'table table = w'val . (table ~>) <$> keys table
 {-# INLINE vec'from'table #-}
 
--- | Get a Table f from List [(String, f)]
-table'from'list :: Num f => [(String, f)] -> Table f
+-- | Get a W'table f from List [(String, f)]
+table'from'list :: Num f => [(String, f)] -> W'table f
 table'from'list =
   foldr
-    ( \(key, val) ->
-        insert key (set'val val . set'unit'key $ key)
+    ( \(key, val) table ->
+        table <~ (key, set'val val . set'unit'key $ key)
     )
     mempty
 {-# INLINE table'from'list #-}
 
--- | Get a wire-value by a wire-key from Table f
-(!) :: Table f -> String -> f
-(!) table key =
-  w'val
-    . fromMaybe
-      (die $ "Error, not found key: " ++ key)
-    $ (table !? key)
-{-# INLINE (!) #-}
+(<~) :: Ord k => Map k a -> (k, a) -> Map k a
+(<~) = flip (uncurry insert)
+{-# INLINE (<~) #-}
+
+(~>) :: (Ord k, Show k) => Map k a -> k -> a
+(~>) table key =
+  fromMaybe (die $ "Error, not found key: " ++ show key) (table !? key)
+{-# INLINE (~>) #-}
+
+-- | Put a wire to the wire-table
+(<~~) :: W'table f -> Wire f -> W'table f
+(<~~) table wire = table <~ (w'key wire, wire)
+{-# INLINE (<~~) #-}
 
 -- | Replace a wire in the table with what previously bound wires
-(!~) :: Table f -> Wire f -> Wire f
-(!~) table wire@Wire {..}
+(~~>) :: W'table f -> Wire f -> Wire f
+(~~>) table wire@Wire {..}
   | const'wirep wire = wire
-  | otherwise =
-      fromMaybe
-        (die $ "Error, not found key: " ++ w'key)
-        (table !? w'key)
-{-# INLINE (!~) #-}
-
--- | Put a wire to the table
-(<~) :: Table f -> Wire f -> Table f
-(<~) table wire@Wire {..} = insert w'key wire table
-{-# INLINE (<~) #-}
+  | otherwise = table ~> w'key
+{-# INLINE (~~>) #-}
 
 -- | The name of specially prepared wire representing constant basis
 const'key :: String
@@ -227,22 +224,22 @@ recip'wirep wire = w'flag wire == 1
 {-# INLINE recip'wirep #-}
 
 -- | Check if both gate input wires are extended wires
-and'ext'wirep :: Integral f => Table f -> Gate f -> Bool
+and'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
 and'ext'wirep table Gate {..} =
-  ext'wirep (table !~ g'lwire) && ext'wirep (table !~ g'rwire)
+  ext'wirep (table ~~> g'lwire) && ext'wirep (table ~~> g'rwire)
 {-# INLINE and'ext'wirep #-}
 
 -- | Check if one of gate input wires is an extended wire
-xor'ext'wirep :: Integral f => Table f -> Gate f -> Bool
+xor'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
 xor'ext'wirep table g =
   not (and'ext'wirep table g)
     && not (nor'ext'wirep table g)
 {-# INLINE xor'ext'wirep #-}
 
 -- | Check if none of gate input wires is an extended wire
-nor'ext'wirep :: Integral f => Table f -> Gate f -> Bool
+nor'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
 nor'ext'wirep table Gate {..} =
-  not $ ext'wirep (table !~ g'lwire) || ext'wirep (table !~ g'rwire)
+  not $ ext'wirep (table ~~> g'lwire) || ext'wirep (table ~~> g'rwire)
 {-# INLINE nor'ext'wirep #-}
 
 -- | Builder for predicate to check gate input wires: AND
@@ -376,7 +373,7 @@ add'gate op (gates, table) lwire rwire = case op of
   _ ->
     let norm wire@Wire {..}
           | out'wirep wire = wire
-          | otherwise = set'flag w'flag (table !~ wire)
+          | otherwise = set'flag w'flag (table ~~> wire)
         out'expr =
           set'expr
             (unwords ["(" ++ pretty op, w'expr lwire, w'expr rwire ++ ")"])
@@ -426,14 +423,14 @@ out'wire = \case
       | otherwise -> die $ "Error, not allowed wire prefix: " ++ [prefix]
 {-# INLINEABLE out'wire #-}
 
--- | Bind two wires together and register them to Table f
-bind'wires :: Table f -> Wire f -> Wire f -> Table f
+-- | Bind two wires together and register them to W'table f
+bind'wires :: W'table f -> Wire f -> Wire f -> W'table f
 bind'wires table Wire {..} rwire
   | member w'key table =
       die . unwords $
         ["Error, found conflicting definition for:", w'key ++ ",", w'expr]
   | otherwise =
-      insert w'key rwire table
+      table <~ (w'key, rwire)
 {-# INLINEABLE bind'wires #-}
 
 {- | Get vector of all wire-keys used in 'circuit':

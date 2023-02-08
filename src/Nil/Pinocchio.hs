@@ -40,12 +40,12 @@ import Nil.Circuit
   ( Circuit (..)
   , Gate
   , Gateop
-  , Table
+  , W'table
   , Wire (..)
   , circuit'from'ast
   , table'from'list
   , vec'from'table
-  , (!)
+  , (~>)
   )
 import Nil.Curve
   ( Curve
@@ -426,7 +426,7 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
 {-# INLINEABLE zkverify #-}
 
 -- | Examine the prepared zero-knowledge suite
-zktest :: Bool -> String -> Table Fr -> Table Fr -> IO Bool
+zktest :: Bool -> String -> W'table Fr -> W'table Fr -> IO Bool
 zktest verbose language witnesses instances = do
   -- Language
   when verbose $ do
@@ -463,7 +463,7 @@ zktest verbose language witnesses instances = do
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."
-    stderr ("Statement:   " ++ show (instances ! "return"))
+    stderr ("Statement:   " ++ (show . w'val $ instances ~> "return"))
     stderr ("Verified: " ++ show verified)
   pure verified
 {-# INLINEABLE zktest #-}
@@ -476,7 +476,7 @@ decode'file f =
     <&> fromRight
       (die $ "Failed to decode data from: " ++ f)
 
-read'table :: FilePath -> IO (Table Fr)
+read'table :: FilePath -> IO (W'table Fr)
 read'table f =
   L.readFile f >>= \bytes -> case J.decode bytes of
     Just x -> pure (table'from'list x)
