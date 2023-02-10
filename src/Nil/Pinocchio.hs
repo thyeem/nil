@@ -81,6 +81,7 @@ import Nil.Qap
 import Nil.Utils
   ( Pretty (..)
   , die
+  , ranf
   , slice
   , stderr
   , (<%>)
@@ -230,7 +231,12 @@ compile'language = circuit'from'ast . parse . tokenize
 -}
 toxicwaste :: IO ToxicWastes
 toxicwaste = do
-  [s, a, bv, bw, by, r] <- (1 :: Fr, maxBound) |? 6
+  s <- ranf
+  a <- ranf
+  bv <- ranf
+  bw <- ranf
+  by <- ranf
+  r <- ranf
   pure (s, a, bv, bw, by, r)
 {-# INLINE toxicwaste #-}
 

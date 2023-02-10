@@ -5,6 +5,7 @@
 module Nil.Evaluator where
 
 import Control.DeepSeq (NFData)
+import Control.Monad (foldM)
 import Data.ByteString (append)
 import Data.List (foldl', nub, sortOn)
 import Data.Map (Map, assocs, elems, keys, member)
@@ -47,7 +48,8 @@ import Nil.Curve
   )
 import Nil.Ecdata (G1, G2)
 import Nil.Field (Field)
-import Nil.Reorg (O'table, amp'wirep, otab'from'gates, shift'wirep)
+import Nil.Poly ((|?))
+import Nil.Reorg (O'table, amp'wirep, otab'from'gates, reorg'circuit, shift'wirep)
 import Nil.Utils
   ( blake2b
   , bytes'from'int'len
@@ -55,8 +57,10 @@ import Nil.Utils
   , die
   , hex'from'bytes
   , int'from'bytes
+  , ranf
   , sha256
   )
+import System.Random (Random, randomRIO)
 
 --------------------------------------------------------------------------------
 --- [zkp] zk-SNARKs circuit evaluator
@@ -426,33 +430,96 @@ type G'table f = Map String [Gate f]
   | otherwise = die $ "Error, reached a deadend wire: " ++ key
 
 -- | Initialize nil-signature
-init'sig :: Circuit f -> NilSig f
-init'sig = NilSig (O, O) mempty
+init'sig :: (Eq f, Num f, Show f) => Circuit f -> IO (NilSig f)
+init'sig circuit = NilSig (O, O) mempty <$> reorg'circuit circuit
 {-# INLINE init'sig #-}
 
 {- | Homomorphically ecrypt secrets based on a reorged circuit.
  @Sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets
 -}
 sign'sig
-  :: Eq f => NilSig f -> W'table f -> IO (NilSig f)
-sign'sig nilsig@NilSig {..} secrets = do
+  :: ( Eq f
+     , Num f
+     , Random f
+     , Field f
+     , Bounded f
+     , Integral k
+     , Field k
+     , Integral f
+     , Fractional k
+     , Fractional k
+     )
+  => Curve k
+  -> NilSig f
+  -> W'table f
+  -> IO (NilSig f)
+sign'sig curve nilsig@NilSig {..} secrets = do
   let o'tab = otab'from'gates . c'gates $ n'sig
       g'tab = gtab'from'otab o'tab
       entries =
-        filter
-          (\(g, _) -> (g'op g /= End) && xor' entry'wirep g)
-          (elems o'tab)
-  pure $
-    nilsig
-      { n'keys = undefined
-      , n'hash = undefined
-      , n'sig = undefined
-      }
+        [ g
+        | (g, _) <- elems o'tab
+        , g'op g /= End
+        , xor' entry'wirep g
+        ]
+  table <- foldM (sign'gate curve secrets g'tab) o'tab entries
+  let sig = n'sig {c'gates = fst <$> sortOn snd (elems table)}
+  let keys = undefined
+  let hash = undefined
+  pure $ nilsig {n'keys = keys, n'hash = hash, n'sig = sig}
 {-# INLINE sign'sig #-}
 
 sign'gate
-  :: Gate f -> W'table f -> IO (NilSig f)
-sign'gate Gate {..} table = undefined
+  :: ( Eq f
+     , Num f
+     , Field f
+     , Random f
+     , Bounded f
+     , Integral f
+     , Integral k
+     , Fractional k
+     , Field k
+     )
+  => Curve k
+  -> W'table f
+  -> G'table f
+  -> O'table f
+  -> Gate f
+  -> IO (O'table f)
+sign'gate curve secrets g'tab o'tab g@Gate {..} = do
+  delta <- ranf
+  epsilon <- ranf
+  let (entry, other) = either'by entry'wirep g
+      secret = secrets ~~> entry
+      hide'p =
+        set'expr frozen'expr
+          . wire'from'p
+          . p'from'wire curve
+          . hide
+      hide =
+        set'expr frozen'expr
+          . set'val
+            (delta * (w'val secret + epsilon))
+  case g'op of
+    Add -> do
+      let lwire = set'key (w'key secret) . hide'p $ secret
+          rwire
+            | shift'wirep other = hide'p secret
+            | otherwise = other
+      pure $
+        o'tab
+          <~! ( w'key g'owire
+              , g {g'lwire = lwire, g'rwire = rwire}
+              )
+    Mul -> do
+      let lwire = hide secret
+      let rwire = other
+      pure $
+        o'tab
+          <~! ( w'key g'owire
+              , g {g'lwire = lwire, g'rwire = rwire}
+              )
+    a -> die $ "Error, found unexpected gate op: " ++ show a
 {-# INLINE sign'gate #-}
 
 sign'wire
@@ -492,7 +559,7 @@ find'shift o'tab g'tab g@Gate {..}
           let next = head $ g'tab ~>> w'key g'owire
               (wire, _) = either'by (/= g'owire) next
            in fst $ o'tab ~> w'key wire
-        a -> die $ "Error, unexpected gate op: " ++ show a
+        a -> die $ "Error, found unexpected gate op: " ++ show a
   | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
 {-# INLINEABLE find'shift #-}
 

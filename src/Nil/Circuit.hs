@@ -59,8 +59,7 @@ import Nil.Utils
  'c'symbols' == ( { symbols for @instance@ }, { symbols for @witness@ } )
 -}
 data Circuit f = Circuit
-  { c'hash :: String
-  , c'symbols :: ([String], [String])
+  { c'symbols :: ([String], [String])
   , c'gates :: [Gate f]
   }
   deriving (Eq, Show, Generic, NFData)
@@ -270,8 +269,7 @@ either'by p g@Gate {..}
 circuit'from'ast :: Num f => AST -> Circuit f
 circuit'from'ast ast =
   Circuit
-    { c'hash = mempty
-    , c'symbols = symbols
+    { c'symbols = symbols
     , c'gates = gates'from'ast (init'state symbols) ast
     }
  where

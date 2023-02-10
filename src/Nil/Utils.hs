@@ -34,7 +34,7 @@ import Numeric (showHex)
 import System.Entropy (getEntropy)
 import System.Exit (exitFailure, exitSuccess)
 import qualified System.IO
-import System.Random (randomRIO)
+import System.Random (Random, randomRIO)
 import Text.Pretty.Simple
   ( OutputOptions (..)
   , StringOutputStyle (..)
@@ -263,6 +263,10 @@ twocols def fmt a b = intercalate "\n" $ lzip'with (printf fmt) def a b
 info :: [String] -> [String] -> IO ()
 info a b = putStrLn $ twocols mempty "%12s    %s" a b
 {-# INLINE info #-}
+
+-- | Generate a random element except for additive identity
+ranf :: (Num f, Random f, Bounded f) => IO f
+ranf = randomRIO (minBound + 1, maxBound - 1)
 
 -- | Random sampling of k from [p]
 sample :: [p] -> Int -> IO [p]
