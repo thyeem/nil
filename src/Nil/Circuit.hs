@@ -125,7 +125,7 @@ table'from'list :: Num f => [(String, f)] -> W'table f
 table'from'list =
   foldr
     ( \(key, val) table ->
-        table <~ (key, set'val val . set'unit'key $ key)
+        table <~ (key, set'val val . unit'var $ key)
     )
     mempty
 {-# INLINE table'from'list #-}
@@ -161,11 +161,6 @@ out'prefix :: Char
 out'prefix = '~'
 {-# INLINE out'prefix #-}
 
--- | Default unit wire
-unit'wire :: Num f => Wire f
-unit'wire = Wire const'key 1 0 mempty
-{-# INLINE unit'wire #-}
-
 -- | Set a given wire's key
 set'key :: String -> Wire f -> Wire f
 set'key key wire@Wire {} = wire {w'key = key}
@@ -184,15 +179,20 @@ set'flag flag wire@Wire {} = wire {w'flag = flag}
 set'expr :: String -> Wire f -> Wire f
 set'expr expr wire@Wire {} = wire {w'expr = expr}
 
--- | Get a const-wire with a given value
-set'unit'val :: Num f => f -> Wire f
-set'unit'val val = set'expr "&1" $ set'val val unit'wire
-{-# INLINE set'unit'val #-}
+-- | Get a unit-value const wire
+unit'const :: Num f => Wire f
+unit'const = Wire const'key 1 0 const'key
+{-# INLINE unit'const #-}
 
--- | Get a unit-wire with a given key
-set'unit'key :: Num f => String -> Wire f
-set'unit'key key = set'expr key $ set'key key unit'wire
-{-# INLINE set'unit'key #-}
+-- | Get a unit-value wire with a given key
+unit'var :: Num f => String -> Wire f
+unit'var key = Wire key 1 0 key
+{-# INLINE unit'var #-}
+
+-- | Get a const wire of a given value
+val'const :: Num f => f -> Wire f
+val'const val = set'val val unit'const
+{-# INLINE val'const #-}
 
 -- | Predicate for a const-wire
 const'wirep :: Wire f -> Bool
@@ -257,9 +257,11 @@ nor' p Gate {..} = not $ p g'lwire || p g'rwire
    The result is valid only when applied input wires hold XOR
 -}
 either'by :: (Wire f -> Bool) -> Gate f -> (Wire f, Wire f)
-either'by p Gate {..}
-  | p g'lwire = (g'lwire, g'rwire)
-  | otherwise = (g'rwire, g'lwire)
+either'by p g@Gate {..}
+  | xor' p g = if p g'lwire then (g'lwire, g'rwire) else (g'rwire, g'lwire)
+  | otherwise =
+      die $
+        unwords ["Error, not XOR between wires: ", w'key g'lwire, w'key g'rwire]
 
 {- | Construct a 'circuit' from 'AST'
 
@@ -294,8 +296,8 @@ init'state :: Num f => ([String], [String]) -> State f
 init'state (pub, priv) =
   ([], fromList $ (\wire -> (w'key wire, wire)) <$> (pub' ++ priv'))
  where
-  priv' = set'flag 5 . set'unit'key <$> priv
-  pub' = set'flag 6 . set'unit'key <$> pub
+  priv' = set'flag 5 . unit'var <$> priv
+  pub' = set'flag 6 . unit'var <$> pub
 {-# INLINE init'state #-}
 
 -- | Construct Gates by traversing AST
@@ -321,9 +323,9 @@ conv state = \case
     let (gates, table) = conv'expr state x
      in ( Gate
             End
-            (set'unit'key "return")
+            (unit'var "return")
             (g'owire . head $ gates)
-            (set'unit'key $ out'prefix : "end")
+            (unit'var $ out'prefix : "end")
             : gates
         , table
         )
@@ -355,16 +357,16 @@ conv'if state a b c =
       [before'a, after'a, after'b, _] = scanl conv'expr state [a, b, c]
       then' = add'gate Star after'b (from'expr before'a a) (from'expr after'a b)
       else' = add'gate Star unless' (outer unless') (from'expr after'b c)
-      unless' = add'gate Plus neg'if (set'unit'val 1) (outer neg'if)
-      neg'if = add'gate Star then' (set'unit'val (-1)) (from'expr before'a a)
+      unless' = add'gate Plus neg'if unit'const (outer neg'if)
+      neg'if = add'gate Star then' (val'const (-1)) (from'expr before'a a)
    in add'gate Plus else' (outer then') (outer else')
 {-# INLINEABLE conv'if #-}
 
 -- | Convert expressions into wires based on the given state
 from'expr :: Num f => State f -> Expr -> Wire f
 from'expr state = \case
-  Value (N n) -> set'unit'val (fromIntegral n)
-  Value (V v) -> set'unit'key v
+  Value (N n) -> val'const (fromIntegral n)
+  Value (V v) -> unit'var v
   a -> g'owire . head . fst . conv'expr state $ a
 {-# INLINE from'expr #-}
 
@@ -417,8 +419,8 @@ gate'op = \case
 -- | Generate an out wire for next gate based on a given accumulated gates
 out'wire :: Num f => [Gate f] -> Wire f
 out'wire = \case
-  [] -> set'unit'key (out'prefix : "1")
-  (g : _) -> set'unit'key (next . w'key . g'owire $ g)
+  [] -> unit'var (out'prefix : "1")
+  (g : _) -> unit'var (next . w'key . g'owire $ g)
  where
   next = \case
     [] -> die "Error, wire key is empty"

@@ -18,6 +18,7 @@ import Nil.Circuit
   , Gateop (..)
   , Wire (..)
   , and'
+  , const'key
   , either'by
   , inp'wirep
   , nor'
@@ -25,9 +26,9 @@ import Nil.Circuit
   , recip'wirep
   , set'expr
   , set'key
-  , set'unit'key
-  , set'unit'val
-  , unit'wire
+  , unit'const
+  , unit'var
+  , val'const
   , xor'
   , (~>)
   )
@@ -56,7 +57,7 @@ needs'merge g@Gate {..} =
 rand'wire :: Num f => IO (Wire f)
 rand'wire =
   set'expr "rand-tie"
-    . set'unit'key
+    . unit'var
     . ("~x" ++)
     <$> random'hex 8
 {-# INLINE rand'wire #-}
@@ -82,15 +83,15 @@ tip'cut table key =
 reorg'circuit :: (Eq f, Num f, Show f) => Circuit f -> IO (Circuit f)
 reorg'circuit circuit@Circuit {..} = do
   let key = w'key . g'owire . last $ c'gates
-  reorged <- nub <$> reorg (gen'otable c'gates) key
+  reorged <- nub <$> reorg (otab'from'gates c'gates) key
   shifted <- concat <$> mapM shift'gate reorged
-  gates <- concat <$> mapM (amplify'gate (gen'otable shifted)) shifted
+  gates <- concat <$> mapM (amplify'gate (otab'from'gates shifted)) shifted
   pure $ circuit {c'gates = gates}
 {-# INLINE reorg'circuit #-}
 
 -- | Generate a lookup table used in circuit reorg process.
-gen'otable :: [Gate f] -> O'table f
-gen'otable = foldl' update mempty
+otab'from'gates :: [Gate f] -> O'table f
+otab'from'gates = foldl' update mempty
  where
   update table g@Gate {..} =
     let height = max (find g'lwire) (find g'rwire)
@@ -98,7 +99,7 @@ gen'otable = foldl' update mempty
           | member w'key table = 1 + snd (table ~> w'key)
           | otherwise = 1
      in insert (w'key g'owire) (g, height) table
-{-# INLINE gen'otable #-}
+{-# INLINE otab'from'gates #-}
 
 -- | Reorganize a circuit for use of zksign
 reorg :: (Eq f, Num f, Show f) => O'table f -> String -> IO [Gate f]
@@ -165,11 +166,15 @@ amp'expr = "*/"
 
 -- | Predicate for a delta-shifter
 shift'wirep :: Wire f -> Bool
-shift'wirep Wire {..} = w'expr == shift'expr
+shift'wirep Wire {..} =
+  w'key == const'key
+    && w'expr == shift'expr
 
 -- | Predicate for a amplifier-knot
 amp'wirep :: Wire f -> Bool
-amp'wirep Wire {..} = w'expr == amp'expr
+amp'wirep Wire {..} =
+  w'key == const'key
+    && w'expr == amp'expr
 
 -- | Randomize entry gates by shifting wires
 shift'gate :: Num f => Gate f -> IO [Gate f]
@@ -180,7 +185,7 @@ shift'gate g@Gate {..}
       shift g'op scalar ext g'owire
   | nor' out'wirep g = do
       tie <- rand'wire
-      pure [Gate Add g'lwire (set'expr shift'expr $ set'unit'val 0) tie]
+      pure [Gate Add g'lwire (set'expr shift'expr $ val'const 0) tie]
         +++ shift g'op g'rwire tie g'owire
   | otherwise = pure [g]
 {-# INLINEABLE shift'gate #-}
@@ -192,10 +197,10 @@ shift op scalar ext out = do
   case op of
     Mul ->
       pure [Gate op scalar ext tie'a]
-        +++ pure [Gate Mul ext (set'expr shift'expr $ set'unit'val 0) tie'b]
+        +++ pure [Gate Mul ext (set'expr shift'expr $ val'const 0) tie'b]
         +++ pure [Gate Add tie'a tie'b out]
     Add ->
-      pure [Gate Add (set'expr shift'expr $ set'unit'val 0) ext tie'a]
+      pure [Gate Add ext (set'expr shift'expr $ val'const 0) tie'a]
         +++ pure [Gate op scalar tie'a out]
     _ -> die "Error,"
 {-# INLINEABLE shift #-}
@@ -228,5 +233,5 @@ amplify'gate table g@Gate {..}
 
 -- | Create an amplifier gate with the given in/out wires
 amplify :: Num f => Wire f -> Wire f -> IO [Gate f]
-amplify in' out = pure [Gate Mul in' (set'expr amp'expr $ set'unit'val 1) out]
+amplify in' out = pure [Gate Mul in' (set'expr amp'expr unit'const) out]
 {-# INLINE amplify #-}

@@ -25,10 +25,10 @@ import Nil.Circuit
   , set'expr
   , set'flag
   , set'key
-  , set'unit'key
-  , set'unit'val
   , set'val
-  , unit'wire
+  , unit'const
+  , unit'var
+  , val'const
   , wire'keys
   , xor'
   , xor'ext'wirep
@@ -47,7 +47,7 @@ import Nil.Curve
   )
 import Nil.Ecdata (G1, G2)
 import Nil.Field (Field)
-import Nil.Reorg (O'table, amp'wirep, gen'otable)
+import Nil.Reorg (O'table, amp'wirep, otab'from'gates, shift'wirep)
 import Nil.Utils
   ( blake2b
   , bytes'from'int'len
@@ -94,7 +94,7 @@ eval'circuit
   -> Circuit f
   -> W'table f
 eval'circuit curve table Circuit {..} =
-  foldl' (eval'gate curve) table c'gates <~~ unit'wire
+  foldl' (eval'gate curve) table c'gates <~~ unit'const
 {-# INLINE eval'circuit #-}
 
 -- | Evaluate each gate based on gate operator
@@ -212,7 +212,7 @@ wire'from'p
   -> Wire f
 wire'from'p point = case toA point of
   A _ x y ->
-    let wire = set'unit'val (fromIntegral x)
+    let wire = val'const (fromIntegral x)
      in if even y then set'flag 2 wire else set'flag 3 wire
   _ -> die "Error, cannot convert point at infinity into wire"
 {-# INLINE wire'from'p #-}
@@ -232,7 +232,7 @@ eval'end :: (Integral f, Fractional f) => W'table f -> Gate f -> W'table f
 eval'end table Gate {..} =
   let val = table ~~~> g'rwire
    in (table <~~ set'val (val * val) g'owire)
-        <~~ set'val val (set'unit'key "return")
+        <~~ set'val val (unit'var "return")
 {-# INLINEABLE eval'end #-}
 
 -- | Evaluate gate of @Mul (*)@ base gate operator
@@ -299,8 +299,8 @@ eval'rop table g@Gate {..}
   | nor'ext'wirep table g =
       let wire =
             if (table ~~~> g'lwire) `op` (table ~~~> g'rwire)
-              then unit'wire
-              else set'unit'val 0
+              then unit'const
+              else val'const 0
        in table <~~ set'key (w'key g'owire) wire
   | otherwise = err'operands g "relational"
  where
@@ -318,7 +318,7 @@ eval'rop table g@Gate {..}
 eval'x'from'p :: Integral f => W'table f -> Gate f -> W'table f
 eval'x'from'p table g@Gate {..}
   | xor'ext'wirep table g =
-      let wire = set'unit'val . fromIntegral . w'val $ table ~~> g'rwire
+      let wire = val'const . fromIntegral . w'val $ table ~~> g'rwire
        in table <~~ set'key (w'key g'owire) wire
   | otherwise = err'operands g "(:)"
 {-# INLINEABLE eval'x'from'p #-}
@@ -329,7 +329,7 @@ eval'y'from'p
 eval'y'from'p curve table g@Gate {..}
   | xor'ext'wirep table g =
       let wire =
-            set'unit'val . fromIntegral . y'from'wire curve $
+            val'const . fromIntegral . y'from'wire curve $
               table ~~> g'rwire
        in table <~~ set'key (w'key g'owire) wire
   | otherwise = err'operands g "(;)"
@@ -419,6 +419,12 @@ type G'table f = Map String [Gate f]
   | otherwise = table <~ (key, [gate])
 {-# INLINE (<<~) #-}
 
+-- | Follow a wire to traverse graph
+(~>>) :: G'table f -> String -> [Gate f]
+(~>>) table key
+  | member key table = table ~> key
+  | otherwise = die $ "Error, reached a deadend wire: " ++ key
+
 -- | Initialize nil-signature
 init'sig :: Circuit f -> NilSig f
 init'sig = NilSig (O, O) mempty
@@ -428,12 +434,22 @@ init'sig = NilSig (O, O) mempty
  @Sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets
 -}
 sign'sig
-  :: (Integral f, Fractional f) => NilSig f -> W'table f -> IO (NilSig f)
+  :: NilSig f -> W'table f -> IO (NilSig f)
 sign'sig NilSig {..} table = undefined
 {-# INLINE sign'sig #-}
 
-gen'gtable :: Eq f => O'table f -> G'table f
-gen'gtable o'tab =
+sign'gate
+  :: Gate f -> W'table f -> IO (NilSig f)
+sign'gate Gate {..} table = undefined
+{-# INLINE sign'gate #-}
+
+sign'wire
+  :: Wire f -> Wire f
+sign'wire Wire {..} = undefined
+{-# INLINE sign'wire #-}
+
+gtab'from'otab :: Eq f => O'table f -> G'table f
+gtab'from'otab o'tab =
   let gates = fst <$> sortOn (negate . snd) (elems o'tab)
       go'wire gate g'tab wire
         | out'wirep wire = g'tab <<~ (w'key wire, gate)
@@ -441,15 +457,28 @@ gen'gtable o'tab =
       update g'tab gate@Gate {..} =
         foldl' (go'wire gate) g'tab [g'lwire, g'rwire]
    in foldl' update mempty gates
-{-# INLINEABLE gen'gtable #-}
+{-# INLINEABLE gtab'from'otab #-}
 
 -- | Find the amplifier-knot gate related to the given gate
-find'paired'amp :: G'table f -> Gate f -> Gate f
-find'paired'amp = undefined
+find'amp :: G'table f -> Gate f -> Gate f
+find'amp table g@Gate {..}
+  | amp'wirep g'rwire = g
+  | otherwise = find'amp table (head $ table ~>> w'key g'owire)
 
 -- | Find the shift-knot gate related to the given gate
-find'paired'shift :: G'table f -> Gate f -> Gate f
-find'paired'shift = undefined
+find'shift :: Eq f => O'table f -> G'table f -> Gate f -> Gate f
+find'shift o'tab g'tab g@Gate {..}
+  | xor' entry'wirep g =
+      case g'op of
+        Add ->
+          let (ext, _) = either'by out'wirep g
+           in fst $ o'tab ~> w'key ext
+        Mul ->
+          let next = head $ g'tab ~>> w'key g'owire
+              (wire, _) = either'by (/= g'owire) next
+           in fst $ o'tab ~> w'key wire
+        a -> die $ "Error, unexpected gate op: " ++ show a
+  | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
 
 -- | Get a list of keys of amplifier gates
 get'amp'keys :: O'table f -> [String]
@@ -466,3 +495,18 @@ get'amp'keys table = foldl' get [] (assocs table)
       let (_, height) = table ~> key
        in table <~ (key, (gate, height))
   | otherwise = die $ "Error, not found gate-key: " ++ key
+
+entry'wirep :: Wire f -> Bool
+entry'wirep =
+  and
+    . ([not . out'wirep, not . amp'wirep, not . shift'wirep] <*>)
+    . (: [])
+
+closed'expr :: String
+closed'expr = "__"
+
+closed'wirep :: Wire f -> Bool
+closed'wirep Wire {..} = w'expr == closed'expr
+
+closed :: Wire f -> Wire f
+closed = set'expr closed'expr

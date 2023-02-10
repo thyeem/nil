@@ -25,6 +25,7 @@ module Nil
   )
 where
 
+import Data.Map (elems)
 import Nil.Circuit
 import Nil.Curve
 import Nil.Ecdata
@@ -50,7 +51,7 @@ lang =
     -- , "let q = a + 3b + p * d / e"
     -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
-    [ "language (priv a, priv b, priv c)"
+    [ "language (pub a, priv b, priv c)"
     , "return a^3 + a*b + a + b + 10"
     -- , "return a + (5*7) + 10"
     -- [ "language (priv w)"
@@ -87,3 +88,21 @@ retc = w'val $ ec ~> "return"
 retr = w'val . (~> "return") <$> er
 
 sig = init'sig <$> rc
+
+otab = otab'from'gates . c'gates <$> rc
+
+gtab = gtab'from'otab <$> otab
+
+t'amp key = do
+  ot <- otab
+  let gt = gtab'from'otab ot
+      g = filter (\(gate, _) -> (w'key . g'lwire $ gate) == key) (elems ot)
+  pp g
+  pure $ find'amp gt (fst . head $ g)
+
+t'shift key = do
+  ot <- otab
+  let gt = gtab'from'otab ot
+      g = filter (\(gate, _) -> (w'key . g'owire $ gate) == key) (elems ot)
+  pp g
+  pure $ find'shift ot gt (fst . head $ g)
