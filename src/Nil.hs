@@ -52,7 +52,7 @@ lang =
     -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
     [ "language (pub a, priv b, priv c)"
-    , "return a^3 + a*b + a + b + 10"
+    , "return a^3 + a*b + a + 7b + 5"
     -- , "return a + (5*7) + 10"
     -- [ "language (priv w)"
     -- , "return w^3 + w + 5"
@@ -97,12 +97,13 @@ t'amp key = do
   ot <- otab
   let gt = gtab'from'otab ot
       g = filter (\(gate, _) -> (w'key . g'lwire $ gate) == key) (elems ot)
-  pp g
+      amp = filter (\(gate, _) -> xor' amp'wirep gate) (elems ot)
+  pp amp
   pure $ find'amp gt (fst . head $ g)
 
-t'shift key = do
+t'shift i = do
   ot <- otab
   let gt = gtab'from'otab ot
-      g = filter (\(gate, _) -> (w'key . g'owire $ gate) == key) (elems ot)
+      g = filter (\(gate, _) -> g'op gate /= End && xor' entry'wirep gate) (elems ot)
   pp g
-  pure $ find'shift ot gt (fst . head $ g)
+  pure $ find'shift ot gt (fst $ g !! i)

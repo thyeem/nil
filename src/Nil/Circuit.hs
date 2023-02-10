@@ -261,7 +261,7 @@ either'by p g@Gate {..}
   | xor' p g = if p g'lwire then (g'lwire, g'rwire) else (g'rwire, g'lwire)
   | otherwise =
       die $
-        unwords ["Error, not XOR between wires: ", w'key g'lwire, w'key g'rwire]
+        unwords ["Error, not XOR between:", w'key g'lwire, "and", w'key g'rwire]
 
 {- | Construct a 'circuit' from 'AST'
 

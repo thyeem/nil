@@ -434,8 +434,20 @@ init'sig = NilSig (O, O) mempty
  @Sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets
 -}
 sign'sig
-  :: NilSig f -> W'table f -> IO (NilSig f)
-sign'sig NilSig {..} table = undefined
+  :: Eq f => NilSig f -> W'table f -> IO (NilSig f)
+sign'sig nilsig@NilSig {..} secrets = do
+  let o'tab = otab'from'gates . c'gates $ n'sig
+      g'tab = gtab'from'otab o'tab
+      entries =
+        filter
+          (\(g, _) -> (g'op g /= End) && xor' entry'wirep g)
+          (elems o'tab)
+  pure $
+    nilsig
+      { n'keys = undefined
+      , n'hash = undefined
+      , n'sig = undefined
+      }
 {-# INLINE sign'sig #-}
 
 sign'gate
@@ -464,21 +476,25 @@ find'amp :: G'table f -> Gate f -> Gate f
 find'amp table g@Gate {..}
   | amp'wirep g'rwire = g
   | otherwise = find'amp table (head $ table ~>> w'key g'owire)
+{-# INLINEABLE find'amp #-}
 
 -- | Find the shift-knot gate related to the given gate
 find'shift :: Eq f => O'table f -> G'table f -> Gate f -> Gate f
 find'shift o'tab g'tab g@Gate {..}
   | xor' entry'wirep g =
       case g'op of
-        Add ->
-          let (ext, _) = either'by out'wirep g
-           in fst $ o'tab ~> w'key ext
+        Add
+          | shift'wirep g'rwire -> g
+          | otherwise ->
+              let (ext, _) = either'by out'wirep g
+               in fst $ o'tab ~> w'key ext
         Mul ->
           let next = head $ g'tab ~>> w'key g'owire
               (wire, _) = either'by (/= g'owire) next
            in fst $ o'tab ~> w'key wire
         a -> die $ "Error, unexpected gate op: " ++ show a
   | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
+{-# INLINEABLE find'shift #-}
 
 -- | Get a list of keys of amplifier gates
 get'amp'keys :: O'table f -> [String]
@@ -487,6 +503,7 @@ get'amp'keys table = foldl' get [] (assocs table)
   get keys (key, (gate, _))
     | xor' amp'wirep gate = key : keys
     | otherwise = keys
+{-# INLINE get'amp'keys #-}
 
 -- | Overwrite/replace previous gate with the new evaluated one
 (<~!) :: Eq f => O'table f -> (String, Gate f) -> O'table f
@@ -495,18 +512,26 @@ get'amp'keys table = foldl' get [] (assocs table)
       let (_, height) = table ~> key
        in table <~ (key, (gate, height))
   | otherwise = die $ "Error, not found gate-key: " ++ key
+{-# INLINE (<~!) #-}
 
 entry'wirep :: Wire f -> Bool
 entry'wirep =
   and
-    . ([not . out'wirep, not . amp'wirep, not . shift'wirep] <*>)
+    . ( [ not . out'wirep
+        , not . shift'wirep
+        , not . amp'wirep
+        , not . frozen'wirep
+        ]
+          <*>
+      )
     . (: [])
+{-# INLINE entry'wirep #-}
 
-closed'expr :: String
-closed'expr = "__"
+frozen'expr :: String
+frozen'expr = "__FROZEN__"
 
-closed'wirep :: Wire f -> Bool
-closed'wirep Wire {..} = w'expr == closed'expr
+frozen'wirep :: Wire f -> Bool
+frozen'wirep Wire {..} = w'expr == frozen'expr
 
-closed :: Wire f -> Wire f
-closed = set'expr closed'expr
+freeze :: Wire f -> Wire f
+freeze = set'expr frozen'expr
