@@ -205,9 +205,9 @@ y'from'wire curve Wire {..} =
           die . unwords $
             ["Error, wire-point is not on curve", w'key ++ ",", w'expr]
    in if
-          | w'flag == 0 -> die "Error, not an elliptic point"
+          | w'flag == 0 -> die $ "Error, not an elliptic point: " ++ w'key
           | even w'flag -> fromIntegral y
-          | otherwise -> fromIntegral (negate y)
+          | odd w'flag -> fromIntegral (negate y)
 {-# INLINE y'from'wire #-}
 
 wire'from'p
@@ -464,8 +464,8 @@ sign'sig curve nilsig@NilSig {..} secrets = do
         ]
   table <- foldM (sign'gate curve secrets g'tab) o'tab entries
   let sig = n'sig {c'gates = fst <$> sortOn snd (elems table)}
-  let keys = undefined
-  let hash = undefined
+  let keys = n'keys
+  let hash = n'hash
   pure $ nilsig {n'keys = keys, n'hash = hash, n'sig = sig}
 {-# INLINE sign'sig #-}
 
@@ -500,26 +500,16 @@ sign'gate curve secrets g'tab o'tab g@Gate {..} = do
         set'expr frozen'expr
           . set'val
             (delta * (w'val secret + epsilon))
-  case g'op of
-    Add -> do
-      let lwire = set'key (w'key secret) . hide'p $ secret
-          rwire
-            | shift'wirep other = hide'p secret
-            | otherwise = other
-      pure $
-        o'tab
-          <~! ( w'key g'owire
-              , g {g'lwire = lwire, g'rwire = rwire}
-              )
-    Mul -> do
-      let lwire = hide secret
-      let rwire = other
-      pure $
-        o'tab
-          <~! ( w'key g'owire
-              , g {g'lwire = lwire, g'rwire = rwire}
-              )
-    a -> die $ "Error, found unexpected gate op: " ++ show a
+      (lwire, rwire)
+        | g'op == Add =
+            ( set'key (w'key secret) . hide'p $ secret
+            , if shift'wirep other
+                then hide'p secret
+                else other
+            )
+        | g'op == Mul = (hide secret, other)
+        | otherwise = die $ "Error, found unexpected gate op: " ++ show g'op
+  pure $ o'tab <~! (w'key g'owire, g {g'lwire = lwire, g'rwire = rwire})
 {-# INLINE sign'gate #-}
 
 sign'wire

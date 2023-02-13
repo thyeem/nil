@@ -294,8 +294,8 @@ init'state :: Num f => ([String], [String]) -> State f
 init'state (pub, priv) =
   ([], fromList $ (\wire -> (w'key wire, wire)) <$> (pub' ++ priv'))
  where
-  priv' = set'flag 5 . unit'var <$> priv
-  pub' = set'flag 6 . unit'var <$> pub
+  priv' = unit'var <$> priv
+  pub' = unit'var <$> pub
 {-# INLINE init'state #-}
 
 -- | Construct Gates by traversing AST

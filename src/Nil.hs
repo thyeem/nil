@@ -107,3 +107,9 @@ t'shift i = do
       g = filter (\(gate, _) -> g'op gate /= End && xor' entry'wirep gate) (elems ot)
   pp g
   pure $ find'shift ot gt (fst $ g !! i)
+
+t'sign = do
+  sig <- init'sig c
+  let ot = otab'from'gates . c'gates . n'sig $ sig
+  let gt = gtab'from'otab ot
+  sign'sig bn128G1 sig t
