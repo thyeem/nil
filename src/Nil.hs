@@ -8,7 +8,8 @@ module Nil
   ( module Nil.Circuit
   , module Nil.Curve
   , module Nil.Ecdata
-  , module Nil.Evaluator
+  , module Nil.Ecdsa
+  , module Nil.Eval
   , module Nil.Field
   , module Nil.Graph
   , module Nil.Lexer
@@ -19,8 +20,8 @@ module Nil
   , module Nil.Qap
   , module Nil.Reorg
   , module Nil.Shamir
+  , module Nil.Sign
   , module Nil.Utils
-  , module Nil.Ecdsa
   , module Nil
   )
 where
@@ -30,7 +31,7 @@ import Nil.Circuit
 import Nil.Curve
 import Nil.Ecdata
 import Nil.Ecdsa
-import Nil.Evaluator
+import Nil.Eval
 import Nil.Field
 import Nil.Graph
 import Nil.Lexer
@@ -41,6 +42,7 @@ import Nil.Poly
 import Nil.Qap
 import Nil.Reorg
 import Nil.Shamir
+import Nil.Sign
 import Nil.Utils
 
 lang =

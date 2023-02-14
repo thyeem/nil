@@ -62,7 +62,7 @@ import Nil.Ecdata
   , gG1
   , gG2
   )
-import Nil.Evaluator
+import Nil.Eval
   ( statement
   , wire'vals
   )
