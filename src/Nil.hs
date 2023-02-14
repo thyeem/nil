@@ -113,4 +113,4 @@ t'sign = do
   sig <- init'sig c
   let ot = otab'from'gates . c'gates . n'sig $ sig
   let gt = gtab'from'otab ot
-  sign'sig bn128G1 sig t
+  nilsign bn128G1 sig t
