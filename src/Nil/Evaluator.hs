@@ -19,8 +19,8 @@ import Nil.Circuit
   , Wire (..)
   , WireType (..)
   , and'ext'wirep
+  , base'wirep
   , const'wirep
-  , def'wirep
   , either'by
   , ext'wirep
   , nor'ext'wirep
@@ -136,7 +136,7 @@ eval'gate curve table gate@Gate {..} =
         | const'wirep wire = w'val wire
         | otherwise = w'val wire * w'val (table ~> w'key)
    in if
-          | def'wirep wire -> val
+          | base'wirep wire -> val
           | recip'wirep wire -> recip val
           | ext'wirep wire -> val -- return x-cooord
           | otherwise ->
@@ -151,7 +151,7 @@ p'from'wire
   -> Wire f
   -> Point k
 p'from'wire curve wire@Wire {..}
-  | def'wirep wire || recip'wirep wire = mulg curve (mempty ~~ wire) -- [k]G
+  | base'wirep wire || recip'wirep wire = mulg curve (mempty ~~ wire) -- [k]G
   | ext'wirep wire =
       ap
         curve
@@ -444,6 +444,35 @@ type G'table f = Map String [Gate f]
   | member key table = table ~> key
   | otherwise = die $ "Error, reached a deadend wire: " ++ key
 
+-- | Overwrite/replace previous gate with the new evaluated one
+(<<<) :: Eq f => O'table f -> (String, Gate f) -> O'table f
+(<<<) table (key, gate)
+  | member key table =
+      let (_, height) = table ~> key
+       in table <~ (key, (gate, height))
+  | otherwise = die $ "Error, not found gate-key: " ++ key
+{-# INLINE (<<<) #-}
+
+-- | Homomorphically hide using a base point of the given elliptic curve
+hide
+  :: (Integral f, Fractional f, Integral k, Field k, Fractional k, NFData k)
+  => Curve k
+  -> Wire f
+  -> Wire f
+hide curve wire =
+  set'key (w'key wire)
+    . set'expr frozen'expr
+    . wire'from'p
+    . p'from'wire curve
+    $ wire
+
+-- | Shift a value of wire over field using crypto-safe random variables
+shift'wire :: Num f => f -> f -> Wire f -> Wire f
+shift'wire delta epsilon wire@Wire {..} =
+  set'expr frozen'expr
+    . set'val (delta * (w'val + epsilon))
+    $ wire
+
 -- | Initialize nil-signature
 init'sig :: (Eq f, Num f, Show f) => Circuit f -> IO (NilSig f)
 init'sig circuit = NilSig (O, O) mempty <$> reorg'circuit circuit
@@ -469,6 +498,8 @@ sign'sig
   -> W'table f
   -> IO (NilSig f)
 sign'sig curve nilsig@NilSig {..} secrets = do
+  phi <- ranf
+  chi <- ranf
   let o'tab = otab'from'gates . c'gates $ n'sig
       g'tab = gtab'from'otab o'tab
       entries =
@@ -478,11 +509,25 @@ sign'sig curve nilsig@NilSig {..} secrets = do
         , xor' entry'wirep g
         ]
   table <- foldM (sign'gate curve secrets g'tab) o'tab entries
-  let sig = n'sig {c'gates = fst <$> sortOn snd (elems table)}
+  let gates =
+        (fst <$>) . sortOn snd . elems $
+          foldl'
+            (update'kappa ((phi + chi) * (phi - chi)))
+            table
+            (fst . (table ~>) <$> get'amp'keys table)
+
+  let sig = n'sig {c'gates = gates}
   let keys = n'keys
   let hash = n'hash
   pure $ nilsig {n'keys = keys, n'hash = hash, n'sig = sig}
 {-# INLINE sign'sig #-}
+
+update'kappa :: (Eq f, Num f) => f -> O'table f -> Gate f -> O'table f
+update'kappa kappa o'tab g@Gate {..} =
+  o'tab
+    <<< ( w'key g'owire
+        , g {g'rwire = g'rwire {w'val = w'val g'rwire * kappa}}
+        )
 
 sign'gate
   :: ( Eq f
@@ -507,31 +552,23 @@ sign'gate curve secrets g'tab o'tab g@Gate {..} = do
   epsilon <- ranf
   let (entry, other) = either'by entry'wirep g
       secret = secrets ~~> entry
-      hide'p =
-        set'expr frozen'expr
-          . wire'from'p
-          . p'from'wire curve
-          . hide
-      hide =
-        set'expr frozen'expr
-          . set'val
-            (delta * (w'val secret + epsilon))
-      (lwire, rwire)
-        | g'op == Add =
-            ( set'key (w'key secret) . hide'p $ secret
-            , if shift'wirep other
-                then hide'p secret
-                else other
-            )
-        | g'op == Mul = (hide secret, other)
-        | otherwise = die $ "Error, found unexpected gate op: " ++ show g'op
-  pure $ o'tab <~! (w'key g'owire, g {g'lwire = lwire, g'rwire = rwire})
+      amp = find'amp g'tab g
+      shift = find'shift o'tab g'tab g
+      lwire = shift'wire delta epsilon secret
+      rwire = case g'op of
+        Add ->
+          if shift'wirep other
+            then hide curve . shift'wire delta epsilon $ unit'const
+            else other
+        Mul -> other
+        a -> die $ "Error, found unexpected gate op: " ++ show a
+  pure $ o'tab <<< (w'key g'owire, g {g'lwire = lwire, g'rwire = rwire})
 {-# INLINE sign'gate #-}
 
-sign'wire
-  :: Wire f -> Wire f
-sign'wire Wire {..} = undefined
-{-# INLINE sign'wire #-}
+update'amp
+  :: Gate f -> f -> O'table f
+update'amp Gate {..} rho = undefined
+{-# INLINE update'amp #-}
 
 gtab'from'otab :: Eq f => O'table f -> G'table f
 gtab'from'otab o'tab =
@@ -578,26 +615,15 @@ get'amp'keys table = foldl' get [] (assocs table)
     | otherwise = keys
 {-# INLINE get'amp'keys #-}
 
--- | Overwrite/replace previous gate with the new evaluated one
-(<~!) :: Eq f => O'table f -> (String, Gate f) -> O'table f
-(<~!) table (key, gate)
-  | member key table =
-      let (_, height) = table ~> key
-       in table <~ (key, (gate, height))
-  | otherwise = die $ "Error, not found gate-key: " ++ key
-{-# INLINE (<~!) #-}
-
 entry'wirep :: Wire f -> Bool
-entry'wirep =
-  and
-    . ( [ not . out'wirep
-        , not . shift'wirep
-        , not . amp'wirep
-        , not . frozen'wirep
-        ]
-          <*>
-      )
-    . (: [])
+entry'wirep wire =
+  and $
+    [ not . out'wirep
+    , not . shift'wirep
+    , not . amp'wirep
+    , not . frozen'wirep
+    ]
+      <*> [wire]
 {-# INLINE entry'wirep #-}
 
 frozen'expr :: String

@@ -18,8 +18,8 @@ import Nil.Circuit
   , Wire (..)
   , WireType (..)
   , and'
+  , base'wirep
   , const'key
-  , def'wirep
   , either'by
   , nor'
   , out'wirep
@@ -66,8 +66,8 @@ rand'wire =
 recip' :: Wire f -> Wire f
 recip' wire@Wire {..} =
   let flag
-        | recip'wirep wire = W'def
-        | def'wirep wire = W'recip
+        | recip'wirep wire = W'base
+        | base'wirep wire = W'recip
         | otherwise = die $ "Error, cannot toggle recip flags: " ++ w'key
    in wire {w'flag = flag}
 {-# INLINE recip' #-}

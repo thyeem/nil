@@ -109,7 +109,7 @@ data Wire f = Wire
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
 data WireType
-  = W'def -- default
+  = W'base -- default
   | W'recip -- reciprocal value
   | W'even -- even y-coord of EC point
   | W'odd -- odd y-coord of EC point
@@ -187,12 +187,12 @@ set'expr expr wire@Wire {} = wire {w'expr = expr}
 
 -- | Get a unit-value const wire
 unit'const :: Num f => Wire f
-unit'const = Wire const'key 1 W'def const'key
+unit'const = Wire const'key 1 W'base const'key
 {-# INLINE unit'const #-}
 
 -- | Get a unit-value wire with a given key
 unit'var :: Num f => String -> Wire f
-unit'var key = Wire key 1 W'def key
+unit'var key = Wire key 1 W'base key
 {-# INLINE unit'var #-}
 
 -- | Get a const wire of a given value
@@ -206,9 +206,9 @@ const'wirep Wire {..} = w'key == const'key
 {-# INLINE const'wirep #-}
 
 -- | Predicate for a default wire
-def'wirep :: Wire f -> Bool
-def'wirep Wire {..} = w'flag == W'def
-{-# INLINE def'wirep #-}
+base'wirep :: Wire f -> Bool
+base'wirep Wire {..} = w'flag == W'base
+{-# INLINE base'wirep #-}
 
 -- | Predicate for a reciprocal wire
 recip'wirep :: Wire f -> Bool
