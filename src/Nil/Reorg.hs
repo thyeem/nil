@@ -5,33 +5,10 @@
 module Nil.Reorg where
 
 import Control.Applicative (liftA2)
-import Control.Monad ((<=<))
 import Data.Bifunctor (bimap)
-import Data.Functor ((<&>))
 import Data.List (foldl', nub)
-import Data.Map (Map, insert, member, (!?))
-import Data.Maybe (fromMaybe)
+import Data.Map (Map, insert, member)
 import Nil.Circuit
-  ( Circuit (..)
-  , Gate (..)
-  , Gateop (..)
-  , Wire (..)
-  , WireType (..)
-  , and'
-  , base'wirep
-  , const'key
-  , either'by
-  , nor'
-  , out'wirep
-  , recip'wirep
-  , set'expr
-  , set'key
-  , unit'const
-  , unit'var
-  , val'const
-  , xor'
-  , (~>)
-  )
 import Nil.Utils (die, random'hex)
 
 -- | Lookup table used in reorg process
@@ -66,8 +43,8 @@ rand'wire =
 recip' :: Wire f -> Wire f
 recip' wire@Wire {..} =
   let flag
-        | recip'wirep wire = W'base
-        | base'wirep wire = W'recip
+        | recip'wirep wire = V'base
+        | base'wirep wire = V'recip
         | otherwise = die $ "Error, cannot toggle recip flags: " ++ w'key
    in wire {w'flag = flag}
 {-# INLINE recip' #-}
@@ -181,6 +158,12 @@ amp'wirep Wire {..} =
   w'key == const'key
     && w'expr == amp'expr
 
+shifter :: Num f => Wire f
+shifter = set'expr shift'expr unit'const
+
+amplifier :: Num f => Wire f
+amplifier = set'expr amp'expr unit'const
+
 -- | Randomize entry gates by shifting wires
 shift'gate :: Num f => Gate f -> IO [Gate f]
 shift'gate g@Gate {..}
@@ -190,7 +173,7 @@ shift'gate g@Gate {..}
       shift g'op scalar ext g'owire
   | nor' out'wirep g = do
       tie <- rand'wire
-      pure [Gate Add g'lwire (set'expr shift'expr $ val'const 0) tie]
+      pure [Gate Add g'lwire shifter tie]
         +++ shift g'op g'rwire tie g'owire
   | otherwise = pure [g]
 {-# INLINEABLE shift'gate #-}
@@ -202,10 +185,10 @@ shift op scalar ext out = do
   case op of
     Mul ->
       pure [Gate op scalar ext tie'a]
-        +++ pure [Gate Mul ext (set'expr shift'expr $ val'const 0) tie'b]
+        +++ pure [Gate Mul ext shifter tie'b]
         +++ pure [Gate Add tie'a tie'b out]
     Add ->
-      pure [Gate Add ext (set'expr shift'expr $ val'const 0) tie'a]
+      pure [Gate Add ext shifter tie'a]
         +++ pure [Gate op scalar tie'a out]
     _ -> die "Error,"
 {-# INLINEABLE shift #-}
@@ -238,5 +221,5 @@ amplify'gate table g@Gate {..}
 
 -- | Create an amplifier gate with the given in/out wires
 amplify :: Num f => Wire f -> Wire f -> IO [Gate f]
-amplify in' out = pure [Gate Mul in' (set'expr amp'expr unit'const) out]
+amplify in' out = pure [Gate Mul in' amplifier out]
 {-# INLINE amplify #-}

@@ -37,48 +37,15 @@ import Data.Functor ((<&>))
 import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
-  ( Circuit (..)
-  , Gate
-  , Gateop
-  , W'table
-  , Wire (..)
-  , WireType
-  , circuit'from'ast
-  , table'from'list
-  , vec'from'table
-  , (~>)
-  )
-import Nil.Curve
-  ( Curve
-  , Point
-  , toA
-  , (.*)
-  , (<.*>)
-  )
-import Nil.Ecdata
-  ( G1
-  , G2
-  , bn128G1
-  , gG1
-  , gG2
-  )
-import Nil.Eval
-  ( statement
-  , wire'vals
-  )
+import Nil.Curve (Curve, Point, toA, (.*), (<.*>))
+import Nil.Ecdata (G1, G2, bn128G1, gG1, gG2)
+import Nil.Eval (statement, wire'vals)
 import Nil.Field (Primefield)
 import Nil.Lexer (tokenize)
 import Nil.Pairing (pairing)
 import Nil.Parser (parse)
-import Nil.Poly
-  ( (|=)
-  , (|?)
-  )
-import Nil.Qap
-  ( QAP (..)
-  , qap'from'circuit
-  , qap'quot
-  )
+import Nil.Poly ((|=))
+import Nil.Qap (QAP (..), qap'from'circuit, qap'quot)
 import Nil.Utils
   ( Pretty (..)
   , die

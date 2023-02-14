@@ -1,4 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -77,8 +76,8 @@ hide
   -> Wire f
   -> Wire f
 hide curve wire =
-  set'key (w'key wire)
-    . set'expr frozen'expr
+  freeze
+    . set'key (w'key wire)
     . wire'from'p
     . p'from'wire curve
     $ wire
@@ -86,7 +85,7 @@ hide curve wire =
 -- | Shift a value of wire over field using crypto-safe random variables
 shift'wire :: Num f => f -> f -> Wire f -> Wire f
 shift'wire delta epsilon wire@Wire {..} =
-  set'expr frozen'expr
+  freeze
     . set'val (delta * (w'val + epsilon))
     $ wire
 
@@ -119,50 +118,51 @@ nilsign curve nilsig@NilSig {..} secrets = do
   chi <- ranf
   let o'tab = otab'from'gates . c'gates $ n'sig
       g'tab = gtab'from'otab o'tab
-  signed <-
-    foldM
-      (sign'gate curve secrets g'tab)
-      o'tab
-      (find'entries o'tab)
-  let gates =
-        (fst <$>) . sortOn snd . elems $
-          foldl'
-            (update'kappa phi chi)
-            signed
-            (fst . (signed ~>) <$> get'amp'keys signed)
+      entries = find'entries o'tab
+  signed <- foldM (sign'gate curve secrets g'tab) o'tab entries
+  let amps = find'amps signed
+      final = foldl' (freeze'amp phi chi) signed amps
   pure $
     nilsig
       { n'nilkey = update'nilkey phi chi n'nilkey
       , n'hash
-      , n'sig = n'sig {c'gates = gates}
+      , n'sig =
+          n'sig {c'gates = (fst <$>) . sortOn snd $ elems final}
       }
 {-# INLINE nilsign #-}
 
+-- | Find a list of entry gates
 find'entries :: O'table f -> [Gate f]
 find'entries table =
   [ g | (g, _) <- elems table, g'op g /= End, xor' entry'wirep g
   ]
 {-# INLINE find'entries #-}
 
-{- | Update kappa value in amplifier gates:
+-- | Find a list of amplifier gates
+find'amps :: O'table f -> [Gate f]
+find'amps table = foldl' go [] (assocs table)
+ where
+  go gates (_, (gate, _))
+    | xor' amp'wirep gate = gate : gates
+    | otherwise = gates
+{-# INLINE find'amps #-}
+
+{- | Update kappa value in each amplifier gates and finalize amplifiers
  Kappa := Pi_j (phi + chi) * (phi - chi)
 -}
-update'kappa :: (Eq f, Num f) => f -> f -> O'table f -> Gate f -> O'table f
-update'kappa phi chi o'tab g@Gate {..} =
-  o'tab
-    <<< ( w'key g'owire
-        , g
-            { g'rwire =
-                g'rwire
-                  { w'val = w'val g'rwire * (phi + chi) * (phi - chi)
-                  }
-            }
-        )
-{-# INLINE update'kappa #-}
+freeze'amp :: (Eq f, Num f) => f -> f -> O'table f -> Gate f -> O'table f
+freeze'amp phi chi o'tab g@Gate {..} =
+  let rwire =
+        g'rwire
+          { w'val = w'val g'rwire * (phi + chi) * (phi - chi)
+          }
+   in o'tab <<< (w'key g'owire, g {g'rwire = rwire})
+{-# INLINE freeze'amp #-}
 
 -- | Update nilkey (verification key) -> (PHI, CHI)
 update'nilkey :: Integral f => f -> f -> NilKey -> NilKey
-update'nilkey phi chi (_PHI, _CHI) = (_PHI .* (phi + chi), _CHI .* (phi - chi))
+update'nilkey phi chi (_PHI, _CHI) =
+  (_PHI .* (phi + chi), _CHI .* (phi - chi))
 {-# INLINE update'nilkey #-}
 
 sign'gate
@@ -188,68 +188,62 @@ sign'gate curve secrets g'tab o'tab g@Gate {..} = do
   epsilon <- ranf
   let (entry, other) = either'by entry'wirep g
       secret = secrets ~~> entry
-      shift' = shift'wire delta epsilon
-      hide' = hide curve . shift'
-  case g'op of
-    Add -> do
-      let gate =
-            g
-              { g'lwire = hide' secret
-              , g'rwire = if shift'wirep other then hide' unit'const else other
-              }
-      pure
-        . update'amp (recip delta) (find'amp g'tab g)
-        $ o'tab <<< (w'key g'owire, gate)
-    Mul -> do
-      let gate =
-            g
-              { g'lwire = shift' secret
-              , g'rwire = other
-              }
-      pure
-        . update'amp (recip delta) (find'amp g'tab g)
-        $ o'tab <<< (w'key g'owire, gate)
-    a -> die $ "Error, found unexpected gate op: " ++ show a
-
--- update'shift delta epsilon (find'shift o'tab g'tab g)
--- lwire = shift'wire delta epsilon secret
--- rwire = case g'op of
--- Add ->
--- if shift'wirep other
--- then hide curve . shift'wire delta epsilon $ unit'const
--- else other
--- Mul -> other
--- a -> die $ "Error, found unexpected gate op: " ++ show a
--- update'gate =
--- o'tab
--- <<< (w'key g'owire, g {g'lwire = lwire, g'rwire = rwire})
--- pure
--- . update'amp (recip delta) (find'amp g'tab g)
--- . update'shift delta epsilon (find'shift o'tab g'tab g)
--- \$ update'gate
+      randomize = shift'wire delta epsilon
+      lift = hide curve . randomize
+      gate = case g'op of
+        Add ->
+          let rwire =
+                if shift'wirep other
+                  then lift unit'const
+                  else other
+           in g {g'lwire = lift secret, g'rwire = rwire}
+        Mul -> g {g'lwire = randomize secret, g'rwire = other}
+        a -> die $ "Error, found unexpected gate op: " ++ show a
+  pure
+    . update'amp delta g g'tab
+    . update'shift curve delta epsilon g g'tab
+    $ o'tab <<< (w'key g'owire, gate)
 {-# INLINEABLE sign'gate #-}
 
 update'shift
-  :: (Eq f, Num f) => f -> f -> Gate f -> O'table f -> O'table f
-update'shift delta epsilon g@Gate {..} o'tab =
-  if
-      | g'op == Add && not (shift'wirep g'rwire) -> undefined
-      | g'op == Mul ->
-          let rwire =
-                g'rwire {w'val = negate $ w'val g'rwire * delta * epsilon}
-           in o'tab <<< (w'key g'owire, g {g'rwire = rwire})
-      | otherwise -> o'tab
+  :: ( Eq f
+     , Num f
+     , Integral f
+     , Fractional f
+     , Integral k
+     , Fractional k
+     , Field k
+     , NFData k
+     )
+  => Curve k
+  -> f
+  -> f
+  -> Gate f
+  -> G'table f
+  -> O'table f
+  -> O'table f
+update'shift curve delta epsilon g g'tab o'tab
+  | shift'wirep . g'rwire $ g = o'tab
+  | otherwise =
+      let shift@Gate {..} = get'shift o'tab g'tab g
+          rwire = g'rwire {w'val = negate $ w'val g'rwire * delta * epsilon}
+          updater
+            | g'op == Add = hide curve
+            | otherwise = freeze
+       in o'tab <<< (w'key g'owire, shift {g'rwire = updater rwire})
+{-# INLINE update'shift #-}
 
 update'amp
-  :: (Eq f, Num f) => f -> Gate f -> O'table f -> O'table f
-update'amp rho g@Gate {..} o'tab =
-  o'tab
-    <<< ( w'key g'owire
-        , g
-            { g'rwire =
-                g'rwire {w'val = w'val g'rwire * rho}
-            }
-        )
+  :: (Eq f, Num f, Fractional f)
+  => f
+  -> Gate f
+  -> G'table f
+  -> O'table f
+  -> O'table f
+update'amp delta g g'tab o'tab =
+  let amp@Gate {..} = get'amp g'tab g
+      rwire = g'rwire {w'val = w'val g'rwire * recip delta}
+   in o'tab <<< (w'key g'owire, amp {g'rwire = rwire})
 {-# INLINE update'amp #-}
 
 gtab'from'otab :: Eq f => O'table f -> G'table f
@@ -263,16 +257,16 @@ gtab'from'otab o'tab =
    in foldl' update mempty gates
 {-# INLINEABLE gtab'from'otab #-}
 
--- | Find the amplifier-knot gate related to the given gate
-find'amp :: G'table f -> Gate f -> Gate f
-find'amp table g@Gate {..}
+-- | Find the amplifier gate related to the given gate
+get'amp :: G'table f -> Gate f -> Gate f
+get'amp table g@Gate {..}
   | amp'wirep g'rwire = g
-  | otherwise = find'amp table (head $ table ~>> w'key g'owire)
-{-# INLINEABLE find'amp #-}
+  | otherwise = get'amp table (head $ table ~>> w'key g'owire)
+{-# INLINEABLE get'amp #-}
 
--- | Find the shift-knot gate related to the given gate
-find'shift :: Eq f => O'table f -> G'table f -> Gate f -> Gate f
-find'shift o'tab g'tab g@Gate {..}
+-- | Find the shift gate related to the given gate
+get'shift :: Eq f => O'table f -> G'table f -> Gate f -> Gate f
+get'shift o'tab g'tab g@Gate {..}
   | xor' entry'wirep g =
       case g'op of
         Add
@@ -286,16 +280,7 @@ find'shift o'tab g'tab g@Gate {..}
            in fst $ o'tab ~> w'key wire
         a -> die $ "Error, found unexpected gate op: " ++ show a
   | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
-{-# INLINEABLE find'shift #-}
-
--- | Get a list of keys of amplifier gates
-get'amp'keys :: O'table f -> [String]
-get'amp'keys table = foldl' get [] (assocs table)
- where
-  get keys (key, (gate, _))
-    | xor' amp'wirep gate = key : keys
-    | otherwise = keys
-{-# INLINE get'amp'keys #-}
+{-# INLINEABLE get'shift #-}
 
 entry'wirep :: Wire f -> Bool
 entry'wirep wire =

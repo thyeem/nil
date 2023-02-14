@@ -9,25 +9,16 @@
 module Nil.Eval where
 
 import Control.DeepSeq (NFData)
-import Control.Monad (foldM)
 import Data.ByteString (append)
-import Data.List (foldl', nub, sortOn)
-import Data.Map (Map, assocs, elems, keys, member, null)
+import Data.List (foldl')
+import Data.Map (Map, null)
 import Data.Maybe (fromMaybe)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
-import Nil.Curve
-  ( Curve (..)
-  , Point (..)
-  , ap
-  , mulg
-  , toA
-  , (.*)
-  )
+import Nil.Curve (Curve (..), Point (..), ap, mulg, toA, (.*))
 import Nil.Field (Field)
 import Nil.Utils
-  ( Pretty
-  , blake2b
+  ( blake2b
   , bytes'from'int'len
   , bytes'from'str
   , die
@@ -140,8 +131,8 @@ y'from'wire curve Wire {..} =
           )
           find'y -- y = sqrt(x*x*x + a*x + b) over field
    in if
-          | w'flag == W'even -> fromIntegral y
-          | w'flag == W'odd -> fromIntegral (negate y)
+          | w'flag == P'even -> fromIntegral y
+          | w'flag == P'odd -> fromIntegral (negate y)
           | otherwise -> die $ "Error, unexpected wire: " ++ w'key
 {-# INLINE y'from'wire #-}
 
@@ -152,7 +143,7 @@ wire'from'p
 wire'from'p point = case toA point of
   A _ x y ->
     let wire = val'const (fromIntegral x)
-     in if even y then set'flag W'even wire else set'flag W'odd wire
+     in if even y then set'flag P'even wire else set'flag P'odd wire
   _ -> die "Error, cannot convert point at infinity into wire"
 {-# INLINE wire'from'p #-}
 

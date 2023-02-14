@@ -102,14 +102,14 @@ t'amp key = do
       g = filter (\(gate, _) -> (w'key . g'lwire $ gate) == key) (elems ot)
       amp = filter (\(gate, _) -> xor' amp'wirep gate) (elems ot)
   pp amp
-  pure $ find'amp gt (fst . head $ g)
+  pure $ get'amp gt (fst . head $ g)
 
 t'shift i = do
   ot <- otab
   let gt = gtab'from'otab ot
       g = filter (\(gate, _) -> g'op gate /= End && xor' entry'wirep gate) (elems ot)
   pp g
-  pure $ find'shift ot gt (fst $ g !! i)
+  pure $ get'shift ot gt (fst $ g !! i)
 
 t'sign = do
   sig <- init'sig c

@@ -27,14 +27,6 @@ import Control.Parallel
 import Data.List (transpose)
 import GHC.Generics (Generic)
 import Nil.Circuit
-  ( Circuit (..)
-  , Gate (..)
-  , Gateop (..)
-  , Wire (..)
-  , const'key
-  , recip'wirep
-  , wire'keys
-  )
 import Nil.Poly
   ( lagrangepoly
   , (<.>)

@@ -109,10 +109,10 @@ data Wire f = Wire
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
 data WireType
-  = W'base -- default
-  | W'recip -- reciprocal value
-  | W'even -- even y-coord of EC point
-  | W'odd -- odd y-coord of EC point
+  = V'base -- default
+  | V'recip -- reciprocal value
+  | P'even -- even y-coord of EC point
+  | P'odd -- odd y-coord of EC point
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
 -- | Look-up table for wires
@@ -187,12 +187,12 @@ set'expr expr wire@Wire {} = wire {w'expr = expr}
 
 -- | Get a unit-value const wire
 unit'const :: Num f => Wire f
-unit'const = Wire const'key 1 W'base const'key
+unit'const = Wire const'key 1 V'base const'key
 {-# INLINE unit'const #-}
 
 -- | Get a unit-value wire with a given key
 unit'var :: Num f => String -> Wire f
-unit'var key = Wire key 1 W'base key
+unit'var key = Wire key 1 V'base key
 {-# INLINE unit'var #-}
 
 -- | Get a const wire of a given value
@@ -207,17 +207,17 @@ const'wirep Wire {..} = w'key == const'key
 
 -- | Predicate for a default wire
 base'wirep :: Wire f -> Bool
-base'wirep Wire {..} = w'flag == W'base
+base'wirep Wire {..} = w'flag == V'base
 {-# INLINE base'wirep #-}
 
 -- | Predicate for a reciprocal wire
 recip'wirep :: Wire f -> Bool
-recip'wirep Wire {..} = w'flag == W'recip
+recip'wirep Wire {..} = w'flag == V'recip
 {-# INLINE recip'wirep #-}
 
 -- | Predicate for an extended wire (representing EC-point)
 ext'wirep :: Wire f -> Bool
-ext'wirep Wire {..} = w'flag == W'even || w'flag == W'odd
+ext'wirep Wire {..} = w'flag == P'even || w'flag == P'odd
 {-# INLINE ext'wirep #-}
 
 -- | Predicate for a out-wire
@@ -352,7 +352,7 @@ conv'expr state = \case
           Star
           after'b
           (from'expr before'a a)
-          (set'flag W'recip . from'expr after'a $ b)
+          (set'flag V'recip . from'expr after'a $ b)
   Ebin o a b ->
     let [before'a, after'a, after'b] = scanl conv'expr state [a, b]
      in add'gate o after'b (from'expr before'a a) (from'expr after'a b)

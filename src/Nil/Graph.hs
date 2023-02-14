@@ -9,15 +9,6 @@ where
 
 import Control.Monad (when)
 import Nil.Circuit
-  ( Circuit (..)
-  , Gate (..)
-  , Gateop (..)
-  , Wire (..)
-  , const'wirep
-  , ext'wirep
-  , out'wirep
-  , recip'wirep
-  )
 import Nil.Reorg (amp'wirep, shift'wirep)
 import Nil.Utils (die)
 import System.Exit (ExitCode (ExitSuccess))
