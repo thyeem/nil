@@ -7,7 +7,6 @@ module Nil.Reorg where
 import Control.Applicative (liftA2)
 import Control.Monad ((<=<))
 import Data.Bifunctor (bimap)
-import Data.Bits (xor)
 import Data.Functor ((<&>))
 import Data.List (foldl', nub)
 import Data.Map (Map, insert, member, (!?))
@@ -17,10 +16,11 @@ import Nil.Circuit
   , Gate (..)
   , Gateop (..)
   , Wire (..)
+  , WireType (..)
   , and'
   , const'key
+  , def'wirep
   , either'by
-  , inp'wirep
   , nor'
   , out'wirep
   , recip'wirep
@@ -64,7 +64,12 @@ rand'wire =
 
 -- | Toggle the reciprocal flag
 recip' :: Wire f -> Wire f
-recip' wire@Wire {..} = wire {w'flag = 1 `xor` w'flag}
+recip' wire@Wire {..} =
+  let flag
+        | recip'wirep wire = W'def
+        | def'wirep wire = W'recip
+        | otherwise = die $ "Error, cannot toggle recip flags: " ++ w'key
+   in wire {w'flag = flag}
 {-# INLINE recip' #-}
 
 -- | Determine which wire will be cut: in forms of (survived, killed)

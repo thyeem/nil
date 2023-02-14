@@ -42,6 +42,7 @@ import Nil.Circuit
   , Gateop
   , W'table
   , Wire (..)
+  , WireType
   , circuit'from'ast
   , table'from'list
   , vec'from'table
@@ -208,6 +209,8 @@ type ToxicWastes = (Fr, Fr, Fr, Fr, Fr, Fr)
 deriving instance Store (Circuit Fr)
 
 deriving instance Store (Wire Fr)
+
+deriving instance Store WireType
 
 deriving instance Store Gateop
 

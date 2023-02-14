@@ -8,7 +8,8 @@ import Control.DeepSeq (NFData)
 import Control.Monad (foldM)
 import Data.ByteString (append)
 import Data.List (foldl', nub, sortOn)
-import Data.Map (Map, assocs, elems, keys, member)
+import Data.Map (Map, assocs, elems, keys, member, null)
+import Data.Maybe (fromMaybe)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
   ( Circuit (..)
@@ -16,13 +17,16 @@ import Nil.Circuit
   , Gateop (..)
   , W'table
   , Wire (..)
+  , WireType (..)
   , and'ext'wirep
   , const'wirep
+  , def'wirep
   , either'by
   , ext'wirep
   , nor'ext'wirep
   , out'prefix
   , out'wirep
+  , recip'wirep
   , set'expr
   , set'flag
   , set'key
@@ -51,7 +55,8 @@ import Nil.Field (Field)
 import Nil.Poly ((|?))
 import Nil.Reorg (O'table, amp'wirep, otab'from'gates, reorg'circuit, shift'wirep)
 import Nil.Utils
-  ( blake2b
+  ( Pretty
+  , blake2b
   , bytes'from'int'len
   , bytes'from'str
   , die
@@ -123,23 +128,72 @@ eval'gate curve table gate@Gate {..} =
     _ -> eval'rop table gate
 {-# INLINEABLE eval'gate #-}
 
--- | Get the wire unlifted by evaluating by key
-(~~~>) :: Fractional f => W'table f -> Wire f -> f
-(~~~>) table wire@Wire {w'key, w'flag, w'expr} =
+-- | Fold a wire into a value by evaluating it with a given table and wire flags
+(~~) :: Fractional f => W'table f -> Wire f -> f
+(~~) table wire@Wire {w'key, w'expr} =
   let val
+        | Data.Map.null table = w'val wire
         | const'wirep wire = w'val wire
         | otherwise = w'val wire * w'val (table ~> w'key)
    in if
-          | w'flag == 1 -> recip val
-          | w'flag == 0 -> val
+          | def'wirep wire -> val
+          | recip'wirep wire -> recip val
+          | ext'wirep wire -> val -- return x-cooord
           | otherwise ->
               die . unwords $
-                ["Error, illegal wire to evaluate:", w'key ++ ",", w'expr]
-{-# INLINE (~~~>) #-}
+                ["Error, cannot reduce to a value:", w'key ++ ",", w'expr]
+{-# INLINE (~~) #-}
+
+-- | Get an elliptic curve point on a given wire
+p'from'wire
+  :: (Integral f, Fractional f, Eq k, Integral k, Fractional k, Field k, NFData k)
+  => Curve k
+  -> Wire f
+  -> Point k
+p'from'wire curve wire@Wire {..}
+  | def'wirep wire || recip'wirep wire = mulg curve (mempty ~~ wire) -- [k]G
+  | ext'wirep wire =
+      ap
+        curve
+        (fromIntegral w'val)
+        (y'from'wire curve wire)
+  | otherwise = die $ "Error, cannot convert to a EC-point: " ++ w'key
+{-# INLINE p'from'wire #-}
+
+-- | Get y-coordinate from a given point-wire
+y'from'wire :: (Integral f, Integral k) => Curve k -> Wire f -> k
+y'from'wire curve Wire {..} =
+  let x = fromIntegral w'val
+      find'y =
+        sqrt'zpz
+          (toInteger $ (x * x + c'a curve) * x + c'b curve)
+          (c'p curve)
+      y =
+        fromMaybe
+          ( die . unwords $
+              ["Error, wire-point is not on curve", w'key ++ ",", w'expr]
+          )
+          find'y -- y = sqrt(x*x*x + a*x + b) over field
+   in if
+          | w'flag == W'even -> fromIntegral y
+          | w'flag == W'odd -> fromIntegral (negate y)
+          | otherwise -> die $ "Error, unexpected wire: " ++ w'key
+{-# INLINE y'from'wire #-}
+
+wire'from'p
+  :: (Integral f, Eq k, Integral k, Fractional k, Field k)
+  => Point k
+  -> Wire f
+wire'from'p point = case toA point of
+  A _ x y ->
+    let wire = val'const (fromIntegral x)
+     in if even y then set'flag W'even wire else set'flag W'odd wire
+  _ -> die "Error, cannot convert point at infinity into wire"
+{-# INLINE wire'from'p #-}
 
 -- | Evaluate gate when both gate input wires are extended
 eval'and'ext'wire
-  :: (Integral f, Eq k, Integral k, Fractional k, Field k)
+  :: (Integral f, Eq k, Integral k, Fractional k, Field k, Fractional f, NFData k)
   => Curve k
   -> (Point k -> Point k -> Point k)
   -> W'table f
@@ -155,7 +209,7 @@ eval'and'ext'wire curve op table Gate {..} =
 
 -- | Evaluate gate when one of gate input wires is an extended
 eval'xor'ext'wire
-  :: (Integral f, Fractional f, Integral k, Fractional k, Field k)
+  :: (Integral f, Fractional f, Integral k, Fractional k, Field k, NFData k)
   => Curve k
   -> (Point k -> f -> Point k)
   -> W'table f
@@ -166,7 +220,7 @@ eval'xor'ext'wire curve op table g@Gate {..} =
       wire =
         wire'from'p $
           p'from'wire curve (table ~~> ext)
-            `op` (table ~~~> scalar)
+            `op` (table ~~ scalar)
    in table <~~ set'key (w'key g'owire) wire
 {-# INLINEABLE eval'xor'ext'wire #-}
 
@@ -174,52 +228,10 @@ eval'xor'ext'wire curve op table g@Gate {..} =
 eval'nor'ext'wire
   :: (Integral f, Fractional f) => (f -> f -> f) -> W'table f -> Gate f -> W'table f
 eval'nor'ext'wire op table Gate {..} =
-  let wire = set'val (table ~~~> g'lwire `op` (table ~~~> g'rwire)) g'owire
+  let val = (table ~~ g'lwire) `op` (table ~~ g'rwire)
+      wire = set'val val g'owire
    in table <~~ set'key (w'key g'owire) wire
 {-# INLINEABLE eval'nor'ext'wire #-}
-
--- | Get an elliptic curve point on a given wire
-p'from'wire
-  :: (Integral f, Eq k, Integral k, Fractional k, Field k)
-  => Curve k
-  -> Wire f
-  -> Point k
-p'from'wire curve wire =
-  ap
-    curve
-    (fromIntegral . w'val $ wire)
-    (y'from'wire curve wire)
-{-# INLINE p'from'wire #-}
-
--- | Get y-coordinate from a given point-wire
-y'from'wire :: (Integral f, Integral k) => Curve k -> Wire f -> k
-y'from'wire curve Wire {..} =
-  let sqrt'y2 =
-        sqrt'zpz
-          (toInteger $ (x * x + c'a curve) * x + c'b curve)
-          (c'p curve)
-      x = fromIntegral w'val
-      y = case sqrt'y2 of
-        Just a -> a
-        _ ->
-          die . unwords $
-            ["Error, wire-point is not on curve", w'key ++ ",", w'expr]
-   in if
-          | w'flag == 0 -> die $ "Error, not an elliptic point: " ++ w'key
-          | even w'flag -> fromIntegral y
-          | odd w'flag -> fromIntegral (negate y)
-{-# INLINE y'from'wire #-}
-
-wire'from'p
-  :: (Integral f, Eq k, Integral k, Fractional k, Field k)
-  => Point k
-  -> Wire f
-wire'from'p point = case toA point of
-  A _ x y ->
-    let wire = val'const (fromIntegral x)
-     in if even y then set'flag 2 wire else set'flag 3 wire
-  _ -> die "Error, cannot convert point at infinity into wire"
-{-# INLINE wire'from'p #-}
 
 -- | Error when evaluating gate with an illegal operator and operands (wires)
 err'operands :: Gate f -> String -> a
@@ -234,7 +246,7 @@ err'operands Gate {..} sym =
 -- | Evaluate the last gate of circuit
 eval'end :: (Integral f, Fractional f) => W'table f -> Gate f -> W'table f
 eval'end table Gate {..} =
-  let val = table ~~~> g'rwire
+  let val = table ~~ g'rwire
    in (table <~~ set'val (val * val) g'owire)
         <~~ set'val val (unit'var "return")
 {-# INLINEABLE eval'end #-}
@@ -302,7 +314,7 @@ eval'rop
 eval'rop table g@Gate {..}
   | nor'ext'wirep table g =
       let wire =
-            if (table ~~~> g'lwire) `op` (table ~~~> g'rwire)
+            if (table ~~ g'lwire) `op` (table ~~ g'rwire)
               then unit'const
               else val'const 0
        in table <~~ set'key (w'key g'owire) wire
@@ -408,6 +420,9 @@ data NilSig f = NilSig
   }
   deriving (Eq, Show)
 
+-- | Pretty printer for NilSig f
+instance Show f => Pretty (NilSig f)
+
 -- | Lookup table describing a circuit as DAG
 type G'table f = Map String [Gate f]
 
@@ -439,7 +454,7 @@ init'sig circuit = NilSig (O, O) mempty <$> reorg'circuit circuit
 -}
 sign'sig
   :: ( Eq f
-     , Num f
+     , Fractional f
      , Random f
      , Field f
      , Bounded f
@@ -447,7 +462,7 @@ sign'sig
      , Field k
      , Integral f
      , Fractional k
-     , Fractional k
+     , NFData k
      )
   => Curve k
   -> NilSig f
@@ -471,7 +486,7 @@ sign'sig curve nilsig@NilSig {..} secrets = do
 
 sign'gate
   :: ( Eq f
-     , Num f
+     , Fractional f
      , Field f
      , Random f
      , Bounded f
@@ -479,6 +494,7 @@ sign'gate
      , Integral k
      , Fractional k
      , Field k
+     , NFData k
      )
   => Curve k
   -> W'table f

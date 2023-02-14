@@ -103,9 +103,16 @@ data Gateop
 data Wire f = Wire
   { w'key :: String
   , w'val :: f
-  , w'flag :: Int
+  , w'flag :: WireType
   , w'expr :: String
   }
+  deriving (Eq, Show, Generic, NFData, ToJSON)
+
+data WireType
+  = W'def -- default
+  | W'recip -- reciprocal value
+  | W'even -- even y-coord of EC point
+  | W'odd -- odd y-coord of EC point
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
 -- | Look-up table for wires
@@ -171,7 +178,7 @@ set'val val wire@Wire {} = wire {w'val = val}
 {-# INLINE set'val #-}
 
 -- | Set a given wire's flag
-set'flag :: Int -> Wire f -> Wire f
+set'flag :: WireType -> Wire f -> Wire f
 set'flag flag wire@Wire {} = wire {w'flag = flag}
 
 -- | Set a given wire's expression
@@ -180,12 +187,12 @@ set'expr expr wire@Wire {} = wire {w'expr = expr}
 
 -- | Get a unit-value const wire
 unit'const :: Num f => Wire f
-unit'const = Wire const'key 1 0 const'key
+unit'const = Wire const'key 1 W'def const'key
 {-# INLINE unit'const #-}
 
 -- | Get a unit-value wire with a given key
 unit'var :: Num f => String -> Wire f
-unit'var key = Wire key 1 0 key
+unit'var key = Wire key 1 W'def key
 {-# INLINE unit'var #-}
 
 -- | Get a const wire of a given value
@@ -198,9 +205,19 @@ const'wirep :: Wire f -> Bool
 const'wirep Wire {..} = w'key == const'key
 {-# INLINE const'wirep #-}
 
+-- | Predicate for a default wire
+def'wirep :: Wire f -> Bool
+def'wirep Wire {..} = w'flag == W'def
+{-# INLINE def'wirep #-}
+
+-- | Predicate for a reciprocal wire
+recip'wirep :: Wire f -> Bool
+recip'wirep Wire {..} = w'flag == W'recip
+{-# INLINE recip'wirep #-}
+
 -- | Predicate for an extended wire (representing EC-point)
 ext'wirep :: Wire f -> Bool
-ext'wirep Wire {..} = w'flag == 2 || w'flag == 3
+ext'wirep Wire {..} = w'flag == W'even || w'flag == W'odd
 {-# INLINE ext'wirep #-}
 
 -- | Predicate for a out-wire
@@ -211,16 +228,6 @@ out'wirep Wire {..} = case w'key of
     | otherwise -> False
   _ -> False
 {-# INLINE out'wirep #-}
-
--- | Predicate for a priv-wire
-inp'wirep :: Wire f -> Bool
-inp'wirep wire = not (out'wirep wire) && not (const'wirep wire)
-{-# INLINE inp'wirep #-}
-
--- | Predicate if reciprocal flag is on
-recip'wirep :: Wire f -> Bool
-recip'wirep wire = w'flag wire == 1
-{-# INLINE recip'wirep #-}
 
 -- | Check if both gate input wires are extended wires
 and'ext'wirep :: Integral f => W'table f -> Gate f -> Bool
@@ -341,7 +348,11 @@ conv'expr state = \case
   Ebin Minus a b -> conv'expr state (Ebin Plus a (Euna Minus b))
   Ebin Slash a b ->
     let [before'a, after'a, after'b] = scanl conv'expr state [a, b]
-     in add'gate Star after'b (from'expr before'a a) (set'flag 1 . from'expr after'a $ b)
+     in add'gate
+          Star
+          after'b
+          (from'expr before'a a)
+          (set'flag W'recip . from'expr after'a $ b)
   Ebin o a b ->
     let [before'a, after'a, after'b] = scanl conv'expr state [a, b]
      in add'gate o after'b (from'expr before'a a) (from'expr after'a b)

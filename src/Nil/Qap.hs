@@ -30,8 +30,9 @@ import Nil.Circuit
   ( Circuit (..)
   , Gate (..)
   , Gateop (..)
-  , Wire (Wire)
+  , Wire (..)
   , const'key
+  , recip'wirep
   , wire'keys
   )
 import Nil.Poly
@@ -95,21 +96,22 @@ r1cs'from'circuit circuit@Circuit {..} =
 l'from'gate :: Num f => [String] -> Gate f -> [f]
 l'from'gate
   keys
-  Gate
+  g@Gate
     { g'op = op
     , g'lwire = Wire lkey lval _ _
-    , g'rwire = Wire rkey rval flag _
+    , g'rwire = Wire rkey rval _ _
     } =
     [coeff key | key <- keys]
    where
+    recip' = recip'wirep $ g'rwire g
     coeff key
-      | flag == 1 && key == const'key = 1
-      | flag /= 1 && op == End && key == lkey = lval
-      | flag /= 1 && op == Add && key == lkey && lkey == rkey = lval + rval
-      | flag /= 1 && op == Add && key == lkey = lval
-      | flag /= 1 && op == Add && key == rkey = rval
-      | flag /= 1 && op == Mul && key == lkey = lval
-      | flag /= 1 && op `notElem` [Mul, Add, End] && key == const'key = 1
+      | recip' && key == const'key = 1
+      | not recip' && op == End && key == lkey = lval
+      | not recip' && op == Add && key == lkey && lkey == rkey = lval + rval
+      | not recip' && op == Add && key == lkey = lval
+      | not recip' && op == Add && key == rkey = rval
+      | not recip' && op == Mul && key == lkey = lval
+      | not recip' && op `notElem` [Mul, Add, End] && key == const'key = 1
       | otherwise = 0
 {-# INLINE l'from'gate #-}
 
@@ -117,19 +119,20 @@ l'from'gate
 r'from'gate :: Num f => [String] -> Gate f -> [f]
 r'from'gate
   keys
-  Gate
+  g@Gate
     { g'op = op
-    , g'rwire = Wire rkey rval flag _
+    , g'rwire = Wire rkey rval _ _
     , g'owire = Wire okey oval _ _
     } =
     [coeff key | key <- keys]
    where
+    recip' = recip'wirep $ g'rwire g
     coeff key
-      | flag == 1 && key == okey = oval
-      | flag /= 1 && op == End && key == rkey = rval
-      | flag /= 1 && op == Add && key == const'key = 1
-      | flag /= 1 && op == Mul && key == rkey = rval
-      | flag /= 1 && op `notElem` [Mul, Add, End] && key == okey = oval
+      | recip' && key == okey = oval
+      | not recip' && op == End && key == rkey = rval
+      | not recip' && op == Add && key == const'key = 1
+      | not recip' && op == Mul && key == rkey = rval
+      | not recip' && op `notElem` [Mul, Add, End] && key == okey = oval
       | otherwise = 0
 {-# INLINE r'from'gate #-}
 

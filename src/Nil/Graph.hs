@@ -14,7 +14,9 @@ import Nil.Circuit
   , Gateop (..)
   , Wire (..)
   , const'wirep
+  , ext'wirep
   , out'wirep
+  , recip'wirep
   )
 import Nil.Reorg (amp'wirep, shift'wirep)
 import Nil.Utils (die)
@@ -81,9 +83,9 @@ write'gate instances witnesses Gate {..}
       , "[color=" ++ edge'color from ++ "];"
       ]
 
-  edge'color Wire {..}
-    | w'flag == 1 = "blue"
-    | w'flag > 1 = "red"
+  edge'color wire
+    | recip'wirep wire = "blue"
+    | ext'wirep wire = "red"
     | otherwise = "black"
 
   color
