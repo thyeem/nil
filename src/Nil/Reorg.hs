@@ -61,13 +61,12 @@ tip'cut table key =
         else (g'rwire, g'lwire)
 {-# INLINE tip'cut #-}
 
--- | reorg-circuit
+-- | nil-circuit
 reorg'circuit :: (Eq f, Num f, Show f) => Circuit f -> IO (Circuit f)
 reorg'circuit circuit@Circuit {..} = do
   let key = w'key . g'owire . last $ c'gates
   reorged <- nub <$> reorg (otab'from'gates c'gates) key
-  dummied <- concat <$> mapM dummy'const reorged
-  shifted <- concat <$> mapM shift'gate dummied
+  shifted <- concat <$> mapM shift'gate reorged
   gates <- concat <$> mapM (amplify'gate (otab'from'gates shifted)) shifted
   pure $ circuit {c'gates = gates}
 {-# INLINE reorg'circuit #-}
@@ -84,7 +83,7 @@ otab'from'gates = foldl' update mempty
      in insert (w'key g'owire) (g, height) table
 {-# INLINE otab'from'gates #-}
 
--- | Reorganize a circuit for use of zksign
+-- | Reconstruct gates and wires of a given circuit for use of nilsign
 reorg :: (Eq f, Num f, Show f) => O'table f -> String -> IO [Gate f]
 reorg table key
   | member key table = do
@@ -149,18 +148,21 @@ amp'expr = "*/"
 
 frozen'expr :: String
 frozen'expr = "##"
+{-# INLINE frozen'expr #-}
 
 -- | Predicate for a delta-shifter
 shift'wirep :: Wire f -> Bool
 shift'wirep Wire {..} =
   w'key == const'key
     && w'expr == shift'expr
+{-# INLINE shift'wirep #-}
 
 -- | Predicate for a amplifier-knot
 amp'wirep :: Wire f -> Bool
 amp'wirep Wire {..} =
   w'key == const'key
     && w'expr == amp'expr
+{-# INLINE amp'wirep #-}
 
 entry'wirep :: Wire f -> Bool
 entry'wirep wire =
@@ -175,32 +177,19 @@ entry'wirep wire =
 
 frozen'wirep :: Wire f -> Bool
 frozen'wirep Wire {..} = w'expr == frozen'expr
+{-# INLINE frozen'wirep #-}
 
 freeze :: Wire f -> Wire f
 freeze = set'expr frozen'expr . set'key const'key
+{-# INLINE freeze #-}
 
 shifter :: Num f => Wire f
 shifter = set'expr shift'expr unit'const
+{-# INLINE shifter #-}
 
 amplifier :: Num f => Wire f
 amplifier = set'expr amp'expr unit'const
-
--- | Add dummy const wires for shifting const wire further
-dummy'const :: Num f => Gate f -> IO [Gate f]
-dummy'const g@Gate {..}
-  | g'op == End = pure [g]
-  | and' const'wirep g && g'op == Add = do
-      tie'a <- rand'wire
-      tie'b <- rand'wire
-      pure [Gate Mul g'lwire unit'const tie'a]
-        +++ pure [Gate Mul g'rwire unit'const tie'b]
-        +++ pure [Gate g'op tie'a tie'b g'owire]
-  | xor' const'wirep g = do
-      tie <- rand'wire
-      let (const, other) = either'by const'wirep g
-      pure [Gate Mul const unit'const tie]
-        +++ pure [Gate g'op other tie g'owire]
-  | otherwise = pure [g]
+{-# INLINE amplifier #-}
 
 -- | Add shifting gates to each entry gate
 shift'gate :: Num f => Gate f -> IO [Gate f]

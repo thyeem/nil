@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Nil.Circuit where
@@ -63,6 +64,9 @@ data Circuit f = Circuit
   , c'gates :: [Gate f]
   }
   deriving (Eq, Show, Generic, NFData)
+
+-- | Pretty printer for Circuit f
+instance Show f => Pretty (Circuit f)
 
 -- | Gates are vertices having several arithmetic operation in Circuit
 data Gate f = Gate
@@ -184,6 +188,10 @@ set'flag flag wire@Wire {} = wire {w'flag = flag}
 -- | Set a given wire's expression
 set'expr :: String -> Wire f -> Wire f
 set'expr expr wire@Wire {} = wire {w'expr = expr}
+
+-- | Replace value and flag of A wire with a given B wire
+set'wval :: Wire f -> Wire f -> Wire f
+set'wval Wire {..} wire = wire {w'val, w'flag}
 
 -- | Get a unit-value const wire
 unit'const :: Num f => Wire f
@@ -459,5 +467,15 @@ wire'keys Circuit {..} =
       [sort (fst c'symbols), sort (snd c'symbols), w'key . g'owire <$> c'gates]
 {-# INLINE wire'keys #-}
 
--- | Pretty printer for Circuit f
-instance Show f => Pretty (Circuit f)
+-- | Clean up all of wire exprs in circuit
+rm'expr :: Circuit f -> Circuit f
+rm'expr circuit@Circuit {..} =
+  let rm'expr'wire = set'expr mempty
+      rm'expr'gate gate@Gate {..} =
+        gate
+          { g'lwire = rm'expr'wire g'lwire
+          , g'rwire = rm'expr'wire g'rwire
+          , g'owire = rm'expr'wire g'owire
+          }
+   in circuit {c'gates = rm'expr'gate <$> c'gates}
+{-# INLINE rm'expr #-}

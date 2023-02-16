@@ -9,7 +9,6 @@
 module Nil.Eval where
 
 import Control.DeepSeq (NFData)
-import Data.ByteString (append)
 import Data.List (foldl')
 import Data.Map (Map, null)
 import Data.Maybe (fromMaybe)
@@ -20,11 +19,8 @@ import Nil.Field (Field)
 import Nil.Utils
   ( blake2b
   , bytes'from'int'len
-  , bytes'from'str
   , die
-  , hex'from'bytes
   , int'from'bytes
-  , sha256
   )
 
 {- | Get vector of all wire-values used in 'circuit':
@@ -160,7 +156,7 @@ eval'and'ext'wire curve op table Gate {..} =
         wire'from'p $
           p'from'wire curve (table ~~> g'lwire)
             `op` p'from'wire curve (table ~~> g'rwire)
-   in table <~~ set'key (w'key g'owire) wire
+   in table <~~ set'wval wire g'owire
 {-# INLINEABLE eval'and'ext'wire #-}
 
 -- | Evaluate gate when one of gate input wires is an extended
@@ -177,7 +173,7 @@ eval'xor'ext'wire curve op table g@Gate {..} =
         wire'from'p $
           p'from'wire curve (table ~~> ext)
             `op` (table ~~ scalar)
-   in table <~~ set'key (w'key g'owire) wire
+   in table <~~ set'wval wire g'owire
 {-# INLINEABLE eval'xor'ext'wire #-}
 
 -- | Evaluate gate when both gate input wires are scalar wires (no extended wires)
@@ -186,7 +182,7 @@ eval'nor'ext'wire
 eval'nor'ext'wire op table Gate {..} =
   let val = (table ~~ g'lwire) `op` (table ~~ g'rwire)
       wire = set'val val g'owire
-   in table <~~ set'key (w'key g'owire) wire
+   in table <~~ set'wval wire g'owire
 {-# INLINEABLE eval'nor'ext'wire #-}
 
 -- | Error when evaluating gate with an illegal operator and operands (wires)
@@ -273,7 +269,7 @@ eval'rop table g@Gate {..}
             if (table ~~ g'lwire) `op` (table ~~ g'rwire)
               then unit'const
               else val'const 0
-       in table <~~ set'key (w'key g'owire) wire
+       in table <~~ set'wval wire g'owire
   | otherwise = err'operands g "relational"
  where
   op = case g'op of
@@ -291,7 +287,7 @@ eval'x'from'p :: Integral f => W'table f -> Gate f -> W'table f
 eval'x'from'p table g@Gate {..}
   | xor'ext'wirep table g =
       let wire = val'const . fromIntegral . w'val $ table ~~> g'rwire
-       in table <~~ set'key (w'key g'owire) wire
+       in table <~~ set'wval wire g'owire
   | otherwise = err'operands g "(:)"
 {-# INLINEABLE eval'x'from'p #-}
 
@@ -303,7 +299,7 @@ eval'y'from'p curve table g@Gate {..}
       let wire =
             val'const . fromIntegral . y'from'wire curve $
               table ~~> g'rwire
-       in table <~~ set'key (w'key g'owire) wire
+       in table <~~ set'wval wire g'owire
   | otherwise = err'operands g "(;)"
 {-# INLINEABLE eval'y'from'p #-}
 
@@ -316,7 +312,7 @@ eval'ekG
 eval'ekG curve table g@Gate {..}
   | nor'ext'wirep table g =
       let wire = wire'from'p . mulg curve . w'val $ table ~~> g'rwire
-       in table <~~ set'key (w'key g'owire) wire
+       in table <~~ set'wval wire g'owire
   | otherwise = err'operands g "[k]"
 {-# INLINEABLE eval'ekG #-}
 
@@ -334,32 +330,6 @@ eval'exy curve table g@Gate {..}
                 curve
                 (fromIntegral . w'val $ table ~~> g'lwire)
                 (fromIntegral . w'val $ table ~~> g'rwire)
-       in table <~~ set'key (w'key g'owire) wire
+       in table <~~ set'wval wire g'owire
   | otherwise = err'operands g "[x,y]"
 {-# INLINEABLE eval'exy #-}
-
--- | Clean up all of wire exprs in circuit
-rm'expr :: Circuit f -> Circuit f
-rm'expr circuit@Circuit {..} =
-  let rm'expr'wire = set'expr mempty
-      rm'expr'gate gate@Gate {..} =
-        gate
-          { g'lwire = rm'expr'wire g'lwire
-          , g'rwire = rm'expr'wire g'rwire
-          , g'owire = rm'expr'wire g'owire
-          }
-   in circuit {c'gates = rm'expr'gate <$> c'gates}
-{-# INLINE rm'expr #-}
-
--- | Get a hash value from a given circuit
-hash'circuit :: String -> Circuit f -> String
-hash'circuit salt Circuit {..} =
-  let from'str = sha256 . bytes'from'str
-      from'ba = foldl1 ((sha256 .) . append)
-      hash'wire Wire {..} = from'str (w'key ++ salt)
-      hash'gate Gate {..} =
-        case g'op of
-          Add -> from'ba $ hash'wire <$> [g'lwire, g'rwire, g'owire]
-          Mul -> from'ba $ hash'wire <$> [g'rwire, g'lwire, g'owire]
-          _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
-   in hex'from'bytes . from'ba $ hash'gate <$> c'gates

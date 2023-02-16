@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -9,10 +10,11 @@ module Nil.Sign where
 
 import Control.DeepSeq (NFData)
 import Control.Monad (foldM)
+import Data.ByteString (append)
 import Data.List (foldl', nub, sortOn)
 import Data.Map (Map, assocs, elems, member)
 import Nil.Circuit
-import Nil.Curve (Curve, Point (..), (.*))
+import Nil.Curve (Curve, Point (..), c'g, toA, (.*))
 import Nil.Ecdata (G1, G2)
 import Nil.Eval (p'from'wire, wire'from'p)
 import Nil.Field (Field)
@@ -25,21 +27,24 @@ import Nil.Reorg
   , reorg'circuit
   , shift'wirep
   )
-import Nil.Utils (Pretty, die, ranf)
+import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, ranf, sha256, tmap)
 import System.Random (Random)
 
 -- | Multiple-signature object for nil-sign
-data NilSig f = NilSig
-  { n'nilkey :: NilKey
-  , n'hash :: String
-  , n'sig :: Circuit f
+data NilSig f k q = NilSig
+  { nil'hash :: String
+  , nil'key :: NilKey k q
+  , nil'circuit :: Circuit f
   }
   deriving (Eq, Show)
 
--- | Pretty printer for NilSig f
-instance Show f => Pretty (NilSig f)
+instance (Show f, Show k, Show q) => Pretty (NilSig f k q)
 
-type NilKey = (Point G1, Point G2)
+-- | Aggregable verification key of nilsig
+type NilKey k q = (Point k, Point q)
+
+instance (Show k, Pretty k, Show q, Pretty q) => Pretty (NilKey k q) where
+  pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
 
 -- | Lookup table describing a circuit as DAG
 type G'table f = Map String [Gate f]
@@ -89,46 +94,84 @@ shift'wire delta epsilon wire@Wire {..} =
     . set'val (delta * (w'val + epsilon))
     $ wire
 
+-- | Eval nil-signature
+eval'nilsig :: NilSig f k q -> W'table f -> Wire f
+eval'nilsig NilSig {..} pubs =
+  foldl' go pubs (c'gates nil'circuit) ~> "return"
+ where
+  go table g@Gate {..} =
+    case g'op of
+      Add -> undefined
+      Mul -> undefined
+      a -> die "Error,"
+
 -- | Initialize nil-signature
-init'sig :: (Eq f, Num f, Show f) => Circuit f -> IO (NilSig f)
-init'sig circuit = NilSig (O, O) mempty <$> reorg'circuit circuit
-{-# INLINE init'sig #-}
+init'nilsig
+  :: ( Eq f
+     , Num f
+     , Show f
+     , Eq k
+     , Fractional k
+     , Field k
+     , Eq q
+     , Fractional q
+     , Field q
+     )
+  => Curve k
+  -> Curve q
+  -> Circuit f
+  -> IO (NilSig f k q)
+init'nilsig k q circuit =
+  NilSig mempty (c'g k, c'g q) <$> reorg'circuit circuit
+{-# INLINE init'nilsig #-}
 
 {- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
  Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
 -}
 nilsign
   :: ( Eq f
+     , Integral f
      , Fractional f
      , Random f
      , Field f
      , Bounded f
      , Integral k
-     , Field k
-     , Integral f
      , Fractional k
+     , Field k
      , NFData k
+     , Eq q
+     , Fractional q
+     , Field q
+     , NFData q
      )
   => Curve k
-  -> NilSig f
+  -> Curve q
+  -> NilSig f k q
   -> W'table f
-  -> IO (NilSig f)
-nilsign curve nilsig@NilSig {..} secrets = do
-  phi <- ranf
-  chi <- ranf
-  let o'tab = otab'from'gates . c'gates $ n'sig
-      g'tab = gtab'from'otab o'tab
-      entries = find'entries o'tab
-  signed <- foldM (sign'gate curve secrets g'tab) o'tab entries
-  let amps = find'amps signed
-      final = foldl' (freeze'amp phi chi) signed amps
-  pure $
-    nilsig
-      { n'nilkey = update'nilkey phi chi n'nilkey
-      , n'hash
-      , n'sig =
-          n'sig {c'gates = (fst <$>) . sortOn snd $ elems final}
-      }
+  -> IO (NilSig f k q)
+nilsign
+  curve'k
+  curve'q
+  nilsig@NilSig {nil'key = (point'k, point'q), ..}
+  secrets = do
+    phi <- ranf
+    chi <- ranf
+    let o'tab = otab'from'gates . c'gates $ nil'circuit
+        g'tab = gtab'from'otab o'tab
+        entries = find'entries o'tab
+    signed <- foldM (sign'gate curve'k secrets g'tab) o'tab entries
+    let amps = find'amps signed
+        final = foldl' (freeze'amp phi chi) signed amps
+    pure $
+      nilsig
+        { nil'key =
+            ( toA $ point'k .* (phi + chi)
+            , toA $ point'q .* (phi - chi)
+            )
+        , nil'hash
+        , nil'circuit =
+            nil'circuit {c'gates = (fst <$>) . sortOn snd $ elems final}
+        }
 {-# INLINE nilsign #-}
 
 -- | Find a list of entry gates
@@ -159,19 +202,13 @@ freeze'amp phi chi o'tab g@Gate {..} =
    in o'tab <<< (w'key g'owire, g {g'rwire = rwire})
 {-# INLINE freeze'amp #-}
 
--- | Update nilkey (verification key) -> (PHI, CHI)
-update'nilkey :: Integral f => f -> f -> NilKey -> NilKey
-update'nilkey phi chi (_PHI, _CHI) =
-  (_PHI .* (phi + chi), _CHI .* (phi - chi))
-{-# INLINE update'nilkey #-}
-
 sign'gate
   :: ( Eq f
+     , Integral f
      , Fractional f
      , Field f
      , Random f
      , Bounded f
-     , Integral f
      , Integral k
      , Fractional k
      , Field k
@@ -281,3 +318,17 @@ get'shift o'tab g'tab g@Gate {..}
         a -> die $ "Error, found unexpected gate op: " ++ show a
   | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
 {-# INLINEABLE get'shift #-}
+
+-- | Get a hash value from a given circuit
+hash'circuit :: String -> Circuit f -> String
+hash'circuit salt Circuit {..} =
+  let from'str = sha256 . bytes'from'str
+      from'ba = foldl1 ((sha256 .) . append)
+      hash'wire Wire {..} = from'str (w'key ++ salt)
+      hash'gate Gate {..} =
+        case g'op of
+          Add -> from'ba $ hash'wire <$> [g'lwire, g'rwire, g'owire]
+          Mul -> from'ba $ hash'wire <$> [g'rwire, g'lwire, g'owire]
+          _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
+   in hex'from'bytes . from'ba $ hash'gate <$> c'gates
+{-# INLINE hash'circuit #-}

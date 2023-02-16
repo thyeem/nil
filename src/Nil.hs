@@ -5,7 +5,8 @@
  Stability   : experimental
 -}
 module Nil
-  ( module Nil.Circuit
+  ( module Nil.Base
+  , module Nil.Circuit
   , module Nil.Curve
   , module Nil.Ecdata
   , module Nil.Ecdsa
@@ -27,6 +28,7 @@ module Nil
 where
 
 import Data.Map (elems)
+import Nil.Base
 import Nil.Circuit
 import Nil.Curve
 import Nil.Ecdata
@@ -53,10 +55,9 @@ lang =
     -- , "let q = a + 3b + p * d / e"
     -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
-    [ "language (pub a, priv b, priv c)"
-    , "return a^2 + 2*b + a*c"
+    [ "language (pub a, priv w, priv b, priv c)"
+    , "return w^3 + a  + 5"
     -- , "return a^3 + a*b + a + 7b + 5 * 3"
-    -- , "return a + (5*7) + 10"
     -- [ "language (priv w)"
     -- , "return w^3 + w + 5"
     ]
@@ -86,31 +87,22 @@ e' = eval'circuit def'curve t <$> reorg'circuit c
 
 o = w'val . (~> "return")
 
-sig = init'sig <$> reorg'circuit c
-
 ---------
 
-otab = otab'from'gates . c'gates <$> reorg'circuit c
-
-gtab = gtab'from'otab <$> otab
-
-t'amp key = do
-  ot <- otab
-  let gt = gtab'from'otab ot
-      g = filter (\(gate, _) -> (w'key . g'lwire $ gate) == key) (elems ot)
-      amp = filter (\(gate, _) -> xor' amp'wirep gate) (elems ot)
-  pp amp
-  pure $ get'amp gt (fst . head $ g)
-
-t'shift i = do
-  ot <- otab
-  let gt = gtab'from'otab ot
-      g = filter (\(gate, _) -> g'op gate /= End && xor' entry'wirep gate) (elems ot)
-  pp g
-  pure $ get'shift ot gt (fst $ g !! i)
-
 t'sign = do
-  sig <- init'sig c
-  let ot = otab'from'gates . c'gates . n'sig $ sig
+  sig <- init'nilsig bn128G1 bn128G2 c
+  let ot = otab'from'gates . c'gates . nil'circuit $ sig
   let gt = gtab'from'otab ot
-  nilsign bn128G1 sig t
+  nilsign bn128G1 bn128G2 sig t
+
+eval = do
+  sig <- t'sign
+  let (phi, chi) = nil'key sig
+      circuit = nil'circuit sig
+      out = eval'circuit bn128G1 t circuit
+      ret = out ~> "~5"
+      epc = pairing phi chi ^ 41
+      r = p'from'wire def'curve ret
+      o = pairing r gG2
+  print epc
+  print o
