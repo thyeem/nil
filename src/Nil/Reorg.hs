@@ -66,7 +66,8 @@ reorg'circuit :: (Eq f, Num f, Show f) => Circuit f -> IO (Circuit f)
 reorg'circuit circuit@Circuit {..} = do
   let key = w'key . g'owire . last $ c'gates
   reorged <- nub <$> reorg (otab'from'gates c'gates) key
-  shifted <- concat <$> mapM shift'gate reorged
+  dummied <- concat <$> mapM dummy'const reorged
+  shifted <- concat <$> mapM shift'gate dummied
   gates <- concat <$> mapM (amplify'gate (otab'from'gates shifted)) shifted
   pure $ circuit {c'gates = gates}
 {-# INLINE reorg'circuit #-}
@@ -146,6 +147,9 @@ amp'expr :: String
 amp'expr = "*/"
 {-# INLINE amp'expr #-}
 
+frozen'expr :: String
+frozen'expr = "##"
+
 -- | Predicate for a delta-shifter
 shift'wirep :: Wire f -> Bool
 shift'wirep Wire {..} =
@@ -158,13 +162,47 @@ amp'wirep Wire {..} =
   w'key == const'key
     && w'expr == amp'expr
 
+entry'wirep :: Wire f -> Bool
+entry'wirep wire =
+  and $
+    [ not . out'wirep
+    , not . shift'wirep
+    , not . amp'wirep
+    , not . frozen'wirep
+    ]
+      <*> [wire]
+{-# INLINE entry'wirep #-}
+
+frozen'wirep :: Wire f -> Bool
+frozen'wirep Wire {..} = w'expr == frozen'expr
+
+freeze :: Wire f -> Wire f
+freeze = set'expr frozen'expr . set'key const'key
+
 shifter :: Num f => Wire f
 shifter = set'expr shift'expr unit'const
 
 amplifier :: Num f => Wire f
 amplifier = set'expr amp'expr unit'const
 
--- | Randomize entry gates by shifting wires
+-- | Add dummy const wires for shifting const wire further
+dummy'const :: Num f => Gate f -> IO [Gate f]
+dummy'const g@Gate {..}
+  | g'op == End = pure [g]
+  | and' const'wirep g && g'op == Add = do
+      tie'a <- rand'wire
+      tie'b <- rand'wire
+      pure [Gate Mul g'lwire unit'const tie'a]
+        +++ pure [Gate Mul g'rwire unit'const tie'b]
+        +++ pure [Gate g'op tie'a tie'b g'owire]
+  | xor' const'wirep g = do
+      tie <- rand'wire
+      let (const, other) = either'by const'wirep g
+      pure [Gate Mul const unit'const tie]
+        +++ pure [Gate g'op other tie g'owire]
+  | otherwise = pure [g]
+
+-- | Add shifting gates to each entry gate
 shift'gate :: Num f => Gate f -> IO [Gate f]
 shift'gate g@Gate {..}
   | g'op == End = pure [g]
@@ -178,44 +216,43 @@ shift'gate g@Gate {..}
   | otherwise = pure [g]
 {-# INLINEABLE shift'gate #-}
 
+-- | Create shift gates and tie them up
 shift :: Num f => Gateop -> Wire f -> Wire f -> Wire f -> IO [Gate f]
 shift op scalar ext out = do
   tie'a <- rand'wire
   tie'b <- rand'wire
   case op of
     Mul ->
-      pure [Gate op scalar ext tie'a]
+      pure [Gate Mul scalar ext tie'a]
         +++ pure [Gate Mul ext shifter tie'b]
         +++ pure [Gate Add tie'a tie'b out]
     Add ->
-      pure [Gate Add ext shifter tie'a]
-        +++ pure [Gate op scalar tie'a out]
+      pure [Gate Add scalar shifter tie'a]
+        +++ pure [Gate Add ext tie'a out]
     _ -> die "Error,"
 {-# INLINEABLE shift #-}
 
--- | Create and add an amplifier gate when amplifier knots are found
+-- | Add an amplifier gate when needed
 amplify'gate :: Num f => O'table f -> Gate f -> IO [Gate f]
-amplify'gate table g@Gate {..}
-  | g'op /= Add = pure [g]
-  | and' out'wirep g && from'addp g'lwire && from'addp g'rwire = do
+amplify'gate table g@Gate {g'lwire, g'rwire, g'owire, g'op = op}
+  | op /= Add = pure [g]
+  | nor' from'addp g = pure [g]
+  | nor' from'entryp g = do
       tie'a <- rand'wire
       tie'b <- rand'wire
       amplify g'lwire tie'a
         +++ amplify g'rwire tie'b
-        +++ pure [Gate g'op tie'a tie'b g'owire]
-  | xor' out'wirep g = do
-      let (ext, scalar) = either'by out'wirep g
-      if from'addp ext && not (shift'wirep scalar)
-        then do
-          tie <- rand'wire
-          pure [Gate g'op scalar ext tie] +++ amplify tie g'owire
-        else pure [g]
+        +++ pure [Gate op tie'a tie'b g'owire]
+  | xor' from'entryp g = do
+      let (true, other) = either'by from'entryp g
+      tie <- rand'wire
+      amplify true tie +++ pure [Gate op other tie g'owire]
   | otherwise = pure [g]
  where
-  from'addp Wire {..}
-    | member w'key table =
-        let (Gate {g'op = op}, _) = table ~> w'key
-         in op == Add
+  from'addp = check ((== Add) . g'op)
+  from'entryp = check (xor' entry'wirep)
+  check p Wire {..}
+    | member w'key table = let (gate, _) = table ~> w'key in p gate
     | otherwise = False
 {-# INLINEABLE amplify'gate #-}
 

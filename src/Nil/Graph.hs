@@ -9,7 +9,7 @@ where
 
 import Control.Monad (when)
 import Nil.Circuit
-import Nil.Reorg (amp'wirep, shift'wirep)
+import Nil.Reorg (amp'wirep, frozen'wirep, shift'wirep)
 import Nil.Utils (die)
 import System.Exit (ExitCode (ExitSuccess))
 import System.Process (readProcessWithExitCode)
@@ -75,8 +75,9 @@ write'gate instances witnesses Gate {..}
       ]
 
   edge'color wire
-    | recip'wirep wire = "blue"
-    | ext'wirep wire = "red"
+    | recip'wirep wire = "red"
+    | ext'wirep wire = "blue"
+    | out'wirep wire = "blue"
     | otherwise = "black"
 
   color
@@ -85,6 +86,11 @@ write'gate instances witnesses Gate {..}
     | otherwise = "white"
 
   style wire
+    | frozen'wirep wire =
+        unwords
+          [ key wire
+          , "[shape=egg,style=filled,fillcolor=gray,fontsize=20,label=\"?\"];"
+          ]
     | shift'wirep wire =
         unwords
           [ key wire

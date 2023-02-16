@@ -54,7 +54,7 @@ lang =
     -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
     [ "language (pub a, priv b, priv c)"
-    , "return a^2 + a*b + b"
+    , "return a^2 + 2*b + a*c"
     -- , "return a^3 + a*b + a + 7b + 5 * 3"
     -- , "return a + (5*7) + 10"
     -- [ "language (priv w)"
@@ -62,8 +62,6 @@ lang =
     ]
 
 c = compile'language lang
-
-rc = reorg'circuit c
 
 t =
   table'from'list
@@ -76,23 +74,23 @@ t =
     ]
     :: W'table Fr
 
-gc = export'graph "p.pdf" (write'dot dot'header c)
+g circuit = export'graph "p.pdf" (write'dot dot'header circuit)
 
-gr = do
-  dot <- write'dot dot'header <$> rc
+g' = do
+  dot <- write'dot dot'header <$> reorg'circuit c
   export'graph "q.pdf" dot
 
-ec = eval'circuit def'curve t c
+e = eval'circuit def'curve t c
 
-er = eval'circuit def'curve t <$> rc
+e' = eval'circuit def'curve t <$> reorg'circuit c
 
-retc = w'val $ ec ~> "return"
+o = w'val . (~> "return")
 
-retr = w'val . (~> "return") <$> er
+sig = init'sig <$> reorg'circuit c
 
-sig = init'sig <$> rc
+---------
 
-otab = otab'from'gates . c'gates <$> rc
+otab = otab'from'gates . c'gates <$> reorg'circuit c
 
 gtab = gtab'from'otab <$> otab
 

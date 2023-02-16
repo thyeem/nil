@@ -19,6 +19,8 @@ import Nil.Field (Field)
 import Nil.Reorg
   ( O'table
   , amp'wirep
+  , entry'wirep
+  , freeze
   , otab'from'gates
   , reorg'circuit
   , shift'wirep
@@ -75,12 +77,10 @@ hide
   => Curve k
   -> Wire f
   -> Wire f
-hide curve wire =
+hide curve =
   freeze
-    . set'key (w'key wire)
     . wire'from'p
     . p'from'wire curve
-    $ wire
 
 -- | Shift a value of wire over field using crypto-safe random variables
 shift'wire :: Num f => f -> f -> Wire f -> Wire f
@@ -187,22 +187,22 @@ sign'gate curve secrets g'tab o'tab g@Gate {..} = do
   delta <- ranf
   epsilon <- ranf
   let (entry, other) = either'by entry'wirep g
-      secret = secrets ~~> entry
-      randomize = shift'wire delta epsilon
-      lift = hide curve . randomize
-      gate = case g'op of
-        Add ->
-          let rwire =
-                if shift'wirep other
-                  then lift unit'const
-                  else other
-           in g {g'lwire = lift secret, g'rwire = rwire}
-        Mul -> g {g'lwire = randomize secret, g'rwire = other}
-        a -> die $ "Error, found unexpected gate op: " ++ show a
-  pure
-    . update'amp delta g g'tab
-    . update'shift curve delta epsilon g g'tab
-    $ o'tab <<< (w'key g'owire, gate)
+  if not (member (w'key entry) secrets) && not (const'wirep entry)
+    then pure o'tab -- do not sign secret variables for others
+    else do
+      let secret = secrets ~~> entry
+          randomize = shift'wire delta epsilon
+          lift = hide curve . randomize
+          gate = case g'op of
+            Add ->
+              let rwire = if shift'wirep other then lift unit'const else other
+               in g {g'lwire = lift secret, g'rwire = rwire}
+            Mul -> g {g'lwire = randomize secret, g'rwire = other}
+            a -> die $ "Error, found unexpected gate op: " ++ show a
+      pure
+        . update'amp delta g g'tab
+        . update'shift curve delta epsilon g g'tab
+        $ o'tab <<< (w'key g'owire, gate)
 {-# INLINEABLE sign'gate #-}
 
 update'shift
@@ -281,23 +281,3 @@ get'shift o'tab g'tab g@Gate {..}
         a -> die $ "Error, found unexpected gate op: " ++ show a
   | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
 {-# INLINEABLE get'shift #-}
-
-entry'wirep :: Wire f -> Bool
-entry'wirep wire =
-  and $
-    [ not . out'wirep
-    , not . shift'wirep
-    , not . amp'wirep
-    , not . frozen'wirep
-    ]
-      <*> [wire]
-{-# INLINE entry'wirep #-}
-
-frozen'expr :: String
-frozen'expr = "__FROZEN__"
-
-frozen'wirep :: Wire f -> Bool
-frozen'wirep Wire {..} = w'expr == frozen'expr
-
-freeze :: Wire f -> Wire f
-freeze = set'expr frozen'expr
