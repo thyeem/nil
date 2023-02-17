@@ -225,27 +225,24 @@ shift op scalar ext out = do
 amplify'gate :: Num f => O'table f -> Gate f -> IO [Gate f]
 amplify'gate table g@Gate {g'lwire, g'rwire, g'owire, g'op = op}
   | op /= Add = pure [g]
-  | nor' from'addp g = pure [g]
-  | nor' from'entryp g = do
-      tie'a <- rand'wire
-      tie'b <- rand'wire
-      amplify g'lwire tie'a
-        +++ amplify g'rwire tie'b
-        +++ pure [Gate op tie'a tie'b g'owire]
-  | xor' from'entryp g = do
-      let (true, other) = either'by from'entryp g
-      tie <- rand'wire
-      amplify true tie +++ pure [Gate op other tie g'owire]
+  | and' from'add g = do
+      (lwire, lamp) <- amplify (from'add'add g'lwire) g'lwire
+      (rwire, ramp) <- amplify (from'add'add g'rwire) g'rwire
+      pure lamp +++ pure ramp +++ pure [Gate Add lwire rwire g'owire]
   | otherwise = pure [g]
  where
-  from'addp = check ((== Add) . g'op)
-  from'entryp = check (xor' entry'wirep)
+  from'add = check ((== Add) . g'op)
+  from'add'add = check (and' from'add)
   check p Wire {..}
     | member w'key table = let (gate, _) = table ~> w'key in p gate
     | otherwise = False
 {-# INLINEABLE amplify'gate #-}
 
 -- | Create an amplifier gate with the given in/out wires
-amplify :: Num f => Wire f -> Wire f -> IO [Gate f]
-amplify in' out = pure [Gate Mul in' amplifier out]
+amplify :: Num f => Bool -> Wire f -> IO (Wire f, [Gate f])
+amplify pass in'
+  | pass = pure (in', [])
+  | otherwise = do
+      out <- rand'wire
+      pure (out, [Gate Mul in' amplifier out])
 {-# INLINE amplify #-}

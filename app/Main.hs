@@ -37,9 +37,9 @@ import Nil
   , export'graph
   , hex'from'bytes
   , info
-  , nil'circuit
   , qap'from'circuit
   , read'table
+  , reorg'circuit
   , sha256
   , statement
   , stderr
@@ -175,7 +175,7 @@ view Opts {..} = do
       | isRight circuit -> do
           let circuit_ = fromRight (die "Error,") circuit
           reorged <-
-            if reorg then nil'circuit circuit_ else pure circuit_
+            if reorg then reorg'circuit circuit_ else pure circuit_
           if graph
             then do
               let circ'id = hex'from'bytes . sha256 . encode $ reorged

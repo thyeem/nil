@@ -38,7 +38,7 @@ import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (.*), (<.*>))
-import Nil.Ecdata (G1, G2, bn128G1, gG1, gG2)
+import Nil.Ecdata (BabyJub, G1, G2, babyJub, gG1, gG2)
 import Nil.Eval (statement, wire'vals)
 import Nil.Field (Primefield)
 import Nil.Lexer (tokenize)
@@ -192,7 +192,7 @@ deriving instance Store VerificationKey
 deriving instance Store Proof
 
 -- | Derive circuit from the domain-specific language, Language
-compile'language :: String -> Circuit Fr
+compile'language :: Num f => String -> Circuit f
 compile'language = circuit'from'ast . parse . tokenize
 {-# INLINE compile'language #-}
 
@@ -211,8 +211,8 @@ toxicwaste = do
 {-# INLINE toxicwaste #-}
 
 -- | Default elliptic curve of this protocol
-def'curve :: Curve G1
-def'curve = bn128G1
+def'curve :: Curve BabyJub
+def'curve = babyJub
 
 -- | Generate evaluation key and verification key from the given CRS and QAP
 zksetup :: QAP Fr -> ToxicWastes -> (EvaluationKey, VerificationKey)

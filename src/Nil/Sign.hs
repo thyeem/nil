@@ -15,7 +15,6 @@ import Data.List (foldl', nub, sortOn)
 import Data.Map (Map, assocs, elems, member)
 import Nil.Circuit
 import Nil.Curve (Curve, Point (..), c'g, toA, (.*))
-import Nil.Ecdata (G1, G2)
 import Nil.Eval (p'from'wire, wire'from'p)
 import Nil.Field (Field)
 import Nil.Reorg
@@ -31,19 +30,19 @@ import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, ranf, sha256
 import System.Random (Random)
 
 -- | Multiple-signature object for nil-sign
-data NilSig f k q = NilSig
+data NilSig f k = NilSig
   { nil'hash :: String
-  , nil'key :: NilKey k q
+  , nil'key :: NilKey f k
   , nil'circuit :: Circuit f
   }
   deriving (Eq, Show)
 
-instance (Show f, Show k, Show q) => Pretty (NilSig f k q)
+instance (Show f, Show k) => Pretty (NilSig f k)
 
 -- | Aggregable verification key of nilsig
-type NilKey k q = (Point k, Point q)
+type NilKey f k = (Point f, Point k)
 
-instance (Show k, Pretty k, Show q, Pretty q) => Pretty (NilKey k q) where
+instance (Show f, Pretty f, Show k, Pretty k) => Pretty (NilKey f k) where
   pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
 
 -- | Lookup table describing a circuit as DAG
@@ -78,8 +77,8 @@ type G'table f = Map String [Gate f]
 
 -- | Homomorphically hide using a base point of the given elliptic curve
 hide
-  :: (Integral f, Fractional f, Integral k, Field k, Fractional k, NFData k)
-  => Curve k
+  :: (Integral f, Fractional f, Field f, NFData f)
+  => Curve f
   -> Wire f
   -> Wire f
 hide curve =
@@ -95,7 +94,7 @@ shift'wire delta epsilon wire@Wire {..} =
     $ wire
 
 -- | Eval nil-signature
-eval'nilsig :: NilSig f k q -> W'table f -> Wire f
+eval'nilsig :: NilSig f k -> W'table f -> Wire f
 eval'nilsig NilSig {..} pubs =
   foldl' go pubs (c'gates nil'circuit) ~> "return"
  where
@@ -110,17 +109,16 @@ init'nilsig
   :: ( Eq f
      , Num f
      , Show f
+     , Fractional f
+     , Field f
      , Eq k
      , Fractional k
      , Field k
-     , Eq q
-     , Fractional q
-     , Field q
      )
-  => Curve k
-  -> Curve q
+  => Curve f
+  -> Curve k
   -> Circuit f
-  -> IO (NilSig f k q)
+  -> IO (NilSig f k)
 init'nilsig k q circuit =
   NilSig mempty (c'g k, c'g q) <$> reorg'circuit circuit
 {-# INLINE init'nilsig #-}
@@ -135,20 +133,13 @@ nilsign
      , Random f
      , Field f
      , Bounded f
-     , Integral k
-     , Fractional k
-     , Field k
-     , NFData k
-     , Eq q
-     , Fractional q
-     , Field q
-     , NFData q
+     , NFData f
      )
-  => Curve k
-  -> Curve q
-  -> NilSig f k q
+  => Curve f
+  -> Curve k
+  -> NilSig f k
   -> W'table f
-  -> IO (NilSig f k q)
+  -> IO (NilSig f k)
 nilsign
   curve'k
   curve'q
@@ -159,18 +150,19 @@ nilsign
     let o'tab = otab'from'gates . c'gates $ nil'circuit
         g'tab = gtab'from'otab o'tab
         entries = find'entries o'tab
-    signed <- foldM (sign'gate curve'k secrets g'tab) o'tab entries
+    signed <- foldM (sign curve'k secrets g'tab) o'tab entries
     let amps = find'amps signed
-        final = foldl' (freeze'amp phi chi) signed amps
+        done = foldl' (update'kappa phi chi) signed amps
     pure $
       nilsig
         { nil'key =
-            ( toA $ point'k .* (phi + chi)
-            , toA $ point'q .* (phi - chi)
-            )
+            -- ( toA $ point'k .* (phi + chi)
+            -- , toA $ point'q .* (phi - chi)
+            -- )
+            (point'k, point'q)
         , nil'hash
         , nil'circuit =
-            nil'circuit {c'gates = (fst <$>) . sortOn snd $ elems final}
+            nil'circuit {c'gates = (fst <$>) . sortOn snd . elems $ done}
         }
 {-# INLINE nilsign #-}
 
@@ -193,36 +185,34 @@ find'amps table = foldl' go [] (assocs table)
 {- | Update kappa value in each amplifier gates and finalize amplifiers
  Kappa := Pi_j (phi + chi) * (phi - chi)
 -}
-freeze'amp :: (Eq f, Num f) => f -> f -> O'table f -> Gate f -> O'table f
-freeze'amp phi chi o'tab g@Gate {..} =
+update'kappa :: (Eq f, Num f) => f -> f -> O'table f -> Gate f -> O'table f
+update'kappa phi chi o'tab g@Gate {..} =
   let rwire =
+        -- g'rwire
+        -- { w'val = w'val g'rwire * (phi + chi) * (phi - chi)
+        -- }
         g'rwire
-          { w'val = w'val g'rwire * (phi + chi) * (phi - chi)
-          }
    in o'tab <<< (w'key g'owire, g {g'rwire = rwire})
-{-# INLINE freeze'amp #-}
+{-# INLINE update'kappa #-}
 
-sign'gate
-  :: ( Eq f
-     , Integral f
+-- | Sign each entry gate assigned for a signer
+sign
+  :: ( Integral f
      , Fractional f
      , Field f
      , Random f
      , Bounded f
-     , Integral k
-     , Fractional k
-     , Field k
-     , NFData k
+     , NFData f
      )
-  => Curve k
+  => Curve f
   -> W'table f
   -> G'table f
   -> O'table f
   -> Gate f
   -> IO (O'table f)
-sign'gate curve secrets g'tab o'tab g@Gate {..} = do
-  delta <- ranf
-  epsilon <- ranf
+sign curve secrets g'tab o'tab g@Gate {..} = do
+  delta <- pure 1 -- ranf
+  epsilon <- pure 2 -- ranf
   let (entry, other) = either'by entry'wirep g
   if not (member (w'key entry) secrets) && not (const'wirep entry)
     then pure o'tab -- do not sign secret variables for others
@@ -232,27 +222,26 @@ sign'gate curve secrets g'tab o'tab g@Gate {..} = do
           lift = hide curve . randomize
           gate = case g'op of
             Add ->
-              let rwire = if shift'wirep other then lift unit'const else other
+              let rwire
+                    | shift'wirep other =
+                        lift $ val'const (negate $ delta * epsilon)
+                    | otherwise = other
                in g {g'lwire = lift secret, g'rwire = rwire}
             Mul -> g {g'lwire = randomize secret, g'rwire = other}
             a -> die $ "Error, found unexpected gate op: " ++ show a
       pure
-        . update'amp delta g g'tab
+        -- . update'rho delta g g'tab
         . update'shift curve delta epsilon g g'tab
         $ o'tab <<< (w'key g'owire, gate)
-{-# INLINEABLE sign'gate #-}
+{-# INLINEABLE sign #-}
 
 update'shift
-  :: ( Eq f
-     , Num f
-     , Integral f
+  :: ( Integral f
      , Fractional f
-     , Integral k
-     , Fractional k
-     , Field k
-     , NFData k
+     , Field f
+     , NFData f
      )
-  => Curve k
+  => Curve f
   -> f
   -> f
   -> Gate f
@@ -263,25 +252,29 @@ update'shift curve delta epsilon g g'tab o'tab
   | shift'wirep . g'rwire $ g = o'tab
   | otherwise =
       let shift@Gate {..} = get'shift o'tab g'tab g
-          rwire = g'rwire {w'val = negate $ w'val g'rwire * delta * epsilon}
+          rwire =
+            -- g'rwire
+            -- { w'val = negate $ delta * epsilon
+            -- }
+            g'rwire
           updater
             | g'op == Add = hide curve
             | otherwise = freeze
        in o'tab <<< (w'key g'owire, shift {g'rwire = updater rwire})
 {-# INLINE update'shift #-}
 
-update'amp
-  :: (Eq f, Num f, Fractional f)
+update'rho
+  :: (Eq f, Fractional f)
   => f
   -> Gate f
   -> G'table f
   -> O'table f
   -> O'table f
-update'amp delta g g'tab o'tab =
+update'rho delta g g'tab o'tab =
   let amp@Gate {..} = get'amp g'tab g
       rwire = g'rwire {w'val = w'val g'rwire * recip delta}
    in o'tab <<< (w'key g'owire, amp {g'rwire = rwire})
-{-# INLINE update'amp #-}
+{-# INLINE update'rho #-}
 
 gtab'from'otab :: Eq f => O'table f -> G'table f
 gtab'from'otab o'tab =

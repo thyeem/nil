@@ -98,7 +98,7 @@ l'from'gate
     recip' = recip'wirep $ g'rwire g
     coeff key
       | recip' && key == const'key = 1
-      | not recip' && op == End && key == lkey = lval
+      | not recip' && op == End && key == const'key = 1
       | not recip' && op == Add && key == lkey && lkey == rkey = lval + rval
       | not recip' && op == Add && key == lkey = lval
       | not recip' && op == Add && key == rkey = rval

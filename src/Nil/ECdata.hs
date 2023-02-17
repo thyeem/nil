@@ -193,7 +193,7 @@ eG1G2 =
     ]
 
 {- | Baby jubjub
- A twisted Edwards elliptic curve E(Fr) where the char of Fr is the order of BN128
+ A twisted Edwards elliptic curve E(Fr) where the char of Fr is the order of BN254
 -}
 type BabyJub =
   Primefield

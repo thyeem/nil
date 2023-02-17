@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 {- |
  Module      : Nil
  License     : MIT
@@ -47,62 +49,65 @@ import Nil.Shamir
 import Nil.Sign
 import Nil.Utils
 
+type NP =
+  Primefield
+    21888242871839275222246405745257275088696311157297823662689037894645226208583
+
 lang =
   unlines
     -- [ "language (priv a, priv b, pub c, priv d, priv e)"
+    -- , "return a+b"
     -- , "let o = 10a + b * c * d / e"
     -- , "let p = o^3 + b / c"
     -- , "let q = a + 3b + p * d / e"
     -- , "let r = a * b / c * d / e"
     -- , "return o * o^2 / r^3 + p * q"
-    [ "language (pub a, priv w, priv b, priv c)"
-    , "return w^3 + a  + 5"
-    -- , "return a^3 + a*b + a + 7b + 5 * 3"
-    -- [ "language (priv w)"
-    -- , "return w^3 + w + 5"
+    [ "language (priv w)"
+    , "return w + w"
+    -- , "return a^3 + a*b + (a * 7b) + 5*3"
     ]
-
-c = compile'language lang
 
 t =
   table'from'list
-    [ ("a", -1111111)
-    , ("b", -2222222)
-    , ("c", -3333333)
-    , ("d", -4444444)
-    , ("e", -5555555)
-    , ("w", 3)
-    ]
-    :: W'table Fr
+    -- [ ("a", 3)
+    -- , ("b", 3)
+    -- , ("c", 3)
+    -- , ("d", 3)
+    -- , ("e", 3)
+    [("w", 3)]
+    :: W'table NP
 
-g circuit = export'graph "p.pdf" (write'dot dot'header circuit)
+c = compile'language lang
 
-g' = do
+r circuit = export'graph "r.pdf" (write'dot dot'header circuit)
+
+p = export'graph "p.pdf" (write'dot dot'header c)
+
+q = do
   dot <- write'dot dot'header <$> reorg'circuit c
   export'graph "q.pdf" dot
 
-e = eval'circuit def'curve t c
+initial = init'nilsig bn128G1 bn128G2 c
 
-e' = eval'circuit def'curve t <$> reorg'circuit c
+otab = otab'from'gates . c'gates . nil'circuit
 
-o = w'val . (~> "return")
+gtab = gtab'from'otab
 
----------
+eval sig = do
+  eval'circuit bn128G1 t (nil'circuit sig)
 
-t'sign = do
-  sig <- init'nilsig bn128G1 bn128G2 c
-  let ot = otab'from'gates . c'gates . nil'circuit $ sig
-  let gt = gtab'from'otab ot
-  nilsign bn128G1 bn128G2 sig t
+sig = do
+  init <- initial
+  let ot = otab init
+  let gt = gtab ot
+  nilsign bn128G1 bn128G2 init t
 
-eval = do
-  sig <- t'sign
+ret = (~> "return") . eval
+
+pair'pc sig fval =
   let (phi, chi) = nil'key sig
-      circuit = nil'circuit sig
-      out = eval'circuit bn128G1 t circuit
-      ret = out ~> "~5"
-      epc = pairing phi chi ^ 41
-      r = p'from'wire def'curve ret
-      o = pairing r gG2
-  print epc
-  print o
+   in pairing phi chi ^ fval
+
+pair'r sig =
+  let r = p'from'wire bn128G1 (ret sig)
+   in pairing r gG2
