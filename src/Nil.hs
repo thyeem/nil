@@ -82,20 +82,20 @@ q = do
   dot <- write'dot dot'header <$> reorg'circuit c
   export'graph "q.pdf" dot
 
-initial = init'nilsig bn128G1 bn128G2 c
+initial = init'nilsig bn254G1 bn254G2 c
 
 otab = otab'from'gates . c'gates . nil'circuit
 
 gtab = gtab'from'otab
 
 eval sig = do
-  eval'circuit bn128G1 t (nil'circuit sig)
+  eval'circuit bn254G1 t (nil'circuit sig)
 
 sig = do
   init <- initial
   let ot = otab init
   let gt = gtab ot
-  nilsign bn128G1 init t
+  nilsign bn254G1 init t
 
 ret = (~> "return") . eval
 
@@ -104,5 +104,5 @@ pair'pc sig fval =
    in pairing phi chi ^ fval
 
 pair'r sig =
-  let r = p'from'wire bn128G1 (ret sig)
+  let r = p'from'wire bn254G1 (ret sig)
    in pairing r gG2

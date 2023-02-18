@@ -19,11 +19,12 @@ import Nil.Curve
   , (.*)
   )
 import Nil.Ecdata
-  ( G1
+  ( BN254
+  , G1
   , G2
   , GT
-  , bn128G1
-  , bn128GT
+  , bn254G1
+  , bn254GT
   , fGT
   )
 import Nil.Field
@@ -73,7 +74,7 @@ ta *|* tb = (o * q, p * r) where ((o, p), (q, r)) = (ta, tb)
  https://eprint.iacr.org/2010/354.pdf
  https://eprint.iacr.org/2016/130.pdf
 -}
-miller'loop :: Point GT -> Point GT -> GT
+miller'loop :: Point BN254 GT -> Point BN254 GT -> GT
 miller'loop p q
   | p == O || q == O = fGT [1]
   | otherwise = final'exp . uncurry (/) . finalQ2 . finalQ1 $ loop
@@ -99,12 +100,20 @@ miller'loop p q
  to avoid frequent reciprocal operations.
 -}
 linefunc
-  :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f -> (f, f)
+  :: (Eq f, Fractional f, Field f)
+  => Point i f
+  -> Point i f
+  -> Point i f
+  -> (f, f)
 linefunc p q t = linefuncJ (toJ p) (toJ q) (toJ t)
 
 -- | LineFunction based on Affine coordinates
 linefuncA
-  :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f -> (f, f)
+  :: (Eq f, Fractional f, Field f)
+  => Point i f
+  -> Point i f
+  -> Point i f
+  -> (f, f)
 linefuncA = go
  where
   go x y z | x == O || y == O || z == O = die "Not defined at O"
@@ -125,7 +134,11 @@ linefuncA = go
 
 -- | LineFunction based on Jacobian coordinates
 linefuncJ
-  :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f -> (f, f)
+  :: (Eq f, Fractional f, Field f)
+  => Point i f
+  -> Point i f
+  -> Point i f
+  -> (f, f)
 linefuncJ = go
  where
   go x y z | x == O || y == O || z == O = die "Not defined at O"
@@ -153,27 +166,27 @@ linefuncJ = go
 final'exp :: GT -> GT
 final'exp f = f ^ expo
  where
-  expo = (c'p bn128G1 ^ (12 :: Int) - 1) `div` c'n bn128G1
+  expo = (c'p bn254G1 ^ (12 :: Int) - 1) `div` c'n bn254G1
 {-# INLINE final'exp #-}
 
 {- | Reduced Tate pairing using optimal Ate pairing
  P in G1 x Q in G2 -> e(P, Q)
 -}
-pairing :: Point G1 -> Point G2 -> GT
+pairing :: Point BN254 G1 -> Point BN254 G2 -> GT
 -- pairing p q = go (toJ p) (toJ q)
 pairing p q = miller'loop (from'fq p) (twist q)
 {-# INLINE pairing #-}
 
 -- | Construct a point on GT from a point on G1
-from'fq :: Point G1 -> Point GT
+from'fq :: Point BN254 G1 -> Point BN254 GT
 from'fq = \case
-  J _ x y z -> jp bn128GT (fGT [x]) (fGT [y]) (fGT [z])
+  J _ x y z -> jp bn254GT (fGT [x]) (fGT [y]) (fGT [z])
   O -> O
   a -> from'fq (toJ a)
 {-# INLINE from'fq #-}
 
 -- | Map G2, E(Fq^2) point to its sextic twist GT, E(Fq^12) point
-twist :: Point G2 -> Point GT
+twist :: Point BN254 G2 -> Point BN254 GT
 twist = \case
   O -> O
   a@A {} -> twist (toJ a)
@@ -184,5 +197,5 @@ twist = \case
         xt = fGT [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * fGT [0, 0, 1]
         yt = fGT [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * fGT [0, 0, 0, 1]
         zt = fGT [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
-     in jp bn128GT xt yt zt
+     in jp bn254GT xt yt zt
 {-# INLINE twist #-}

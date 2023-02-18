@@ -20,7 +20,7 @@ import Nil.Field
   , ef
   )
 
-{- | BN128: old SNARKs Pairing Curve (*new SNARKs curve: BLS-12-381)
+{- | BN254: old SNARKs Pairing Curve (*new SNARKs curve: BLS-12-381)
  Barreto-Naehrig (BN) curve, G1=E(Fq): y^2 = x^3 + b
  Twisted BN, G2=E'(Fq^2): y^2 = x^3 + b/xi  where xi = u + 9
  xi must be in Fq^2 and neither a square nor a cube.
@@ -35,6 +35,8 @@ import Nil.Field
  Hereafter, however, it was used as a field type throughout the program
  since it is an important characteristic of curve.
 -}
+data BN254
+
 type G1 =
   Primefield
     21888242871839275222246405745257275088696311157297823662689037894645226208583
@@ -57,45 +59,45 @@ deriving instance Store (Irreduciblepoly G1 U)
 
 deriving instance Store GT
 
-deriving instance Store (Point G1)
+deriving instance Store (Point BN254 G1)
 
-deriving instance Store (Point G2)
+deriving instance Store (Point BN254 G2)
 
-deriving instance Store (Point GT)
+deriving instance Store (Point BN254 GT)
 
-deriving instance Store (Curve G1)
+deriving instance Store (Curve BN254 G1)
 
-deriving instance Store (Curve G2)
+deriving instance Store (Curve BN254 G2)
 
-deriving instance Store (Curve GT)
+deriving instance Store (Curve BN254 GT)
 
 -- | G1 field constructor
 fG1 :: Integral a => a -> G1
 fG1 = fromIntegral
 
 -- | Generator or base point on G1
-gG1 :: Point G1
-gG1 = c'g bn128G1
+gG1 :: Point BN254 G1
+gG1 = c'g bn254G1
 
 -- | G2 field constructor
 fG2 :: [G1] -> G2
 fG2 = ef (I pX) where pX = [1 :: G1, 0, 1]
 
 -- | Generator or base point on G2
-gG2 :: Point G2
-gG2 = c'g bn128G2
+gG2 :: Point BN254 G2
+gG2 = c'g bn254G2
 
 -- | GT field constructor
 fGT :: [G1] -> GT
 fGT = ef (I pU) where pU = [82 :: G1, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0, 1]
 
 -- | Generator or base point on GT
-gGT :: Point GT
-gGT = c'g bn128GT
+gGT :: Point BN254 GT
+gGT = c'g bn254GT
 
--- G1 = E(Fq): BN128 over base field Fq
-bn128G1 :: Curve G1
-bn128G1 =
+-- G1 = E(Fq): BN254 over base field Fq
+bn254G1 :: Curve BN254 G1
+bn254G1 =
   Curve
     { c'name = "BN254"
     , c'p =
@@ -109,9 +111,9 @@ bn128G1 =
     , c'h = 1
     }
 
--- | G2 = E(Fq^2): BN128 twisted over Fq^2
-bn128G2 :: Curve G2
-bn128G2 =
+-- | G2 = E(Fq^2): BN254 twisted over Fq^2
+bn254G2 :: Curve BN254 G2
+bn254G2 =
   Curve
     { c'name = "BN254-q2"
     , c'p =
@@ -128,15 +130,15 @@ bn128G2 =
           [ 8495653923123431417604973247489272438418190587263600148770280649306958101930
           , 4082367875863433681332203403145435568316851327593401208105741076214120093531
           ]
-    , c'n = c'n bn128G1
+    , c'n = c'n bn254G1
     , c'h = 1
     }
 
-{- | GT = E(Fq^12): BN128 over Fq12
+{- | GT = E(Fq^12): BN254 over Fq12
  the r-th root of unity subgroup of the multiplicative Fq12 group
 -}
-bn128GT :: Curve GT
-bn128GT =
+bn254GT :: Curve BN254 GT
+bn254GT =
   Curve
     { c'name = "BN254-q12"
     , c'p =
@@ -168,7 +170,7 @@ bn128GT =
           , 0
           , 4082367875863433681332203403145435568316851327593401208105741076214120093531
           ]
-    , c'n = c'n bn128G1
+    , c'n = c'n bn254G1
     , c'h = 1
     }
 
@@ -195,7 +197,9 @@ eG1G2 =
 {- | Baby jubjub
  A twisted Edwards elliptic curve E(Fr) where the char of Fr is the order of BN254
 -}
-type BabyJub =
+data BabyJubjub
+
+type Fr =
   Primefield
     21888242871839275222246405745257275088548364400416034343698204186575808495617
 
@@ -215,7 +219,7 @@ type BabyJub =
  a = (3 - A^2) / 3B^2
  b = (2A^3 - 9A) / 27B^3
 -}
-babyJub :: Curve BabyJub
+babyJub :: Curve BabyJubjub Fr
 babyJub =
   Curve
     { c'name = "Baby Jubjub"
@@ -235,22 +239,24 @@ babyJub =
     }
 
 -- | Baby Jubjub field constructor
-fBabyJub :: Integral a => a -> BabyJub
+fBabyJub :: Integral a => a -> Fr
 fBabyJub = fromIntegral
 
 -- | Generator or base point on Baby Jubjub
-gBabyJub :: Point BabyJub
+gBabyJub :: Point BabyJubjub Fr
 gBabyJub = c'g babyJub
 
 {- | secp256k1: Bitcoin Curve
  k = 19298681539552699237261830834781317975472927379845817397100860523586360249056
  r | q^k - 1, the embedding degree is very huge, not pairing-friendly curve.
 -}
-type Fp256k1 =
+data Secp256k1
+
+type Fp =
   Primefield
     115792089237316195423570985008687907853269984665640564039457584007908834671663
 
-secp256k1 :: Curve Fp256k1
+secp256k1 :: Curve Secp256k1 Fp
 secp256k1 =
   Curve
     { c'name = "secp256k1"

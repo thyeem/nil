@@ -30,19 +30,19 @@ import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, ranf, sha256
 import System.Random (Random)
 
 -- | Multiple-signature object for nil-sign
-data NilSig f k = NilSig
+data NilSig i f k = NilSig
   { nil'hash :: String
-  , nil'key :: NilKey f k
+  , nil'key :: NilKey i f k
   , nil'circuit :: Circuit f
   }
   deriving (Eq, Show)
 
-instance (Show f, Show k) => Pretty (NilSig f k)
+instance (Show f, Show k) => Pretty (NilSig i f k)
 
 -- | Aggregable verification key of nilsig
-type NilKey f k = (Point f, Point k)
+type NilKey i f k = (Point i f, Point i k)
 
-instance (Show f, Pretty f, Show k, Pretty k) => Pretty (NilKey f k) where
+instance (Show f, Pretty f, Show k, Pretty k) => Pretty (NilKey i f k) where
   pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
 
 -- | Lookup table describing a circuit as DAG
@@ -76,7 +76,7 @@ type G'table f = Map String [Gate f]
 {-# INLINE (<<<) #-}
 
 -- | Homomorphically hide using a base point of the given elliptic curve
-hide :: (Integral f, Field f) => Curve f -> Wire f -> Wire f
+hide :: (Integral f, Field f) => Curve i f -> Wire f -> Wire f
 hide curve =
   freeze
     . wire'from'p
@@ -90,7 +90,7 @@ shift'wire delta epsilon wire@Wire {..} =
     $ wire
 
 -- | Eval nil-signature
-eval'nilsig :: NilSig f k -> W'table f -> Wire f
+eval'nilsig :: NilSig i f k -> W'table f -> Wire f
 eval'nilsig NilSig {..} pubs =
   foldl' go pubs (c'gates nil'circuit) ~> "return"
  where
@@ -103,10 +103,10 @@ eval'nilsig NilSig {..} pubs =
 -- | Initialize nil-signature
 init'nilsig
   :: (Field f, Field k)
-  => Curve f
-  -> Curve k
+  => Curve i f
+  -> Curve i k
   -> Circuit f
-  -> IO (NilSig f k)
+  -> IO (NilSig i f k)
 init'nilsig curve'f curve'k circuit =
   NilSig mempty (c'g curve'f, c'g curve'k) <$> reorg'circuit circuit
 {-# INLINE init'nilsig #-}
@@ -116,10 +116,10 @@ init'nilsig curve'f curve'k circuit =
 -}
 nilsign
   :: (Field f, Bounded f, Random f, Integral f)
-  => Curve f
-  -> NilSig f k
+  => Curve i f
+  -> NilSig i f k
   -> W'table f
-  -> IO (NilSig f k)
+  -> IO (NilSig i f k)
 nilsign
   curve
   nilsig@NilSig {nil'key = (point'k, point'q), ..}
@@ -177,7 +177,7 @@ update'kappa phi chi o'tab g@Gate {..} =
 -- | Sign each entry gate assigned for a signer
 sign
   :: (Integral f, Field f, Random f, Bounded f)
-  => Curve f
+  => Curve i f
   -> W'table f
   -> G'table f
   -> O'table f
@@ -210,7 +210,7 @@ sign curve secrets g'tab o'tab g@Gate {..} = do
 
 update'shift
   :: (Integral f, Field f)
-  => Curve f
+  => Curve i f
   -> f
   -> f
   -> Gate f

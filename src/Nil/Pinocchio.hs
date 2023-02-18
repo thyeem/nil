@@ -38,7 +38,7 @@ import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (.*), (<.*>))
-import Nil.Ecdata (BabyJub, G1, G2, babyJub, gG1, gG2)
+import Nil.Ecdata (BN254, BabyJubjub, Fr, G1, G2, babyJub, bn254G1, gG1, gG2)
 import Nil.Eval (statement, wire'vals)
 import Nil.Field (Primefield)
 import Nil.Lexer (tokenize)
@@ -119,56 +119,57 @@ import Nil.Utils
 
 -- | Evaluation Key or Proving key
 data EvaluationKey = EKey
-  { eEvj :: [Point G1] -- [ E(Vj(s)) ]
-  , eEwk :: [Point G1] -- [ E(Wk(s)) ]
-  , eE'wk :: [Point G2] -- [ E'(Wk(s)) ]
-  , eEyk :: [Point G1] -- [ E(Yk(s)) ]
-  , eEavj :: [Point G1] -- [ E(a * Vj(s)) ]
-  , eEawk :: [Point G1] -- [ E(a * Wk(s)) ]
-  , eEayk :: [Point G1] -- [ E(a * Yk(s)) ]
-  , eEbvvj :: [Point G1] -- [ E(bv * Vj(s)) ]
-  , eEbwwk :: [Point G1] -- [ E(bw * Wk(s)) ]
-  , eEbyyk :: [Point G1] -- [ E(by * Yk(s)) ]
-  , eEsi :: [Point G1] -- [ E(s^i) ]
-  , eEasi :: [Point G1] -- [ E(a * s^i) ]
+  { eEvj :: [Point BN254 G1] -- [ E(Vj(s)) ]
+  , eEwk :: [Point BN254 G1] -- [ E(Wk(s)) ]
+  , eE'wk :: [Point BN254 G2] -- [ E'(Wk(s)) ]
+  , eEyk :: [Point BN254 G1] -- [ E(Yk(s)) ]
+  , eEavj :: [Point BN254 G1] -- [ E(a * Vj(s)) ]
+  , eEawk :: [Point BN254 G1] -- [ E(a * Wk(s)) ]
+  , eEayk :: [Point BN254 G1] -- [ E(a * Yk(s)) ]
+  , eEbvvj :: [Point BN254 G1] -- [ E(bv * Vj(s)) ]
+  , eEbwwk :: [Point BN254 G1] -- [ E(bw * Wk(s)) ]
+  , eEbyyk :: [Point BN254 G1] -- [ E(by * Yk(s)) ]
+  , eEsi :: [Point BN254 G1] -- [ E(s^i) ]
+  , eEasi :: [Point BN254 G1] -- [ E(a * s^i) ]
   }
   deriving (Eq, Show, Generic, NFData)
 
 -- | Verification Key
 data VerificationKey = VKey
-  { vE1 :: Point G2 -- E(1)
-  , vEa :: Point G2 -- E(a)
-  , vEr :: Point G2 -- E(r)
-  , vErbv :: Point G2 -- E(r * bv)
-  , vErbw :: Point G2 -- E(r * bw)
-  , vErby :: Point G2 -- E(r * by)
-  , vEt :: Point G2 -- E(t(s))
-  , vEv0 :: Point G1 -- E(V0(s))
-  , vEw0 :: Point G2 -- E(W0(s))
-  , vEy0 :: Point G1 -- E(Y0(s))
-  , vEvio :: [Point G1] -- [ E(Vio(s)) ]
+  { vE1 :: Point BN254 G2 -- E(1)
+  , vEa :: Point BN254 G2 -- E(a)
+  , vEr :: Point BN254 G2 -- E(r)
+  , vErbv :: Point BN254 G2 -- E(r * bv)
+  , vErbw :: Point BN254 G2 -- E(r * bw)
+  , vErby :: Point BN254 G2 -- E(r * by)
+  , vEt :: Point BN254 G2 -- E(t(s))
+  , vEv0 :: Point BN254 G1 -- E(V0(s))
+  , vEw0 :: Point BN254 G2 -- E(W0(s))
+  , vEy0 :: Point BN254 G1 -- E(Y0(s))
+  , vEvio :: [Point BN254 G1] -- [ E(Vio(s)) ]
   }
   deriving (Eq, Show, Generic, NFData)
 
 -- | Proof
 data Proof = Proof
-  { pEvJ :: Point G1 -- E(Vj(s))
-  , pEw :: Point G1 -- E(W(s))
-  , pE'w :: Point G2 -- E'(W(s))
-  , pEy :: Point G1 -- E(Y(s))
-  , pEh :: Point G1 -- E(h(s))
-  , pEavJ :: Point G1 -- E(a * Vj(s))
-  , pEaw :: Point G1 -- E(a * W(s))
-  , pEay :: Point G1 -- E(a * Y(s))
-  , pEah :: Point G1 -- E(a * h(s))
-  , pEbvwy :: Point G1 -- E(bv * V(s) + bw * W(s) + by * Y(s))
+  { pEvJ :: Point BN254 G1 -- E(Vj(s))
+  , pEw :: Point BN254 G1 -- E(W(s))
+  , pE'w :: Point BN254 G2 -- E'(W(s))
+  , pEy :: Point BN254 G1 -- E(Y(s))
+  , pEh :: Point BN254 G1 -- E(h(s))
+  , pEavJ :: Point BN254 G1 -- E(a * Vj(s))
+  , pEaw :: Point BN254 G1 -- E(a * W(s))
+  , pEay :: Point BN254 G1 -- E(a * Y(s))
+  , pEah :: Point BN254 G1 -- E(a * h(s))
+  , pEbvwy :: Point BN254 G1 -- E(bv * V(s) + bw * W(s) + by * Y(s))
   }
   deriving (Eq, Show, Generic, NFData)
 
--- | Fr is the prime field governing the circuit based on BN128
-type Fr =
-  Primefield
-    21888242871839275222246405745257275088548364400416034343698204186575808495617
+{- | Fr is the prime field governing the circuit based on BN128
+ type Fr =
+ Primefield
+ 21888242871839275222246405745257275088548364400416034343698204186575808495617
+-}
 
 -- | Set of random numbers used during setup phase
 type ToxicWastes = (Fr, Fr, Fr, Fr, Fr, Fr)
@@ -211,7 +212,7 @@ toxicwaste = do
 {-# INLINE toxicwaste #-}
 
 -- | Default elliptic curve of this protocol
-def'curve :: Curve BabyJub
+def'curve :: Curve BabyJubjub Fr
 def'curve = babyJub
 
 -- | Generate evaluation key and verification key from the given CRS and QAP
