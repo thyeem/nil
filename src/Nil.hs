@@ -100,7 +100,7 @@ sig = do
   init <- initial
   let ot = otab init
   let gt = gtab ot
-  nilsign bn128G1 bn128G2 init t
+  nilsign bn128G1 init t
 
 ret = (~> "return") . eval
 

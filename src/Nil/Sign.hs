@@ -119,8 +119,8 @@ init'nilsig
   -> Curve k
   -> Circuit f
   -> IO (NilSig f k)
-init'nilsig k q circuit =
-  NilSig mempty (c'g k, c'g q) <$> reorg'circuit circuit
+init'nilsig curve'f curve'k circuit =
+  NilSig mempty (c'g curve'f, c'g curve'k) <$> reorg'circuit circuit
 {-# INLINE init'nilsig #-}
 
 {- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
@@ -136,13 +136,11 @@ nilsign
      , NFData f
      )
   => Curve f
-  -> Curve k
   -> NilSig f k
   -> W'table f
   -> IO (NilSig f k)
 nilsign
-  curve'k
-  curve'q
+  curve
   nilsig@NilSig {nil'key = (point'k, point'q), ..}
   secrets = do
     phi <- ranf
@@ -150,7 +148,7 @@ nilsign
     let o'tab = otab'from'gates . c'gates $ nil'circuit
         g'tab = gtab'from'otab o'tab
         entries = find'entries o'tab
-    signed <- foldM (sign curve'k secrets g'tab) o'tab entries
+    signed <- foldM (sign curve secrets g'tab) o'tab entries
     let amps = find'amps signed
         done = foldl' (update'kappa phi chi) signed amps
     pure $

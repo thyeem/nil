@@ -142,7 +142,8 @@ wire'from'p point = case toA point of
   A _ x y ->
     let wire = val'const (fromIntegral x)
      in if even y then set'flag P'even wire else set'flag P'odd wire
-  _ -> val'const 0
+  -- _ -> val'const 0
+  _ -> die "Error, Francis"
 {-# INLINE wire'from'p #-}
 
 -- | Evaluate gate when both gate input wires are extended
