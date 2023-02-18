@@ -55,16 +55,11 @@ type NP =
 
 lang =
   unlines
-    -- [ "language (priv a, priv b, pub c, priv d, priv e)"
-    -- , "return a+b"
-    -- , "let o = 10a + b * c * d / e"
-    -- , "let p = o^3 + b / c"
-    -- , "let q = a + 3b + p * d / e"
-    -- , "let r = a * b / c * d / e"
-    -- , "return o * o^2 / r^3 + p * q"
-    [ "language (priv w)"
-    , "return w + w"
-    -- , "return a^3 + a*b + (a * 7b) + 5*3"
+    [ "language (priv a, priv b, pub c, priv d, priv e)"
+    , -- "let q = a + 3b + p * d / e"
+      -- [ "language (priv w)"
+      -- , "return w + w"
+      "return e * (((a + a*b)^2) * (c+d))"
     ]
 
 t =

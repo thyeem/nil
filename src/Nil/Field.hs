@@ -17,34 +17,17 @@ module Nil.Field
 where
 
 import Control.DeepSeq (NFData)
-import Data.Aeson
-  ( FromJSON
-  , ToJSON
-  )
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Bifunctor (first)
 import Data.Ratio ((%))
 import Data.Store (Store)
 import GHC.Generics (Generic)
-import GHC.TypeLits
-  ( KnownNat
-  , Nat
-  , natVal
-  )
+import GHC.TypeLits (KnownNat, Nat, natVal)
 import Nil.Base ((~%))
-import Nil.Poly
-  ( egcdpoly
-  , (|*)
-  , (|/)
-  )
-import Nil.Utils
-  ( Pretty (..)
-  , die
-  )
+import Nil.Poly (egcdpoly, (|*), (|/))
+import Nil.Utils (Pretty (..), die)
 import System.Random (Random (..))
-import Test.QuickCheck
-  ( Arbitrary (..)
-  , choose
-  )
+import Test.QuickCheck (Arbitrary (..), choose)
 
 -- | Kind for Galois field or Finite field, GF(q) or GF(p^k)
 class
@@ -153,21 +136,21 @@ instance KnownNat p => Real (Primefield p) where
 
 instance KnownNat p => Random (Primefield p) where
   random = randomR (minBound, maxBound)
-  {-# INLINEABLE random #-}
+  {-# INLINE random #-}
 
   randomR (a, b) = first fromInteger . randomR (toInteger a, toInteger b)
-  {-# INLINEABLE randomR #-}
+  {-# INLINE randomR #-}
 
 instance KnownNat p => Arbitrary (Primefield p) where
   arbitrary = choose (minBound, maxBound)
-  {-# INLINEABLE arbitrary #-}
+  {-# INLINE arbitrary #-}
 
 instance KnownNat p => Bounded (Primefield p) where
   minBound = pf 0
-  {-# INLINEABLE minBound #-}
+  {-# INLINE minBound #-}
 
   maxBound = minBound - 1
-  {-# INLINEABLE maxBound #-}
+  {-# INLINE maxBound #-}
 
 instance KnownNat p => Enum (Primefield p) where
   succ = (+ 1)
@@ -232,13 +215,13 @@ ef
 ef p@(I !px) !fx = E p fx' where (_, fx') = fx |/ px
 {-# INLINEABLE ef #-}
 
-instance (Eq f, Fractional f, Field f) => Semigroup (Extensionfield f i) where
+instance Field f => Semigroup (Extensionfield f i) where
   (<>) = (*)
 
-instance (Eq f, Fractional f, Field f) => Monoid (Extensionfield f i) where
+instance Field f => Monoid (Extensionfield f i) where
   mempty = f where f = one f
 
-instance (Eq f, Fractional f, Field f) => Field (Extensionfield f i) where
+instance Field f => Field (Extensionfield f i) where
   char = const $ char (1 :: f)
   {-# INLINE char #-}
 
@@ -251,7 +234,7 @@ instance (Eq f, Fractional f, Field f) => Field (Extensionfield f i) where
   one (E p _) = E p [1]
   {-# INLINE one #-}
 
-instance (Eq f, Fractional f, Field f) => Num (Extensionfield f i) where
+instance Field f => Num (Extensionfield f i) where
   (E !p !fx) + (E _ !gx) = ef p (fx + gx)
   {-# INLINE (+) #-}
 
@@ -268,7 +251,7 @@ instance (Eq f, Fractional f, Field f) => Num (Extensionfield f i) where
   signum _ = undefined
   abs = undefined
 
-instance (Eq f, Fractional f, Field f) => Fractional (Extensionfield f i) where
+instance Field f => Fractional (Extensionfield f i) where
   fromRational = undefined
 
   (/) !a !b = a * recip b
