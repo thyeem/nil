@@ -26,12 +26,7 @@ import Nil.Utils
 {- | Get vector of all wire-values used in 'circuit':
  This is values corresponding to 'wire'keys' and the same as QAP witness vector
 -}
-wire'vals
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Circuit f
-  -> [f]
+wire'vals :: (Field f, Integral f) => Curve f -> W'table f -> Circuit f -> [f]
 wire'vals curve table circuit =
   w'val
     . ((eval'circuit curve table circuit <~~ unit'const) ~>)
@@ -39,33 +34,18 @@ wire'vals curve table circuit =
 {-# INLINE wire'vals #-}
 
 -- @statement@ is an circuit evaluation result that a prover can use to prove it
-statement
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Circuit f
-  -> f
+statement :: (Field f, Integral f) => Curve f -> W'table f -> Circuit f -> f
 statement curve table circuit =
   w'val $ eval'circuit curve table circuit ~> "return"
 {-# INLINE statement #-}
 
 -- | Evaluate Circuit with a given set of @(x, w)@
-eval'circuit
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Circuit f
-  -> W'table f
+eval'circuit :: (Field f, Integral f) => Curve f -> W'table f -> Circuit f -> W'table f
 eval'circuit curve table Circuit {..} = foldl' (eval'gate curve) table c'gates
 {-# INLINE eval'circuit #-}
 
 -- | Evaluate each gate based on gate operator
-eval'gate
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Gate f
-  -> W'table f
+eval'gate :: (Field f, Integral f) => Curve f -> W'table f -> Gate f -> W'table f
 eval'gate curve table gate@Gate {..} =
   case g'op of
     End -> eval'end table gate
@@ -98,11 +78,7 @@ eval'gate curve table gate@Gate {..} =
 {-# INLINE (~~) #-}
 
 -- | Get an elliptic curve point on a given wire
-p'from'wire
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> Wire f
-  -> Point f
+p'from'wire :: (Field f, Integral f) => Curve f -> Wire f -> Point f
 p'from'wire curve wire@Wire {..}
   | base'wirep wire || recip'wirep wire = mulg curve (mempty ~~ wire) -- [k]G
   | ext'wirep wire =
@@ -114,7 +90,7 @@ p'from'wire curve wire@Wire {..}
 {-# INLINE p'from'wire #-}
 
 -- | Get y-coordinate from a given point-wire
-y'from'wire :: (Integral f) => Curve f -> Wire f -> f
+y'from'wire :: Integral f => Curve f -> Wire f -> f
 y'from'wire curve Wire {..} =
   let odd' o = if odd o then o else negate o
       x = fromIntegral w'val
@@ -134,10 +110,7 @@ y'from'wire curve Wire {..} =
           | otherwise -> die $ "Error, unexpected wire: " ++ w'key
 {-# INLINE y'from'wire #-}
 
-wire'from'p
-  :: (Integral f, Eq k, Integral k, Fractional k, Field k)
-  => Point k
-  -> Wire f
+wire'from'p :: (Integral f, Integral k, Field k) => Point k -> Wire f
 wire'from'p point = case toA point of
   A _ x y ->
     let wire = val'const (fromIntegral x)
@@ -148,7 +121,7 @@ wire'from'p point = case toA point of
 
 -- | Evaluate gate when both gate input wires are extended
 eval'and'ext'wire
-  :: (Integral f, Fractional f, Field f, NFData f)
+  :: (Integral f, Field f)
   => Curve f
   -> (Point f -> Point f -> Point f)
   -> W'table f
@@ -164,7 +137,7 @@ eval'and'ext'wire curve op table Gate {..} =
 
 -- | Evaluate gate when one of gate input wires is an extended
 eval'xor'ext'wire
-  :: (Integral f, Fractional f, Field f, NFData f)
+  :: (Integral f, Field f)
   => Curve f
   -> (Point f -> f -> Point f)
   -> W'table f
@@ -209,12 +182,7 @@ eval'end table Gate {..} =
 {-# INLINEABLE eval'end #-}
 
 -- | Evaluate gate of @Mul (*)@ base gate operator
-eval'mul
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Gate f
-  -> W'table f
+eval'mul :: (Field f, Integral f) => Curve f -> W'table f -> Gate f -> W'table f
 eval'mul curve table g
   | and'ext'wirep table g = err'operands g "(*)"
   | xor'ext'wirep table g = eval'xor'ext'wire curve (.*) table g
@@ -222,12 +190,7 @@ eval'mul curve table g
 {-# INLINEABLE eval'mul #-}
 
 -- | Evaluate gate of @Add (+)@ base gate operator
-eval'add
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Gate f
-  -> W'table f
+eval'add :: (Integral f, Field f) => Curve f -> W'table f -> Gate f -> W'table f
 eval'add curve table g
   | and'ext'wirep table g = eval'and'ext'wire curve (+) table g
   | xor'ext'wirep table g = err'operands g "(+)"
@@ -308,12 +271,7 @@ eval'y'from'p curve table g@Gate {..}
   | otherwise = err'operands g "(;)"
 {-# INLINEABLE eval'y'from'p #-}
 
-eval'ekG
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> W'table f
-  -> Gate f
-  -> W'table f
+eval'ekG :: (Integral f, Field f) => Curve f -> W'table f -> Gate f -> W'table f
 eval'ekG curve table g@Gate {..}
   | nor'ext'wirep table g =
       let wire = wire'from'p . mulg curve . w'val $ table ~~> g'rwire
@@ -321,12 +279,7 @@ eval'ekG curve table g@Gate {..}
   | otherwise = err'operands g "[k]"
 {-# INLINEABLE eval'ekG #-}
 
-eval'exy
-  :: (Integral f, Fractional f, Field f)
-  => Curve f
-  -> W'table f
-  -> Gate f
-  -> W'table f
+eval'exy :: (Integral f, Field f) => Curve f -> W'table f -> Gate f -> W'table f
 eval'exy curve table g@Gate {..}
   | nor'ext'wirep table g =
       let wire =

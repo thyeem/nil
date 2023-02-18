@@ -76,11 +76,7 @@ type G'table f = Map String [Gate f]
 {-# INLINE (<<<) #-}
 
 -- | Homomorphically hide using a base point of the given elliptic curve
-hide
-  :: (Integral f, Fractional f, Field f, NFData f)
-  => Curve f
-  -> Wire f
-  -> Wire f
+hide :: (Integral f, Field f) => Curve f -> Wire f -> Wire f
 hide curve =
   freeze
     . wire'from'p
@@ -106,15 +102,7 @@ eval'nilsig NilSig {..} pubs =
 
 -- | Initialize nil-signature
 init'nilsig
-  :: ( Eq f
-     , Num f
-     , Show f
-     , Fractional f
-     , Field f
-     , Eq k
-     , Fractional k
-     , Field k
-     )
+  :: (Field f, Field k)
   => Curve f
   -> Curve k
   -> Circuit f
@@ -127,14 +115,7 @@ init'nilsig curve'f curve'k circuit =
  Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
 -}
 nilsign
-  :: ( Eq f
-     , Integral f
-     , Fractional f
-     , Random f
-     , Field f
-     , Bounded f
-     , NFData f
-     )
+  :: (Field f, Bounded f, Random f, Integral f)
   => Curve f
   -> NilSig f k
   -> W'table f
@@ -195,13 +176,7 @@ update'kappa phi chi o'tab g@Gate {..} =
 
 -- | Sign each entry gate assigned for a signer
 sign
-  :: ( Integral f
-     , Fractional f
-     , Field f
-     , Random f
-     , Bounded f
-     , NFData f
-     )
+  :: (Integral f, Field f, Random f, Bounded f)
   => Curve f
   -> W'table f
   -> G'table f
@@ -234,11 +209,7 @@ sign curve secrets g'tab o'tab g@Gate {..} = do
 {-# INLINEABLE sign #-}
 
 update'shift
-  :: ( Integral f
-     , Fractional f
-     , Field f
-     , NFData f
-     )
+  :: (Integral f, Field f)
   => Curve f
   -> f
   -> f
