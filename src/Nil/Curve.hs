@@ -102,7 +102,7 @@ data Point f
   deriving (Show, Read, Generic, NFData)
 
 -- | Definition of Point Equality
-instance (Eq f, Fractional f, Field f) => Eq (Point f) where
+instance Field f => Eq (Point f) where
   (==) = f
    where
     f (A _ x1 y1) (A _ x2 y2) = x1 == x2 && y1 == y2
@@ -115,13 +115,13 @@ instance (Eq f, Fractional f, Field f) => Eq (Point f) where
 -- f (J _ x1 y1 z1) (J _ x2 y2 z2) =
 --   x1 * z2 ^ 2 == x2 * z1 ^ 2 && y1 * z2 ^ 3 == y2 * z1 ^ 3
 
-instance (Eq f, Fractional f, Field f, NFData f) => Semigroup (Point f) where
+instance Field f => Semigroup (Point f) where
   (<>) = (+)
 
-instance (Eq f, Fractional f, Field f, NFData f) => Monoid (Point f) where
+instance Field f => Monoid (Point f) where
   mempty = O
 
-instance (Eq f, Fractional f, Field f, NFData f) => Num (Point f) where
+instance Field f => Num (Point f) where
   (+) !p !q = addp p q
   {-# INLINE (+) #-}
 
@@ -137,11 +137,11 @@ instance (Eq f, Fractional f, Field f, NFData f) => Num (Point f) where
   abs = undefined
 
 -- | Construct an @Affine@ point
-ap :: (Eq f, Fractional f, Field f) => Curve f -> f -> f -> Point f
+ap :: Field f => Curve f -> f -> f -> Point f
 ap curve x y = A curve (e * x) (e * y) where e = one x
 
 -- | Construct an @Affine@ point with a on-curve checkup
-ap' :: (Eq f, Fractional f, Field f) => Curve f -> f -> f -> Point f
+ap' :: Field f => Curve f -> f -> f -> Point f
 ap' curve x = checkup . ap curve x
  where
   checkup p
@@ -149,7 +149,7 @@ ap' curve x = checkup . ap curve x
     | otherwise = die "Error, not on curve"
 
 -- | Constructor a @Jacobian@ point
-jp :: (Eq f, Fractional f, Field f) => Curve f -> f -> f -> f -> Point f
+jp :: Field f => Curve f -> f -> f -> f -> Point f
 jp curve x y z
   | atinf p = O
   | otherwise = p
@@ -158,7 +158,7 @@ jp curve x y z
   e = one x
 
 -- | Constructor a @Jacobian@ point with a on-curve checkup
-jp' :: (Eq f, Fractional f, Field f) => Curve f -> f -> f -> f -> Point f
+jp' :: Field f => Curve f -> f -> f -> f -> Point f
 jp' curve x y = checkup . jp curve x y
  where
   checkup p
@@ -166,7 +166,7 @@ jp' curve x y = checkup . jp curve x y
     | otherwise = die "Error, not on curve"
 
 -- | Convert @Jacobian@ point into @Affine@ point
-toA :: (Eq f, Fractional f, Field f) => Point f -> Point f
+toA :: Field f => Point f -> Point f
 toA p = case p of
   A {} -> p
   O -> O
@@ -176,14 +176,14 @@ toA p = case p of
 {-# INLINE toA #-}
 
 -- | Convert @Affine@ point into @Jacobian@ point
-toJ :: (Eq f, Fractional f, Field f) => Point f -> Point f
+toJ :: Field f => Point f -> Point f
 toJ p = case p of
   A curve x y -> jp curve x y (one x)
   _ -> p
 {-# INLINE toJ #-}
 
 -- | Get the defined base point or the generator from a given elliptic curve
-c'g :: (Eq f, Fractional f, Field f) => Curve f -> Point f
+c'g :: Field f => Curve f -> Point f
 c'g curve = A curve (c'gx curve) (c'gy curve)
 {-# INLINE c'g #-}
 
@@ -191,7 +191,7 @@ c'g curve = A curve (c'gx curve) (c'gy curve)
 
  True if @y^2 = x^3 + a*x + b@ holds over the finite field
 -}
-oncurve :: (Eq f, Fractional f, Field f) => Point f -> Bool
+oncurve :: Field f => Point f -> Bool
 oncurve p = case p of
   O -> True
   (A curve x y) -> y * y == (x * x + c'a curve) * x + c'b curve
@@ -201,7 +201,7 @@ oncurve p = case p of
 {-# INLINEABLE oncurve #-}
 
 -- | Check if a given point is @__Point at Infinity__@ or not
-atinf :: (Eq f, Num f, Field f) => Point f -> Bool
+atinf :: Field f => Point f -> Bool
 atinf p = case p of
   O -> True
   J _ x y z
@@ -211,7 +211,7 @@ atinf p = case p of
 {-# INLINEABLE atinf #-}
 
 -- | Get @Affine@ @x@-coordinate from an elliptic curve point
-p'x :: (Eq f, Fractional f, Field f) => Point f -> Maybe f
+p'x :: Field f => Point f -> Maybe f
 p'x = \case
   O -> Nothing
   A _ x _ -> Just x
@@ -219,7 +219,7 @@ p'x = \case
 {-# INLINE p'x #-}
 
 -- | Get @Affine@ @x@-coordinate from an elliptic curve point
-p'y :: (Eq f, Fractional f, Field f) => Point f -> Maybe f
+p'y :: Field f => Point f -> Maybe f
 p'y = \case
   O -> Nothing
   A _ _ y -> Just y
@@ -227,11 +227,7 @@ p'y = \case
 {-# INLINE p'y #-}
 
 -- | Point scalar multiplication infix operator
-(.*)
-  :: (Eq f, Fractional f, Field f, NFData f, Integral a)
-  => Point f
-  -> a
-  -> Point f
+(.*) :: (Field f, Integral a) => Point f -> a -> Point f
 (.*) = mulp
 {-# INLINE (.*) #-}
 
@@ -239,37 +235,29 @@ p'y = \case
  For arbitrary points P, Q, and R on curve E(Fq),
  [P,Q,R] <:> [3,5,7] = (P *: 3) + (Q *: 5) + (R *: 7)
 -}
-(<.*>)
-  :: (Eq f, Fractional f, Monoid f, Field f, NFData f, Integral a, NFData a)
-  => [Point f]
-  -> [a]
-  -> Point f
+(<.*>) :: (Field f, Integral a, NFData a) => [Point f] -> [a] -> Point f
 (<.*>) = (pfold (+) .) . pzip'with (.*)
 {-# INLINE (<.*>) #-}
 
 -- | Point addition
-addp :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f
+addp :: Field f => Point f -> Point f -> Point f
 addp a b = addjp (toJ a) (toJ b)
 {-# INLINE addp #-}
 
 -- | Point doubling
-dblp :: (Eq f, Fractional f, Field f) => Point f -> Point f
+dblp :: Field f => Point f -> Point f
 dblp p = dbljp (toJ p)
 {-# INLINE dblp #-}
 
 -- | Flip point on x-axis
-invp :: (Eq f, Num f, Fractional f, Field f) => Point f -> Point f
+invp :: Field f => Point f -> Point f
 invp (J curve x y z) = jp curve x (-y) z
 invp (A curve x y) = ap curve x (-y)
 invp O = O
 {-# INLINE invp #-}
 
 -- | Point scalar multiplication using 'double and add algorithm'
-mulp
-  :: (Eq f, Fractional f, Field f, NFData f, Integral a)
-  => Point f
-  -> a
-  -> Point f
+mulp :: (Field f, Integral a) => Point f -> a -> Point f
 mulp p = go (toJ p)
  where
   go O _ = O
@@ -284,28 +272,19 @@ mulp p = go (toJ p)
 {-# INLINE mulp #-}
 
 -- | Point substraction
-subp
-  :: (Eq f, Fractional f, Field f, NFData f) => Point f -> Point f -> Point f
+subp :: Field f => Point f -> Point f -> Point f
 subp p q = p |+| invp q
 {-# INLINE subp #-}
 
 -- | Point scalar mutiplication with curve generator point
-mulg
-  :: (Eq f, Fractional f, Field f, NFData f, Integral a)
-  => Curve f
-  -> a
-  -> Point f
+mulg :: (Field f, Integral a) => Curve f -> a -> Point f
 mulg curve n = g .* n where g = c'g curve
 {-# INLINE mulg #-}
 
 {- | Point multiplication using Strauss-Shamir method or Shamir's trick
  For those given (a,P) and (b,Q), efficiently evaluate (a *: P) +: (b *: Q)
 -}
-apbq'sum
-  :: (Eq f, Fractional f, Field f, NFData f, Integral a)
-  => (Point f, a)
-  -> (Point f, a)
-  -> Point f
+apbq'sum :: (Field f, Integral a) => (Point f, a) -> (Point f, a) -> Point f
 apbq'sum (p, a) (q, b) = go (toJ p, a) (toJ q, b)
  where
   go (O, _) (O, _) = O
@@ -328,11 +307,7 @@ apbq'sum (p, a) (q, b) = go (toJ p, a) (toJ q, b)
  pi_q: E(Fq) -> E(Fq)
  pi(x, y) -> (x^(q^i), y^(q^i))
 -}
-frobp
-  :: (Eq f, Fractional f, Field f, NFData f, Integral a)
-  => Point f
-  -> a
-  -> Point f
+frobp :: (Field f, Integral a) => Point f -> a -> Point f
 frobp p i = case toJ p of
   O -> O
   J curve x y z ->
@@ -344,13 +319,13 @@ frobp p i = case toJ p of
 {-# INLINEABLE frobp #-}
 
 -- | Pick a random point from a given curve
-randp :: (Eq f, Fractional f, Field f, NFData f) => Curve f -> IO (Point f)
+randp :: Field f => Curve f -> IO (Point f)
 randp curve = do
   k <- randomRIO (1, c'n curve - 1)
   return $ mulg curve k
 
 -- | Point addition (Affine Point)
-addap :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f
+addap :: Field f => Point f -> Point f -> Point f
 addap p O = p
 addap O q = q
 addap p1@(A curve x1 y1) p2@(A _ x2 y2)
@@ -365,7 +340,7 @@ addap _ _ = die "Error, invalid points used"
 {-# INLINEABLE addap #-}
 
 -- | Point doubling (Affine Point)
-dblap :: (Eq f, Fractional f, Field f) => Point f -> Point f
+dblap :: Field f => Point f -> Point f
 dblap O = O
 dblap (A curve x y)
   | y == zero y = O
@@ -385,7 +360,7 @@ dblap _ = die "Error, invalid points used"
  The "add-2007-bl" Addition Explicit Formula: 2007 Bernstein–Lange
  Cost: 11M + 5S + 9add + 4*2
 -}
-addjp :: (Eq f, Fractional f, Field f) => Point f -> Point f -> Point f
+addjp :: Field f => Point f -> Point f -> Point f
 addjp p O = p
 addjp O q = q
 addjp p1@(J curve x1 y1 z1) p2@(J _ x2 y2 z2)
@@ -415,7 +390,7 @@ addjp _ _ = die "Error, invalid points used"
  The "dbl-2007-bl" Doubling Explicit Formula: 2007 Bernstein–Lange
  Cost: 1M + 8S + 1*a + 10add + 2*2 + 1*3 + 1*8
 -}
-dbljp :: (Eq f, Fractional f, Field f) => Point f -> Point f
+dbljp :: Field f => Point f -> Point f
 dbljp O = O
 dbljp (J curve x1 y1 z1) = jp curve x3 y3 z3
  where
@@ -451,7 +426,7 @@ yfromx curve x = case a of
 
 -- | Find all points on a given curve using brute-force method
 findp
-  :: (Integral f, Bounded f, Fractional f, Field f, NFData f)
+  :: (Integral f, Bounded f, Field f)
   => Curve f
   -> [Point f]
 findp curve =

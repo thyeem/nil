@@ -47,7 +47,16 @@ import Test.QuickCheck
   )
 
 -- | Kind for Galois field or Finite field, GF(q) or GF(p^k)
-class Num k => Field k where
+class
+  ( Eq k
+  , Ord k
+  , Fractional k
+  , NFData k
+  , Show k
+  , Pretty k
+  ) =>
+  Field k
+  where
   -- | Characteristic @p@ of the field
   char :: k -> Integer
 
@@ -270,10 +279,6 @@ instance (Eq f, Fractional f, Field f) => Fractional (Extensionfield f i) where
     (x, y) = egcdpoly fx px
     g = head $ fx * x + px * y
   {-# INLINE recip #-}
-
--- instance KnownNat p => Random (Primefield p) where
-
--- instance KnownNat p => Arbitrary (Primefield p) where
 
 instance Show f => Pretty (Extensionfield f i) where
   pretty (E _ fx) = pretty fx
