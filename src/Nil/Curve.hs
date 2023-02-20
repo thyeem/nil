@@ -446,11 +446,10 @@ findp curve =
     | y == zero y = [A curve x y]
     | otherwise = [A curve x y, A curve x y']
 
-instance (Show f, Pretty f) => Pretty (Curve i f) where
-  pretty = c'name
+instance (Show f, Pretty f) => Pretty (Curve i f)
 
 instance (Show f, Pretty f) => Pretty (Point c f) where
   pretty = \case
     O -> "Point at Infinity"
-    A c x y -> unlines [pretty c, pretty x, pretty y]
-    J c x y z -> unlines [pretty c, pretty x, pretty y, pretty z]
+    A c x y -> unlines [c'name c, pretty x, pretty y]
+    J c x y z -> unlines [c'name c, pretty x, pretty y, pretty z]

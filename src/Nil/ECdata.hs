@@ -21,25 +21,31 @@ import Nil.Field
   )
 
 {- | BN254: old SNARKs Pairing Curve (*new SNARKs curve: BLS-12-381)
- Barreto-Naehrig (BN) curve, G1=E(Fq): y^2 = x^3 + b
- Twisted BN, G2=E'(Fq^2): y^2 = x^3 + b/xi  where xi = u + 9
- xi must be in Fq^2 and neither a square nor a cube.
--}
-
----------------------------------------------------------------------
--- G1 = E(Fq)    <--  [twist]  -->   G2 = E'(Fq^2)
--- y^2 = x^3 + (b=3)                 y^2 = x^3 + (b/xi = 3/u+9)
-
-{- | G1, G2 and GT are also field types!
- G1, G2 and GT are basically indicating curves like G1=E(Fq) and G1=E(Fq^2)
- Hereafter, however, it was used as a field type throughout the program
- since it is an important characteristic of curve.
+   Barreto-Naehrig (BN) curve, G1=E(Fq): y^2 = x^3 + b
+   Twisted BN, G2=E'(Fq^2): y^2 = x^3 + b/xi  where xi = u + 9
+   xi must be in Fq^2 and neither a square nor a cube.
 -}
 data BN254
 
+{- | G1, G2 and GT are field types.
+
+   G1 = E(Fq)    <--  [twist]  -->   G2 = E'(Fq^2)
+   y^2 = x^3 + (b=3)                 y^2 = x^3 + (b/xi = 3/u+9)
+
+   G1, G2 and GT are basically indicating curves like G1=E(Fq) and G1=E(Fq^2)
+   Hereafter, however, it was used as a field type throughout the program
+   since it is an important characteristic of curve.
+-}
 type G1 =
   Primefield
     21888242871839275222246405745257275088696311157297823662689037894645226208583
+
+{- | Fr is the prime field governing the zk-SNARKs circuit,
+   Characteristic of Fr is exactly the same as the order of G1
+-}
+type Fr =
+  Primefield
+    21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 -- | G2 := Extensionfield G1[x] / <p(x)>  where p(x) = x^2 + 1
 type G2 = Extensionfield G1 X
@@ -71,33 +77,29 @@ deriving instance Store (Curve BN254 G2)
 
 deriving instance Store (Curve BN254 GT)
 
--- | G1 field constructor
-fG1 :: Integral a => a -> G1
-fG1 = fromIntegral
-
 -- | Generator or base point on G1
-gG1 :: Point BN254 G1
-gG1 = c'g bn254G1
+g1 :: Point BN254 G1
+g1 = c'g bn254'g1
 
 -- | G2 field constructor
-fG2 :: [G1] -> G2
-fG2 = ef (I pX) where pX = [1 :: G1, 0, 1]
+field'g2 :: [G1] -> G2
+field'g2 = ef (I pX) where pX = [1 :: G1, 0, 1]
 
 -- | Generator or base point on G2
-gG2 :: Point BN254 G2
-gG2 = c'g bn254G2
+g2 :: Point BN254 G2
+g2 = c'g bn254'g2
 
 -- | GT field constructor
-fGT :: [G1] -> GT
-fGT = ef (I pU) where pU = [82 :: G1, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0, 1]
+field'gt :: [G1] -> GT
+field'gt = ef (I pU) where pU = [82 :: G1, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0, 1]
 
 -- | Generator or base point on GT
-gGT :: Point BN254 GT
-gGT = c'g bn254GT
+gt :: Point BN254 GT
+gt = c'g bn254'gt
 
 -- G1 = E(Fq): BN254 over base field Fq
-bn254G1 :: Curve BN254 G1
-bn254G1 =
+bn254'g1 :: Curve BN254 G1
+bn254'g1 =
   Curve
     { c'name = "BN254"
     , c'p =
@@ -112,41 +114,41 @@ bn254G1 =
     }
 
 -- | G2 = E(Fq^2): BN254 twisted over Fq^2
-bn254G2 :: Curve BN254 G2
-bn254G2 =
+bn254'g2 :: Curve BN254 G2
+bn254'g2 =
   Curve
     { c'name = "BN254-q2"
     , c'p =
         21888242871839275222246405745257275088696311157297823662689037894645226208583
-    , c'a = fG2 [0]
-    , c'b = fG2 [3] / fG2 [9, 1]
+    , c'a = field'g2 [0]
+    , c'b = field'g2 [3] / field'g2 [9, 1]
     , c'gx =
-        fG2
+        field'g2
           [ 10857046999023057135944570762232829481370756359578518086990519993285655852781
           , 11559732032986387107991004021392285783925812861821192530917403151452391805634
           ]
     , c'gy =
-        fG2
+        field'g2
           [ 8495653923123431417604973247489272438418190587263600148770280649306958101930
           , 4082367875863433681332203403145435568316851327593401208105741076214120093531
           ]
-    , c'n = c'n bn254G1
+    , c'n = c'n bn254'g1
     , c'h = 1
     }
 
 {- | GT = E(Fq^12): BN254 over Fq12
  the r-th root of unity subgroup of the multiplicative Fq12 group
 -}
-bn254GT :: Curve BN254 GT
-bn254GT =
+bn254'gt :: Curve BN254 GT
+bn254'gt =
   Curve
     { c'name = "BN254-q12"
     , c'p =
         21888242871839275222246405745257275088696311157297823662689037894645226208583
-    , c'a = fGT [0]
-    , c'b = fGT [3]
+    , c'a = field'gt [0]
+    , c'b = field'gt [3]
     , c'gx =
-        fGT
+        field'gt
           [ 0
           , 0
           , 16260673061341949275257563295988632869519996389676903622179081103440260644990
@@ -158,7 +160,7 @@ bn254GT =
           , 11559732032986387107991004021392285783925812861821192530917403151452391805634
           ]
     , c'gy =
-        fGT
+        field'gt
           [ 0
           , 0
           , 0
@@ -170,16 +172,16 @@ bn254GT =
           , 0
           , 4082367875863433681332203403145435568316851327593401208105741076214120093531
           ]
-    , c'n = c'n bn254G1
+    , c'n = c'n bn254'g1
     , c'h = 1
     }
 
 {- | e: G1 x G2 -> GT
- precomputation of pairing value: e(gG1, gG2)
+ precomputation of pairing value: e(g1, g2)
 -}
-eG1G2 :: GT
-eG1G2 =
-  fGT
+e'g1'g2 :: GT
+e'g1'g2 =
+  field'gt
     [ 18443897754565973717256850119554731228214108935025491924036055734000366132575
     , 10734401203193558706037776473742910696504851986739882094082017010340198538454
     , 5985796159921227033560968606339653189163760772067273492369082490994528765680
@@ -198,10 +200,6 @@ eG1G2 =
  A twisted Edwards elliptic curve E(Fr) where the char of Fr is the order of BN254
 -}
 data BabyJubjub
-
-type Fr =
-  Primefield
-    21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 {- | Montgomery form of Baby Jubjub
  By^2 = x^3 + Ax^2 + x
@@ -237,14 +235,6 @@ babyJub =
         2736030358979909402780800718157159386076813972158567259200215660948447373041
     , c'h = 8
     }
-
--- | Baby Jubjub field constructor
-fBabyJub :: Integral a => a -> Fr
-fBabyJub = fromIntegral
-
--- | Generator or base point on Baby Jubjub
-gBabyJub :: Point BabyJubjub Fr
-gBabyJub = c'g babyJub
 
 {- | secp256k1: Bitcoin Curve
  k = 19298681539552699237261830834781317975472927379845817397100860523586360249056

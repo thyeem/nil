@@ -23,9 +23,9 @@ import Nil.Ecdata
   , G1
   , G2
   , GT
-  , bn254G1
-  , bn254GT
-  , fGT
+  , bn254'g1
+  , bn254'gt
+  , field'gt
   )
 import Nil.Field
   ( Extensionfield (..)
@@ -76,10 +76,10 @@ ta *|* tb = (o * q, p * r) where ((o, p), (q, r)) = (ta, tb)
 -}
 miller'loop :: Point BN254 GT -> Point BN254 GT -> GT
 miller'loop p q
-  | p == O || q == O = fGT [1]
+  | p == O || q == O = field'gt [1]
   | otherwise = final'exp . uncurry (/) . finalQ2 . finalQ1 $ loop
  where
-  loop = foldl' (add . dbl) ((fGT [1], fGT [1]), q) s
+  loop = foldl' (add . dbl) ((field'gt [1], field'gt [1]), q) s
   s = drop 1 . reverse $ bits'from'int loop'count
   frobQ1 = frobp q (1 :: Int)
   frobQ2 = negate . frobp q $ (2 :: Int)
@@ -166,7 +166,7 @@ linefuncJ = go
 final'exp :: GT -> GT
 final'exp f = f ^ expo
  where
-  expo = (c'p bn254G1 ^ (12 :: Int) - 1) `div` c'n bn254G1
+  expo = (c'p bn254'g1 ^ (12 :: Int) - 1) `div` c'n bn254'g1
 {-# INLINE final'exp #-}
 
 {- | Reduced Tate pairing using optimal Ate pairing
@@ -180,7 +180,7 @@ pairing p q = miller'loop (from'fq p) (twist q)
 -- | Construct a point on GT from a point on G1
 from'fq :: Point BN254 G1 -> Point BN254 GT
 from'fq = \case
-  J _ x y z -> jp bn254GT (fGT [x]) (fGT [y]) (fGT [z])
+  J _ x y z -> jp bn254'gt (field'gt [x]) (field'gt [y]) (field'gt [z])
   O -> O
   a -> from'fq (toJ a)
 {-# INLINE from'fq #-}
@@ -194,8 +194,8 @@ twist = \case
     let [x0, x1] = x + [0, 0]
         [y0, y1] = y + [0, 0]
         [z0, z1] = z + [0, 0]
-        xt = fGT [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * fGT [0, 0, 1]
-        yt = fGT [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * fGT [0, 0, 0, 1]
-        zt = fGT [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
-     in jp bn254GT xt yt zt
+        xt = field'gt [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * field'gt [0, 0, 1]
+        yt = field'gt [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * field'gt [0, 0, 0, 1]
+        zt = field'gt [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
+     in jp bn254'gt xt yt zt
 {-# INLINE twist #-}

@@ -18,7 +18,7 @@ import Nil.Ecdata
   , Fp
   , G1
   , Secp256k1
-  , bn254G1
+  , bn254'g1
   , secp256k1
   )
 import Nil.Field (Field)
@@ -81,11 +81,11 @@ ecdsa'verify curve hashFunc eG (r, s) msg
 
 -- | ECDSA-sign using BN254 curve and Blake2b 32-byte hash function
 bn254'sign :: Privatekey -> Message -> IO Signature
-bn254'sign = ecdsa'sign bn254G1 (blake2b 32 mempty)
+bn254'sign = ecdsa'sign bn254'g1 (blake2b 32 mempty)
 
 -- | ECDSA-verify using BN254 curve and Blake2b 32-byte hash function
 bn254'verify :: Publickey BN254 G1 -> Signature -> Message -> Bool
-bn254'verify = ecdsa'verify bn254G1 (blake2b 32 mempty)
+bn254'verify = ecdsa'verify bn254'g1 (blake2b 32 mempty)
 
 -- | ECDSA-sign using secp256k1 curve and Blake2b 32-byte hash function
 secp256k1'sign :: Privatekey -> Message -> IO Signature

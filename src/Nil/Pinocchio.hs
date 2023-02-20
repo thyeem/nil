@@ -38,7 +38,7 @@ import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (.*), (<.*>))
-import Nil.Ecdata (BN254, BabyJubjub, Fr, G1, G2, babyJub, bn254G1, gG1, gG2)
+import Nil.Ecdata (BN254, BabyJubjub, Fr, G1, G2, babyJub, bn254'g1, g1, g2)
 import Nil.Eval (statement, wire'vals)
 import Nil.Field (Primefield)
 import Nil.Lexer (tokenize)
@@ -165,12 +165,6 @@ data Proof = Proof
   }
   deriving (Eq, Show, Generic, NFData)
 
-{- | Fr is the prime field governing the circuit based on BN128
- type Fr =
- Primefield
- 21888242871839275222246405745257275088548364400416034343698204186575808495617
--}
-
 -- | Set of random numbers used during setup phase
 type ToxicWastes = (Fr, Fr, Fr, Fr, Fr, Fr)
 
@@ -296,8 +290,8 @@ zksetup QAP {..} (s, a, bv, bw, by, r) = ekey `par` vkey `pseq` (ekey, vkey)
   vEw0 = lift'G2 w0 -- E(W0(s))
   vEy0 = lift'G1 y0 -- E(Y0(s))
   vEvio = lift'G1 <%> vio -- [ E(Vio(s)) ]
-  lift'G1 = toA . (gG1 .*) -- lift a scalar to a point on G1
-  lift'G2 = toA . (gG2 .*) -- lift a scalar to a point on G2
+  lift'G1 = toA . (g1 .*) -- lift a scalar to a point on G1
+  lift'G2 = toA . (g2 .*) -- lift a scalar to a point on G2
   vio = (|= s) . (qap'V !!) <%> ix'inst -- [ Vio(s) ]
   vj = (|= s) . (qap'V !!) <%> ix'wit -- [ Vj(s) ]
   wk = (|= s) . (qap'W !!) <%> ix'full -- [ Wk(s) ]
