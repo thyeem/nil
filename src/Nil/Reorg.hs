@@ -26,7 +26,7 @@ valid'operator Gate {..} = g'op `elem` [Mul, Add, End]
 -- | When merge happens
 needs'merge :: Gate f -> Bool
 needs'merge g@Gate {..} =
-  recip'wirep g'rwire
+  w'recip g'rwire
     || (and' out'wirep g && g'op == Mul)
 {-# INLINE needs'merge #-}
 
@@ -41,12 +41,7 @@ rand'wire =
 
 -- | Toggle the reciprocal flag
 recip' :: Wire f -> Wire f
-recip' wire@Wire {..} =
-  let flag
-        | recip'wirep wire = V'base
-        | base'wirep wire = V'recip
-        | otherwise = die $ "Error, cannot toggle recip flags: " ++ w'key
-   in wire {w'flag = flag}
+recip' wire@Wire {..} = wire {w'recip = not w'recip}
 {-# INLINE recip' #-}
 
 -- | Determine which wire will be cut: in forms of (survived, killed)
@@ -56,7 +51,7 @@ tip'cut table key =
       height wire
         | member (w'key wire) table = snd (table ~> w'key wire)
         | otherwise = -1
-   in if recip'wirep g'rwire || (height g'lwire > height g'rwire)
+   in if w'recip g'rwire || (height g'lwire > height g'rwire)
         then (g'lwire, g'rwire)
         else (g'rwire, g'lwire)
 {-# INLINE tip'cut #-}
@@ -113,7 +108,7 @@ merge table out tip cut
 
 merge'mul :: (Eq f, Num f) => O'table f -> Wire f -> Wire f -> Wire f -> IO [Gate f]
 merge'mul table out tip cut = do
-  let op = if recip'wirep cut then recip' else id
+  let op = if w'recip cut then recip' else id
       (tip_, cut_) = bimap op op $ tip'cut table (w'key cut)
   tie <- rand'wire
   merge table tie tip tip_ +++ merge table out tie cut_
@@ -121,7 +116,7 @@ merge'mul table out tip cut = do
 
 merge'add :: (Eq f, Num f) => O'table f -> Wire f -> Wire f -> Wire f -> IO [Gate f]
 merge'add table out tip cut = do
-  if recip'wirep cut
+  if w'recip cut
     then
       die . unlines $
         [ "Error, failed to reorg the wire in circuit: " ++ w'expr cut

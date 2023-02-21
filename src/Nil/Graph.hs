@@ -37,7 +37,7 @@ dot'header = "size=\"32,32\"; rankdir=LR;"
 
 write'gates :: Eq f => Circuit f -> String
 write'gates Circuit {..} =
-  unwords $ uncurry write'gate c'symbols <$> c'gates
+  unwords $ write'gate c'pubs c'privs <$> c'gates
 
 write'gate :: Eq f => [String] -> [String] -> Gate f -> String
 write'gate instances witnesses Gate {..}
@@ -75,8 +75,7 @@ write'gate instances witnesses Gate {..}
       ]
 
   edge'color wire
-    | recip'wirep wire = "red"
-    | ext'wirep wire = "blue"
+    | w'recip wire = "red"
     | out'wirep wire = "blue"
     | otherwise = "black"
 

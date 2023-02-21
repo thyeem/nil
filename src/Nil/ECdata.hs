@@ -27,7 +27,7 @@ import Nil.Field
 -}
 data BN254
 
-{- | G1, G2 and GT are field types.
+{- | G1, G2 and GT are both curve types and field types.
 
    G1 = E(Fq)    <--  [twist]  -->   G2 = E'(Fq^2)
    y^2 = x^3 + (b=3)                 y^2 = x^3 + (b/xi = 3/u+9)
@@ -117,7 +117,7 @@ bn254'g1 =
 bn254'g2 :: Curve BN254 G2
 bn254'g2 =
   Curve
-    { c'name = "BN254-q2"
+    { c'name = "BN254-Q2"
     , c'p =
         21888242871839275222246405745257275088696311157297823662689037894645226208583
     , c'a = field'g2 [0]
@@ -142,7 +142,7 @@ bn254'g2 =
 bn254'gt :: Curve BN254 GT
 bn254'gt =
   Curve
-    { c'name = "BN254-q12"
+    { c'name = "BN254-Q12"
     , c'p =
         21888242871839275222246405745257275088696311157297823662689037894645226208583
     , c'a = field'gt [0]

@@ -37,7 +37,7 @@ import Data.Functor ((<&>))
 import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
-import Nil.Curve (Curve, Point, toA, (.*), (<.*>))
+import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
 import Nil.Ecdata (BN254, BabyJubjub, Fr, G1, G2, babyJub, bn254'g1, g1, g2)
 import Nil.Eval (statement, wire'vals)
 import Nil.Field (Primefield)
@@ -290,8 +290,8 @@ zksetup QAP {..} (s, a, bv, bw, by, r) = ekey `par` vkey `pseq` (ekey, vkey)
   vEw0 = lift'G2 w0 -- E(W0(s))
   vEy0 = lift'G1 y0 -- E(Y0(s))
   vEvio = lift'G1 <%> vio -- [ E(Vio(s)) ]
-  lift'G1 = toA . (g1 .*) -- lift a scalar to a point on G1
-  lift'G2 = toA . (g2 .*) -- lift a scalar to a point on G2
+  lift'G1 = toA . (g1 ~*) -- lift a scalar to a point on G1
+  lift'G2 = toA . (g2 ~*) -- lift a scalar to a point on G2
   vio = (|= s) . (qap'V !!) <%> ix'inst -- [ Vio(s) ]
   vj = (|= s) . (qap'V !!) <%> ix'wit -- [ Vj(s) ]
   wk = (|= s) . (qap'W !!) <%> ix'full -- [ Wk(s) ]
@@ -335,20 +335,20 @@ zkprove qap@QAP {..} EKey {..} witness = proof
                           , pEbvwy
                           }
 
-  pEvJ = toA $ eEvj <.*> witJ -- E(Vj(s))
-  pEw = toA $ eEwk <.*> witK -- E(W(s))
-  pE'w = toA $ eE'wk <.*> witK -- E'(W(s))
-  pEy = toA $ eEyk <.*> witK -- E(Y(s))
-  pEh = toA $ eEsi <.*> h -- E(h(s))
-  pEavJ = toA $ eEavj <.*> witJ -- E(a * Vj(s))
-  pEaw = toA $ eEawk <.*> witK -- E(a * W(s))
-  pEay = toA $ eEayk <.*> witK -- E(a * Y(s))
-  pEah = toA $ eEasi <.*> h -- E(a * h(s))
+  pEvJ = toA $ eEvj <~*> witJ -- E(Vj(s))
+  pEw = toA $ eEwk <~*> witK -- E(W(s))
+  pE'w = toA $ eE'wk <~*> witK -- E'(W(s))
+  pEy = toA $ eEyk <~*> witK -- E(Y(s))
+  pEh = toA $ eEsi <~*> h -- E(h(s))
+  pEavJ = toA $ eEavj <~*> witJ -- E(a * Vj(s))
+  pEaw = toA $ eEawk <~*> witK -- E(a * W(s))
+  pEay = toA $ eEayk <~*> witK -- E(a * Y(s))
+  pEah = toA $ eEasi <~*> h -- E(a * h(s))
   pEbvwy =
     toA $
-      (eEbvvj <.*> witJ)
-        |+| (eEbwwk <.*> witK)
-        |+| (eEbyyk <.*> witK) -- E(bv * Vj(s) + bw * W(s) + by * Y(s))
+      (eEbvvj <~*> witJ)
+        |+| (eEbwwk <~*> witK)
+        |+| (eEbyyk <~*> witK) -- E(bv * Vj(s) + bw * W(s) + by * Y(s))
   h = qap'quot qap witness -- h(x)
   n = qap'num'inst -- number of instances
   m = pred . length $ qap'V -- size of (#gates + #witness + #instance)
@@ -389,7 +389,7 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
     (e sumV sumW |/| e sumY vE1)
       |=| e pEh vEt
 
-  uEvio = vEvio <.*> instances -- E(Vio(s))
+  uEvio = vEvio <~*> instances -- E(Vio(s))
   sumV = vEv0 |+| uEvio |+| pEvJ -- E(V(s))
   sumW = vEw0 |+| pE'w -- E(W(s))
   sumY = vEy0 |+| pEy -- E(Y(s))

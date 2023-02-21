@@ -1,5 +1,5 @@
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 --------------------------------------------------------------------------------
@@ -10,235 +10,220 @@ module Nil.Eval where
 
 import Control.DeepSeq (NFData)
 import Data.List (foldl')
-import Data.Map (null)
-import Data.Maybe (fromMaybe)
+import Data.Map (keys)
+import Data.Maybe (fromJust, fromMaybe)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
-import Nil.Curve (Curve (..), Point (..), ap, mulg, toA, (.*))
+import Nil.Curve (Curve (..), Point (..), ap, mulg, p'x, p'y, toA, (~*))
+import Nil.Data (NIL (..), UL (..), nil, unil, unlift)
 import Nil.Field (Field)
-import Nil.Utils
-  ( blake2b
-  , bytes'from'int'len
-  , die
-  , int'from'bytes
-  )
+import Nil.Utils (blake2b, bytes'from'int'len, die, int'from'bytes)
+
+lifted'wirep :: Wire (NIL i r q) -> Bool
+lifted'wirep wire = case w'val wire of
+  NIL _ (U _) -> False
+  _ -> True
+
+-- | Extends a wire to a NIL-type wire
+extend'wire :: Curve i q -> Wire r -> Wire (NIL i r q)
+extend'wire c w@Wire {..} = w {w'val = nil c w'val}
+{-# INLINE extend'wire #-}
+
+-- | Extends all wires from a circuit to NIL-type wires
+extend'circuit :: Curve i q -> Circuit r -> Circuit (NIL i r q)
+extend'circuit c circuit@Circuit {..} =
+  circuit
+    { c'gates =
+        ( \g@Gate {..} ->
+            g
+              { g'lwire = extend'wire c g'lwire
+              , g'rwire = extend'wire c g'rwire
+              , g'owire = extend'wire c g'owire
+              }
+        )
+          <$> c'gates
+    }
+{-# INLINE extend'circuit #-}
+
+-- | Get the wire bases vector from Wmap
+v'fromWmap :: (Integral r, Integral q, Field q) => Wmap (NIL i r q) -> [r]
+v'fromWmap wmap = unil . w'val . (wmap ~>) <$> keys wmap
+{-# INLINE v'fromWmap #-}
+
+-- | Get a Wmap from List in forms of [(String, r)]
+wmap'fromList :: Num r => Curve i q -> [(String, r)] -> Wmap (NIL i r q)
+wmap'fromList c =
+  foldr
+    ( \(key, val) wmap ->
+        wmap <~ (key, extend'wire c . unit'var $ key)
+    )
+    (mempty <~~ extend'wire c unit'const)
+{-# INLINE wmap'fromList #-}
 
 {- | Get vector of all wire-values used in 'circuit':
  This is values corresponding to 'wire'keys' and the same as QAP witness vector
 -}
-wire'vals :: (Field f, Integral f) => Curve i f -> W'table f -> Circuit f -> [f]
-wire'vals curve table circuit =
-  w'val
-    . ((eval'circuit curve table circuit <~~ unit'const) ~>)
+wire'vals
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Circuit (NIL i r q)
+  -> [r]
+wire'vals wmap circuit =
+  unil
+    . w'val
+    . (eval'circuit wmap circuit ~>)
     <$> wire'keys circuit
 {-# INLINE wire'vals #-}
 
 -- @statement@ is an circuit evaluation result that a prover can use to prove it
-statement :: (Field f, Integral f) => Curve i f -> W'table f -> Circuit f -> f
-statement curve table circuit =
-  w'val $ eval'circuit curve table circuit ~> "return"
+statement
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Circuit (NIL i r q)
+  -> r
+statement wmap circuit =
+  unil . w'val $ eval'circuit wmap circuit ~> "return"
 {-# INLINE statement #-}
 
 -- | Evaluate Circuit with a given set of @(x, w)@
-eval'circuit :: (Field f, Integral f) => Curve i f -> W'table f -> Circuit f -> W'table f
-eval'circuit curve table Circuit {..} = foldl' (eval'gate curve) table c'gates
+eval'circuit
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Circuit (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'circuit wmap Circuit {..} = foldl' eval'gate wmap c'gates
 {-# INLINE eval'circuit #-}
 
 -- | Evaluate each gate based on gate operator
-eval'gate :: (Field f, Integral f) => Curve i f -> W'table f -> Gate f -> W'table f
-eval'gate curve table gate@Gate {..} =
+eval'gate
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'gate wmap gate@Gate {..} =
   case g'op of
-    End -> eval'end table gate
-    Mul -> eval'mul curve table gate
-    Add -> eval'add curve table gate
-    Mod' -> eval'mod table gate
-    Exp' -> eval'exp table gate
-    Hash' -> eval'hash table gate
-    Px' -> eval'x'from'p table gate
-    Py' -> eval'y'from'p curve table gate
-    EkG' -> eval'ekG curve table gate
-    Exy' -> eval'exy curve table gate
-    _ -> eval'rop table gate
+    Mul -> eval (*) wmap gate
+    Add -> eval (+) wmap gate
+    Mod' -> eval'mod wmap gate
+    Exp' -> eval'exp wmap gate
+    End -> eval'end wmap gate
+    Hash' -> eval'hash wmap gate
+    Px' -> eval'px wmap gate
+    Py' -> eval'py wmap gate
+    EkG' -> eval'kg wmap gate
+    Exy' -> eval'ep wmap gate
+    _ -> eval'rop wmap gate
 {-# INLINEABLE eval'gate #-}
 
--- | Fold a wire into a value by evaluating it with a given table and wire flags
-(~~) :: Fractional f => W'table f -> Wire f -> f
-(~~) table wire@Wire {w'key, w'expr} =
+-- | Evaluate a NIL-wire with a given wmap
+(~~)
+  :: (Integral r, Field r, Integral q, Field q)
+  => Wmap (NIL i r q)
+  -> Wire (NIL i r q)
+  -> NIL i r q
+(~~) wmap wire@Wire {w'key, w'expr} =
   let val
-        | Data.Map.null table = w'val wire
         | const'wirep wire = w'val wire
-        | otherwise = w'val wire * w'val (table ~> w'key)
-   in if
-          | base'wirep wire -> val
-          | recip'wirep wire -> recip val
-          | ext'wirep wire -> val -- return x-cooord
-          | otherwise ->
-              die . unwords $
-                ["Error, cannot reduce to a value:", w'key ++ ",", w'expr]
+        | otherwise = w'val wire * w'val (wmap ~> w'key)
+   in if w'recip wire then recip val else val
 {-# INLINE (~~) #-}
 
--- | Get an elliptic curve point on a given wire
-p'from'wire :: (Field f, Integral f) => Curve i f -> Wire f -> Point i f
-p'from'wire curve wire@Wire {..}
-  | base'wirep wire || recip'wirep wire = mulg curve (mempty ~~ wire) -- [k]G
-  | ext'wirep wire =
-      ap
-        curve
-        (fromIntegral w'val)
-        (y'from'wire curve wire)
-  | otherwise = die $ "Error, cannot convert to a EC-point: " ++ w'key
-{-# INLINE p'from'wire #-}
+-- | Evaluate gate
+eval
+  :: (Integral r, Integral q, Field r, Field q)
+  => (NIL i r q -> NIL i r q -> NIL i r q)
+  -> Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval op wmap Gate {..} =
+  let val = (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
+   in wmap <~~ set'val val g'owire
+{-# INLINEABLE eval #-}
 
--- | Get y-coordinate from a given point-wire
-y'from'wire :: Integral f => Curve i f -> Wire f -> f
-y'from'wire curve Wire {..} =
-  let odd' o = if odd o then o else negate o
-      x = fromIntegral w'val
-      find'y =
-        sqrt'zpz
-          (toInteger $ (x * x + c'a curve) * x + c'b curve)
-          (c'p curve)
-      y =
-        fromMaybe
-          ( die . unwords $
-              ["Error, wire-point is not on curve", w'key ++ ",", w'expr]
-          )
-          find'y -- y = sqrt(x*x*x + a*x + b) over field
-   in if
-          | w'flag == P'odd -> fromIntegral . odd' $ y
-          | w'flag == P'even -> fromIntegral . negate . odd' $ y
-          | otherwise -> die $ "Error, unexpected wire: " ++ w'key
-{-# INLINE y'from'wire #-}
+-- | Evaluate only when both wires are scalars
+eval'scalar
+  :: (Num a, Integral r, Integral q, Field r, Field q)
+  => (a -> a -> NIL i r q)
+  -> String
+  -> Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'scalar op label wmap Gate {..} =
+  let val wire = case wmap ~~ wire of
+        NIL _ (U v) -> fromIntegral v
+        _ ->
+          die $
+            unwords
+              [ "Error, used"
+              , label
+              , "on non-scalar wire:"
+              , w'key wire
+              ]
+      lval = val g'lwire
+      rval = val g'rwire
+   in wmap <~~ set'val (op lval rval) g'owire
+{-# INLINEABLE eval'scalar #-}
 
-wire'from'p :: (Integral f, Integral k, Field k) => Point i k -> Wire f
-wire'from'p point = case toA point of
-  A _ x y ->
-    let wire = val'const (fromIntegral x)
-     in if even y then set'flag P'even wire else set'flag P'odd wire
-  -- _ -> val'const 0
-  _ -> die "Error, Francis"
-{-# INLINE wire'from'p #-}
-
--- | Evaluate gate when both gate input wires are extended
-eval'and'ext'wire
-  :: (Integral f, Field f)
-  => Curve i f
-  -> (Point i f -> Point i f -> Point i f)
-  -> W'table f
-  -> Gate f
-  -> W'table f
-eval'and'ext'wire curve op table Gate {..} =
-  let wire =
-        wire'from'p $
-          p'from'wire curve (table ~~> g'lwire)
-            `op` p'from'wire curve (table ~~> g'rwire)
-   in table <~~ set'wval wire g'owire
-{-# INLINEABLE eval'and'ext'wire #-}
-
--- | Evaluate gate when one of gate input wires is an extended
-eval'xor'ext'wire
-  :: (Integral f, Field f)
-  => Curve i f
-  -> (Point i f -> f -> Point i f)
-  -> W'table f
-  -> Gate f
-  -> W'table f
-eval'xor'ext'wire curve op table g@Gate {..} =
-  let (ext, scalar) = either'by (ext'wirep . (table ~~>)) g
-      wire =
-        wire'from'p $
-          p'from'wire curve (table ~~> ext)
-            `op` (table ~~ scalar)
-   in table <~~ set'wval wire g'owire
-{-# INLINEABLE eval'xor'ext'wire #-}
-
--- | Evaluate gate when both gate input wires are scalar wires (no extended wires)
-eval'nor'ext'wire
-  :: (Integral f, Fractional f) => (f -> f -> f) -> W'table f -> Gate f -> W'table f
-eval'nor'ext'wire op table Gate {..} =
-  let val = (table ~~ g'lwire) `op` (table ~~ g'rwire)
-      wire = set'val val g'owire
-   in table <~~ set'wval wire g'owire
-{-# INLINEABLE eval'nor'ext'wire #-}
-
--- | Error when evaluating gate with an illegal operator and operands (wires)
-err'operands :: Gate f -> String -> a
-err'operands Gate {..} sym =
-  die . unwords $
-    [ "Error, not allowed " ++ sym ++ " operator between:"
-    , w'key g'lwire
-    , "and"
-    , w'key g'rwire
-    ]
-
--- | Evaluate the last gate of circuit
-eval'end :: (Integral f, Fractional f) => W'table f -> Gate f -> W'table f
-eval'end table Gate {..} =
-  let end = set'key "~end" (table ~~> g'rwire)
-   in (table <~~ end) <~~ set'key "return" end
--- let val = table ~~ g'rwire
--- in (table <~~ set'val (val * val) g'owire)
--- <~~ set'val val (unit'var "return")
-{-# INLINEABLE eval'end #-}
-
--- | Evaluate gate of @Mul (*)@ base gate operator
-eval'mul :: (Field f, Integral f) => Curve i f -> W'table f -> Gate f -> W'table f
-eval'mul curve table g
-  | and'ext'wirep table g = err'operands g "(*)"
-  | xor'ext'wirep table g = eval'xor'ext'wire curve (.*) table g
-  | otherwise = eval'nor'ext'wire (*) table g
-{-# INLINEABLE eval'mul #-}
-
--- | Evaluate gate of @Add (+)@ base gate operator
-eval'add :: (Integral f, Field f) => Curve i f -> W'table f -> Gate f -> W'table f
-eval'add curve table g
-  | and'ext'wirep table g = eval'and'ext'wire curve (+) table g
-  | xor'ext'wirep table g = err'operands g "(+)"
-  | otherwise = eval'nor'ext'wire (+) table g
-{-# INLINEABLE eval'add #-}
-
--- | Evaluate exponentiation
-eval'exp :: (Integral f, Fractional f) => W'table f -> Gate f -> W'table f
-eval'exp table g
-  | nor'ext'wirep table g = eval'nor'ext'wire (^) table g
-  | otherwise = err'operands g "(^)"
+eval'exp
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'exp wmap g =
+  let (NIL c _) = wmap ~~ g'rwire g
+   in eval'scalar ((nil c .) . (^)) "(^)" wmap g
 {-# INLINEABLE eval'exp #-}
 
 -- | Evaluate modulo operator
-eval'mod :: (Integral f, Fractional f) => W'table f -> Gate f -> W'table f
-eval'mod table g
-  | nor'ext'wirep table g = eval'nor'ext'wire mod table g
-  | otherwise = err'operands g "mod"
+eval'mod
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'mod wmap g =
+  let (NIL c _) = wmap ~~ g'rwire g
+   in eval'scalar ((nil c .) . mod) "'mod'" wmap g
 {-# INLINEABLE eval'mod #-}
 
+-- | Evaluate the last gate of circuit
+eval'end :: Wmap (NIL i r q) -> Gate (NIL i r q) -> Wmap (NIL i r q)
+eval'end wmap Gate {..} =
+  let end = set'key "~end" (wmap ~~> g'rwire)
+   in (wmap <~~ end) <~~ set'key "return" end
+{-# INLINEABLE eval'end #-}
+
 -- | Evaluate hash operator
-eval'hash :: (Integral f, Fractional f) => W'table f -> Gate f -> W'table f
-eval'hash table g
-  | nor'ext'wirep table g =
-      let hash =
-            fromIntegral
-              . int'from'bytes
-              . blake2b 32 mempty
-              . bytes'from'int'len 32
-              . fromIntegral
-       in eval'nor'ext'wire (const hash) table g
-  | otherwise = err'operands g "hash"
+eval'hash
+  :: (Integral r, Field r, Integral q, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'hash wmap Gate {..} =
+  let (NIL c _) = wmap ~~ g'lwire
+      hash =
+        nil c
+          . fromIntegral
+          . int'from'bytes
+          . blake2b 32 mempty
+          . bytes'from'int'len 32
+          . fromIntegral
+          . unil
+   in wmap <~~ set'val (hash $ wmap ~~ g'rwire) g'owire
 {-# INLINEABLE eval'hash #-}
 
 -- | Evalate gates of relational operators
 eval'rop
-  :: (Eq f, Ord f, Integral f, Fractional f)
-  => W'table f
-  -> Gate f
-  -> W'table f
-eval'rop table g@Gate {..}
-  | nor'ext'wirep table g =
-      let wire =
-            if (table ~~ g'lwire) `op` (table ~~ g'rwire)
-              then unit'const
-              else val'const 0
-       in table <~~ set'wval wire g'owire
-  | otherwise = err'operands g "relational"
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'rop wmap Gate {..} =
+  let (NIL c _) = wmap ~~ g'lwire
+      val =
+        if (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
+          then nil c 1
+          else nil c 0
+   in wmap <~~ set'val val g'owire
  where
   op = case g'op of
     GT' -> (>)
@@ -251,43 +236,54 @@ eval'rop table g@Gate {..}
 {-# INLINEABLE eval'rop #-}
 
 -- | Evaluate operator of getting x-coordinate from elliptic curve points
-eval'x'from'p :: Integral f => W'table f -> Gate f -> W'table f
-eval'x'from'p table g@Gate {..}
-  | xor'ext'wirep table g =
-      let wire = val'const . fromIntegral . w'val $ table ~~> g'rwire
-       in table <~~ set'wval wire g'owire
-  | otherwise = err'operands g "(:)"
-{-# INLINEABLE eval'x'from'p #-}
+eval'px
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'px wmap Gate {..} =
+  let (NIL c val) = wmap ~~ g'rwire
+      xval = case val of
+        L p -> nil c . fromIntegral . fromJust . p'x $ p
+        U _ -> die $ "Error, used (:) on non-EC point wire: " ++ w'key g'rwire
+   in wmap <~~ set'val xval g'owire
+{-# INLINEABLE eval'px #-}
 
 -- | Evaluate operator of getting y-coordinate from elliptic curve points
-eval'y'from'p
-  :: (Integral f) => Curve i f -> W'table f -> Gate f -> W'table f
-eval'y'from'p curve table g@Gate {..}
-  | xor'ext'wirep table g =
-      let wire =
-            val'const . fromIntegral . y'from'wire curve $
-              table ~~> g'rwire
-       in table <~~ set'wval wire g'owire
-  | otherwise = err'operands g "(;)"
-{-# INLINEABLE eval'y'from'p #-}
+eval'py
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'py wmap Gate {..} =
+  let (NIL c val) = wmap ~~ g'rwire
+      yval = case val of
+        L p -> nil c . fromIntegral . fromJust . p'y $ p
+        U _ -> die $ "Error, used (;) on non-EC point wire: " ++ w'key g'rwire
+   in wmap <~~ set'val yval g'owire
+{-# INLINEABLE eval'py #-}
 
-eval'ekG :: (Integral f, Field f) => Curve i f -> W'table f -> Gate f -> W'table f
-eval'ekG curve table g@Gate {..}
-  | nor'ext'wirep table g =
-      let wire = wire'from'p . mulg curve . w'val $ table ~~> g'rwire
-       in table <~~ set'wval wire g'owire
-  | otherwise = err'operands g "[k]"
-{-# INLINEABLE eval'ekG #-}
+-- | [k]G
+eval'kg
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'kg wmap Gate {..} =
+  let (NIL c val) = wmap ~~ g'rwire
+      kg = case val of
+        U v -> NIL c . L . mulg c $ v
+        L _ -> die $ "Error, used ([]) on non-scalar wire: " ++ w'key g'rwire
+   in wmap <~~ set'val kg g'owire
+{-# INLINEABLE eval'kg #-}
 
-eval'exy :: (Integral f, Field f) => Curve i f -> W'table f -> Gate f -> W'table f
-eval'exy curve table g@Gate {..}
-  | nor'ext'wirep table g =
-      let wire =
-            wire'from'p $
-              ap
-                curve
-                (fromIntegral . w'val $ table ~~> g'lwire)
-                (fromIntegral . w'val $ table ~~> g'rwire)
-       in table <~~ set'wval wire g'owire
-  | otherwise = err'operands g "[x,y]"
-{-# INLINEABLE eval'exy #-}
+-- | [x,y]
+eval'ep
+  :: (Integral r, Integral q, Field r, Field q)
+  => Wmap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Wmap (NIL i r q)
+eval'ep wmap g =
+  let (NIL c _) = wmap ~~ g'rwire g
+   in eval'scalar (((NIL c . L) .) . ap c) "([])" wmap g
+{-# INLINEABLE eval'ep #-}

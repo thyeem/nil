@@ -230,17 +230,17 @@ p'y = \case
 {-# INLINE p'y #-}
 
 -- | Point scalar multiplication infix operator
-(.*) :: (Field f, Integral a) => Point i f -> a -> Point i f
-(.*) = mulp
-{-# INLINE (.*) #-}
+(~*) :: (Field f, Integral a) => Point i f -> a -> Point i f
+(~*) = mulp
+{-# INLINE (~*) #-}
 
 {- | Inner product or weighted sum with the given point and weight vectors
  For arbitrary points P, Q, and R on curve E(Fq),
  [P,Q,R] <:> [3,5,7] = (P *: 3) + (Q *: 5) + (R *: 7)
 -}
-(<.*>) :: (Field f, Integral a, NFData a) => [Point i f] -> [a] -> Point i f
-(<.*>) = (pfold (+) .) . pzip'with (.*)
-{-# INLINE (<.*>) #-}
+(<~*>) :: (Field f, Integral a, NFData a) => [Point i f] -> [a] -> Point i f
+(<~*>) = (pfold (+) .) . pzip'with (~*)
+{-# INLINE (<~*>) #-}
 
 -- | Point addition
 addp :: Field f => Point i f -> Point i f -> Point i f
@@ -281,7 +281,7 @@ subp p q = p |+| invp q
 
 -- | Point scalar mutiplication with curve generator point
 mulg :: (Field f, Integral a) => Curve i f -> a -> Point i f
-mulg curve n = g .* n where g = c'g curve
+mulg curve n = g ~* n where g = c'g curve
 {-# INLINE mulg #-}
 
 {- | Point multiplication using Strauss-Shamir method or Shamir's trick
@@ -291,8 +291,8 @@ apbq'sum :: (Field f, Integral a) => (Point i f, a) -> (Point i f, a) -> Point i
 apbq'sum (p, a) (q, b) = go (toJ p, a) (toJ q, b)
  where
   go (O, _) (O, _) = O
-  go (p', a') (O, _) = p' .* a'
-  go (O, _) (q', b') = q' .* b'
+  go (p', a') (O, _) = p' ~* a'
+  go (O, _) (q', b') = q' ~* b'
   go (_, a') (_, b') = g a' b'
    where
     r = p + q

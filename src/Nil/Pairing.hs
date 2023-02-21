@@ -16,7 +16,7 @@ import Nil.Curve
   , frobp
   , jp
   , toJ
-  , (.*)
+  , (~*)
   )
 import Nil.Ecdata
   ( BN254
@@ -85,7 +85,7 @@ miller'loop p q
   frobQ2 = negate . frobp q $ (2 :: Int)
   finalQ1 (f, t) = (f *|* linefunc t frobQ1 p, t |+| frobQ1)
   finalQ2 (f, t) = f *|* linefunc t frobQ2 p
-  dbl (f, t) = (f *|* f *|* linefunc t t p, t .* (2 :: Int))
+  dbl (f, t) = (f *|* f *|* linefunc t t p, t ~* (2 :: Int))
   add (f, t) b
     | b == 1 = (f *|* linefunc t q p, t |+| q)
     | otherwise = (f, t)

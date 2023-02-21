@@ -76,7 +76,7 @@ r1cs'from'circuit circuit@Circuit {..} =
           { r1cs'A
           , r1cs'B
           , r1cs'C
-          , r1cs'num'inst = length (fst c'symbols)
+          , r1cs'num'inst = length c'pubs
           }
  where
   r1cs'A = l'from'gate (wire'keys circuit) <%> c'gates
@@ -90,12 +90,12 @@ l'from'gate
   keys
   g@Gate
     { g'op = op
-    , g'lwire = Wire lkey lval _ _
-    , g'rwire = Wire rkey rval _ _
+    , g'lwire = Wire lkey _ _ lval
+    , g'rwire = Wire rkey _ _ rval
     } =
     [coeff key | key <- keys]
    where
-    recip' = recip'wirep $ g'rwire g
+    recip' = w'recip $ g'rwire g
     coeff key
       | recip' && key == const'key = 1
       | not recip' && op == End && key == const'key = 1
@@ -113,12 +113,12 @@ r'from'gate
   keys
   g@Gate
     { g'op = op
-    , g'rwire = Wire rkey rval _ _
-    , g'owire = Wire okey oval _ _
+    , g'rwire = Wire rkey _ _ rval
+    , g'owire = Wire okey _ _ oval
     } =
     [coeff key | key <- keys]
    where
-    recip' = recip'wirep $ g'rwire g
+    recip' = w'recip $ g'rwire g
     coeff key
       | recip' && key == okey = oval
       | not recip' && op == End && key == rkey = rval
@@ -130,7 +130,7 @@ r'from'gate
 
 -- | Convert a given gate into a row-vector based on out-wire
 o'from'gate :: Num f => [String] -> Gate f -> [f]
-o'from'gate keys Gate {g'owire = Wire okey oval _ _} =
+o'from'gate keys Gate {g'owire = Wire okey _ _ oval} =
   [if key == okey then oval else 0 | key <- keys]
 {-# INLINE o'from'gate #-}
 
