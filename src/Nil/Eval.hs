@@ -46,19 +46,22 @@ extend'circuit c circuit@Circuit {..} =
 {-# INLINE extend'circuit #-}
 
 -- | Get the wire bases vector from Wmap
-v'fromWmap :: (Integral r, Integral q, Field q) => Wmap (NIL i r q) -> [r]
-v'fromWmap wmap = unil . w'val . (wmap ~>) <$> keys wmap
+v'fromWmap :: Num r => Wmap r -> [r]
+v'fromWmap wmap = w'val . (wmap ~>) <$> keys wmap
 {-# INLINE v'fromWmap #-}
 
 -- | Get a Wmap from List in forms of [(String, r)]
-wmap'fromList :: Num r => Curve i q -> [(String, r)] -> Wmap (NIL i r q)
-wmap'fromList c =
+wmap'fromList :: Num r => [(String, r)] -> Wmap r
+wmap'fromList =
   foldr
     ( \(key, val) wmap ->
-        wmap <~ (key, extend'wire c . unit'var $ key)
+        wmap <~ (key, set'val val . unit'var $ key)
     )
-    (mempty <~~ extend'wire c unit'const)
+    (mempty <~~ unit'const)
 {-# INLINE wmap'fromList #-}
+
+lift'wmap :: Curve i q -> Wmap r -> Wmap (NIL i r q)
+lift'wmap c wmap = extend'wire c <$> wmap
 
 {- | Get vector of all wire-values used in 'circuit':
  This is values corresponding to 'wire'keys' and the same as QAP witness vector
@@ -108,10 +111,10 @@ eval'gate wmap gate@Gate {..} =
     Exp' -> eval'exp wmap gate
     End -> eval'end wmap gate
     Hash' -> eval'hash wmap gate
-    Px' -> eval'px wmap gate
-    Py' -> eval'py wmap gate
-    EkG' -> eval'kg wmap gate
-    Exy' -> eval'ep wmap gate
+    EPx' -> eval'epx wmap gate
+    EPy' -> eval'epy wmap gate
+    EkG' -> eval'ekg wmap gate
+    ECP' -> eval'ecp wmap gate
     _ -> eval'rop wmap gate
 {-# INLINEABLE eval'gate #-}
 
@@ -236,54 +239,54 @@ eval'rop wmap Gate {..} =
 {-# INLINEABLE eval'rop #-}
 
 -- | Evaluate operator of getting x-coordinate from elliptic curve points
-eval'px
+eval'epx
   :: (Integral r, Integral q, Field r, Field q)
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'px wmap Gate {..} =
+eval'epx wmap Gate {..} =
   let (NIL c val) = wmap ~~ g'rwire
       xval = case val of
         L p -> nil c . fromIntegral . fromJust . p'x $ p
         U _ -> die $ "Error, used (:) on non-EC point wire: " ++ w'key g'rwire
    in wmap <~~ set'val xval g'owire
-{-# INLINEABLE eval'px #-}
+{-# INLINEABLE eval'epx #-}
 
 -- | Evaluate operator of getting y-coordinate from elliptic curve points
-eval'py
+eval'epy
   :: (Integral r, Integral q, Field r, Field q)
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'py wmap Gate {..} =
+eval'epy wmap Gate {..} =
   let (NIL c val) = wmap ~~ g'rwire
       yval = case val of
         L p -> nil c . fromIntegral . fromJust . p'y $ p
         U _ -> die $ "Error, used (;) on non-EC point wire: " ++ w'key g'rwire
    in wmap <~~ set'val yval g'owire
-{-# INLINEABLE eval'py #-}
+{-# INLINEABLE eval'epy #-}
 
 -- | [k]G
-eval'kg
+eval'ekg
   :: (Integral r, Integral q, Field r, Field q)
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'kg wmap Gate {..} =
+eval'ekg wmap Gate {..} =
   let (NIL c val) = wmap ~~ g'rwire
       kg = case val of
         U v -> NIL c . L . mulg c $ v
         L _ -> die $ "Error, used ([]) on non-scalar wire: " ++ w'key g'rwire
    in wmap <~~ set'val kg g'owire
-{-# INLINEABLE eval'kg #-}
+{-# INLINEABLE eval'ekg #-}
 
 -- | [x,y]
-eval'ep
+eval'ecp
   :: (Integral r, Integral q, Field r, Field q)
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'ep wmap g =
+eval'ecp wmap g =
   let (NIL c _) = wmap ~~ g'rwire g
    in eval'scalar (((NIL c . L) .) . ap c) "([])" wmap g
-{-# INLINEABLE eval'ep #-}
+{-# INLINEABLE eval'ecp #-}

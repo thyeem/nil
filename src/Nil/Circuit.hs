@@ -63,7 +63,7 @@ data Circuit r = Circuit
   , c'pubs :: [String]
   , c'gates :: [Gate r]
   }
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic, NFData, ToJSON)
 
 instance Show r => Pretty (Circuit r)
 
@@ -74,7 +74,7 @@ data Gate r = Gate
   , g'rwire :: Wire r
   , g'owire :: Wire r
   }
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic, NFData, ToJSON)
 
 {- | Gate operators: Base operators (x, +) and extended extended operators (ending with ').
  Extended operators: perform operations that cannot be converted into base operators.
@@ -87,18 +87,18 @@ data Gateop
   | Add -- base bop
   | Exp' -- bop
   | Mod' -- bop
-  | Exy' -- bop
-  | EkG' -- bop
+  | ECP' -- bop
+  | EkG' -- uop
+  | EPx' -- uop
+  | EPy' -- uop
   | Hash' -- uop
-  | Px' -- uop
-  | Py' -- uop
   | GT' -- rop
   | LT' -- rop
   | GE' -- rop
   | LE' -- rop
   | EQ' -- rop
   | NE' -- rop
-  deriving (Eq, Ord, Show, Generic, NFData)
+  deriving (Eq, Ord, Show, Generic, NFData, ToJSON)
 
 {- | Wires are edges connecting gates each other with coefficients
  Two input wires (left, right) and one output wire in each gate
@@ -109,7 +109,7 @@ data Wire r = Wire
   , w'recip :: Bool
   , w'val :: r
   }
-  deriving (Eq, Show, Generic, NFData)
+  deriving (Eq, Show, Generic, NFData, ToJSON)
 
 -- | Map from string keys to wires
 type Wmap r = Map String (Wire r)
@@ -269,7 +269,7 @@ init'state pubs privs =
   ( []
   , fromList $
       (\wire -> (w'key wire, wire))
-        <$> (unit'var <$> privs) ++ (unit'var <$> pubs)
+        <$> (unit'var <$> pubs ++ privs)
   )
 {-# INLINE init'state #-}
 
@@ -379,11 +379,11 @@ gate'op = \case
   -- extended gate operators
   Caret -> Exp'
   Percent -> Mod'
-  PointXY -> Exy'
+  PointXY -> ECP'
   PointkG -> EkG'
   Bang -> Hash'
-  Colon -> Px'
-  Semicolon -> Py'
+  Colon -> EPx'
+  Semicolon -> EPy'
   Greater -> GT'
   Less -> LT'
   GreaterEq -> GE'

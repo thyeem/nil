@@ -1,5 +1,8 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ParallelListComp #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Nil.Utils where
 
@@ -21,6 +24,7 @@ import qualified Data.ByteString.Base16 as H
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as CL
 import Data.Char (isSpace)
 import Data.Function (on)
 import Data.List
@@ -28,6 +32,7 @@ import Data.List
   , intercalate
   , isPrefixOf
   )
+import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Word (Word8)
 import Numeric (showHex)
@@ -41,6 +46,14 @@ import Text.Pretty.Simple
   , pShowOpt
   )
 import Text.Printf (printf)
+
+type Text = T.Text
+
+type ByteString = C.ByteString
+
+type LazyText = TL.Text
+
+type LazyByteString = CL.ByteString
 
 -- | Pretty-Show and Pretty-Printer
 class Show a => Pretty a where
@@ -59,6 +72,22 @@ class Show a => Pretty a where
         }
   pp :: a -> IO ()
   pp = putStrLn . pretty
+
+deriving instance Pretty Integer
+
+deriving instance Pretty Bool
+
+deriving instance Pretty Char
+
+deriving instance Pretty ()
+
+deriving instance Pretty Text
+
+deriving instance Pretty ByteString
+
+deriving instance Pretty LazyText
+
+deriving instance Pretty LazyByteString
 
 -- | Parallel computing (+) operator
 (|+|) :: Num a => a -> a -> a
@@ -256,13 +285,19 @@ lzip'with op def = go
  No need two lists have the same length as the default value will be filled
 -}
 twocols :: String -> String -> [String] -> [String] -> String
-twocols def fmt a b = intercalate "\n" $ lzip'with (printf fmt) def a b
+twocols def fmt a b =
+  intercalate "\n" $ lzip'with (printf fmt) def a b
 {-# INLINE twocols #-}
 
--- | Default formatted printer of this project
-info :: [String] -> [String] -> IO ()
-info a b = putStrLn $ twocols mempty "%12s    %s" a b
+-- | info
+info :: [String] -> [String] -> String
+info = twocols mempty "%12s    %s"
 {-# INLINE info #-}
+
+-- | Default formatted printer of this project
+info'io :: [String] -> [String] -> IO ()
+info'io = (putStrLn .) . info
+{-# INLINE info'io #-}
 
 -- | Generate a random element except for additive identity
 ranf :: (Num f, Random f, Bounded f) => IO f

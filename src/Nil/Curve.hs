@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# OPTIONS -Wno-unused-top-binds #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
@@ -7,7 +6,10 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections #-}
+
+{-# OPTIONS -Wno-unused-top-binds #-}
 
 -- | Defines @Weierstrass Elliptic@ 'Curve' and 'Point' over @/GF(p)/@
 module Nil.Curve where
@@ -48,8 +50,10 @@ import Nil.Field (Field (..), Primefield)
 import Nil.Utils
   ( Pretty (..)
   , die
+  , info
   , pfold
   , pzip'with
+  , twocols
   , (<%>)
   , (|+|)
   )
@@ -84,7 +88,7 @@ data Curve i f = Curve
   , c'n :: Integer
   , c'h :: Integer
   }
-  deriving (Eq, Show, Read, Generic, NFData)
+  deriving (Eq, Generic, NFData)
 
 {- | Points on Elliptic Curve
  @
@@ -102,7 +106,7 @@ data Point i f
   = A (Curve i f) f f
   | J (Curve i f) f f f
   | O
-  deriving (Show, Read, Generic, NFData)
+  deriving (Generic, NFData)
 
 -- | Definition of Point Equality
 instance Field f => Eq (Point c f) where
@@ -446,10 +450,37 @@ findp curve =
     | y == zero y = [A curve x y]
     | otherwise = [A curve x y, A curve x y']
 
-instance (Show f, Pretty f) => Pretty (Curve i f)
+instance Show f => Show (Curve i f) where
+  show = c'name
 
-instance (Show f, Pretty f) => Pretty (Point c f) where
+instance (Show f, Field f) => Show (Point i f) where
+  show = \case
+    O -> "O"
+    A _ x y -> unwords [show x, show y]
+    a -> show . toA $ a
+
+instance (Show f, Pretty f) => Pretty (Curve i f) where
+  pretty Curve {..} =
+    info
+      ["name", "char", "order", "cofactor", "a", "b", "Gx", "Gy"]
+      [ c'name
+      , pretty c'p
+      , pretty c'n
+      , pretty c'h
+      , pretty c'a
+      , pretty c'b
+      , pretty c'gx
+      , pretty c'gy
+      ]
+
+instance (Show f, Pretty f, Field f) => Pretty (Point c f) where
   pretty = \case
     O -> "Point at Infinity"
-    A c x y -> unlines [c'name c, pretty x, pretty y]
-    J c x y z -> unlines [c'name c, pretty x, pretty y, pretty z]
+    A c x y ->
+      info
+        ["curve", "x", "y"]
+        [c'name c, pretty x, pretty y]
+    J c x y z ->
+      info
+        ["curve", "X", "Y", "Z"]
+        [c'name c, pretty x, pretty y, pretty z]

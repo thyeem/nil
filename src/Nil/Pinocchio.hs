@@ -38,8 +38,9 @@ import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
-import Nil.Ecdata (BN254, BabyJubjub, Fr, G1, G2, babyJub, bn254'g1, g1, g2)
-import Nil.Eval (statement, wire'vals)
+import Nil.Data (NIL, UL)
+import Nil.Ecdata (BN254, Fr, G1, G2, bn254'g1, g1, g2)
+import Nil.Eval (extend'circuit, extend'wire, statement, v'fromWmap, wire'vals, wmap'fromList)
 import Nil.Field (Primefield)
 import Nil.Lexer (tokenize)
 import Nil.Pairing (pairing)
@@ -172,8 +173,6 @@ deriving instance Store (Circuit Fr)
 
 deriving instance Store (Wire Fr)
 
-deriving instance Store WireType
-
 deriving instance Store Gateop
 
 deriving instance Store (Gate Fr)
@@ -206,8 +205,8 @@ toxicwaste = do
 {-# INLINE toxicwaste #-}
 
 -- | Default elliptic curve of this protocol
-def'curve :: Curve BabyJubjub Fr
-def'curve = babyJub
+def'curve :: Curve BN254 G1
+def'curve = bn254'g1
 
 -- | Generate evaluation key and verification key from the given CRS and QAP
 zksetup :: QAP Fr -> ToxicWastes -> (EvaluationKey, VerificationKey)
@@ -385,9 +384,7 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
 
   -- checkD: check QAP divisibility (3-pairings)
   -- e( E(V(s)), E(W(s)) ) / e( E(Y(s)), G ) == e( E(h(s)), E(t(s)) )
-  checkD =
-    (e sumV sumW |/| e sumY vE1)
-      |=| e pEh vEt
+  checkD = (e sumV sumW |/| e sumY vE1) |=| e pEh vEt
 
   uEvio = vEvio <~*> instances -- E(Vio(s))
   sumV = vEv0 |+| uEvio |+| pEvJ -- E(V(s))
@@ -397,7 +394,7 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
 {-# INLINEABLE zkverify #-}
 
 -- | Examine the prepared zero-knowledge suite
-zktest :: Bool -> String -> W'table Fr -> W'table Fr -> IO Bool
+zktest :: Bool -> String -> Wmap Fr -> Wmap Fr -> IO Bool
 zktest verbose language witnesses instances = do
   -- Language
   when verbose $ do
@@ -424,13 +421,15 @@ zktest verbose language witnesses instances = do
   when verbose $ do
     stderr mempty
     stderr "Generating zk-proof..."
-  let out = statement def'curve witnesses circuit
-      vec'wit = wire'vals def'curve witnesses circuit
+  let x'circuit = extend'circuit bn254'g1 circuit
+      x'witness = extend'wire bn254'g1 <$> witnesses
+      out = statement x'witness x'circuit
+      vec'wit = wire'vals x'witness x'circuit
       proof = zkprove qap ekey vec'wit
   when verbose $ stderr ("Prover returns: " ++ show out)
 
   -- zk-verify
-  let verified = zkverify proof vkey (vec'from'table instances)
+  let verified = zkverify proof vkey (v'fromWmap instances)
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."
@@ -447,10 +446,10 @@ decode'file f =
     <&> fromRight
       (die $ "Failed to decode data from: " ++ f)
 
-read'table :: FilePath -> IO (W'table Fr)
+read'table :: FilePath -> IO (Wmap Fr)
 read'table f =
   L.readFile f >>= \bytes -> case J.decode bytes of
-    Just x -> pure (table'from'list x)
+    Just x -> pure (wmap'fromList x)
     Nothing -> die $ "Failed to read table from: " ++ f
 
 instance Pretty EvaluationKey

@@ -20,14 +20,18 @@ import Data.Store
   , encode
   )
 import Nil
-  ( Circuit
+  ( BN254
+  , Circuit
   , EvaluationKey
   , Fr
+  , G1
+  , NIL
   , Pretty (..)
   , Proof
   , VerificationKey
-  , W'table
   , Wire (w'val)
+  , Wmap
+  , bn254'g1
   , compile'language
   , decode'file
   , def'curve
@@ -35,8 +39,10 @@ import Nil
   , dot'header
   , err
   , export'graph
+  , extend'circuit
+  , extend'wire
   , hex'from'bytes
-  , info
+  , info'io
   , qap'from'circuit
   , read'table
   , reorg'circuit
@@ -44,10 +50,10 @@ import Nil
   , statement
   , stderr
   , str'from'bytes
-  , table'from'list
   , toxicwaste
-  , vec'from'table
+  , v'fromWmap
   , wire'vals
+  , wmap'fromList
   , write'dot
   , zkprove
   , zksetup
@@ -98,7 +104,7 @@ setup Opts {..} = do
   -- dump setup result (3 files: circuit, evaluation key, verification key),
   -- and their SHA-256 hashes as fingerprints
   unless o'quite $ do
-    info
+    info'io
       [ "filepath"
       , "Circuit"
       , "(hash)"
@@ -121,24 +127,26 @@ setup Opts {..} = do
     export'graph (path ++ "/" ++ dagfile) (write'dot dot'header circuit)
     unless o'quite $ do
       putStrLn mempty
-      info ["Graph"] [dagfile]
+      info'io ["Graph"] [dagfile]
 
 prove :: Opts -> IO ()
 prove Opts {..} = do
   let Prove circuit ekey wit = o'command
   circuit_ <- decode'file circuit :: IO (Circuit Fr)
   ekey_ <- decode'file ekey :: IO EvaluationKey
-  witness_ <- read'table wit :: IO (W'table Fr)
+  witness_ <- read'table wit :: IO (Wmap Fr)
   let qap = qap'from'circuit circuit_
-      out = statement def'curve witness_ circuit_
-      vec'wit = wire'vals def'curve witness_ circuit_
+      x'circuit = extend'circuit bn254'g1 circuit_
+      x'witness = extend'wire bn254'g1 <$> witness_
+      out = statement x'witness x'circuit
+      vec'wit = wire'vals x'witness x'circuit
       proof = zkprove qap ekey_ vec'wit
       path = takeDirectory ekey
       pfID = hex'from'bytes . sha256 . encode $ proof
       file'proof = pfID ++ ".pf"
   B.writeFile (path ++ "/" ++ file'proof) . encode $ proof
   unless o'quite $ do
-    info
+    info'io
       ["Eval (out)", "filepath", "Proof" :: String]
       [show (toInteger out), path, file'proof]
 
@@ -147,11 +155,11 @@ verify Opts {..} = do
   let Verify proof vkey inst = o'command
   proof_ <- decode'file proof :: IO Proof
   vkey_ <- decode'file vkey :: IO VerificationKey
-  instance_ <- read'table inst :: IO (W'table Fr)
+  instance_ <- read'table inst :: IO (Wmap Fr)
   let claim = w'val $ instance_ ~> "return"
-      verified = zkverify proof_ vkey_ (vec'from'table instance_)
+      verified = zkverify proof_ vkey_ (v'fromWmap instance_)
   unless o'quite $ do
-    info
+    info'io
       ["Statement", "Verified" :: String]
       [show (toInteger claim), show verified]
 
@@ -184,7 +192,7 @@ view Opts {..} = do
               export'graph
                 (path ++ "/" ++ dagfile)
                 (write'dot dot'header reorged)
-              unless o'quite $ info ["Graph"] [dagfile]
+              unless o'quite $ info'io ["Graph"] [dagfile]
             else pp reorged
       | isRight ekey -> dump ekey
       | isRight vkey -> dump vkey
@@ -214,7 +222,7 @@ demo'zkp verbose =
         , "return o"
         ]
     )
-    ( table'from'list
+    ( wmap'fromList
         [
           ( "e"
           , 8464813805670834410435113564993955236359239915934467825032129101731355555480
@@ -232,9 +240,9 @@ demo'zkp verbose =
           , 4025919241471660438673811488519877818316526842848831811191175453074037299584
           )
         ]
-        :: W'table Fr
+        :: Wmap Fr
     )
-    ( table'from'list
+    ( wmap'fromList
         [
           ( "return"
           , 20546328083791890245710917085664594543309426573230401055874323960053340664311

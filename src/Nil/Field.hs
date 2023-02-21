@@ -199,8 +199,6 @@ data Extensionfield f i = E (Irreduciblepoly f i) [f]
 -- Irreducible polynomial over primefield f
 newtype Irreduciblepoly f i = I [f] deriving (Eq, Ord, Show, Read, Generic, NFData)
 
-deriving instance Show f => Pretty (Irreduciblepoly f i)
-
 {- | Construct Extensionfield f i
 
  > ip = I [1,0,1 :: Primefield 13]
@@ -262,6 +260,9 @@ instance Field f => Fractional (Extensionfield f i) where
     (x, y) = egcdpoly fx px
     g = head $ fx * x + px * y
   {-# INLINE recip #-}
+
+instance Show f => Pretty (Irreduciblepoly f i) where
+  pretty (I ip) = pretty ip
 
 instance Show f => Pretty (Extensionfield f i) where
   pretty (E _ fx) = pretty fx
