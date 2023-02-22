@@ -10,7 +10,7 @@ module Nil.Eval where
 
 import Control.DeepSeq (NFData)
 import Data.List (foldl')
-import Data.Map (keys)
+import Data.Map (elems, keys)
 import Data.Maybe (fromJust, fromMaybe)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
@@ -47,7 +47,9 @@ extend'circuit c circuit@Circuit {..} =
 
 -- | Get the wire bases vector from Wmap
 v'fromWmap :: Num r => Wmap r -> [r]
-v'fromWmap wmap = w'val . (wmap ~>) <$> keys wmap
+v'fromWmap wmap =
+  w'val . (wmap ~>)
+    <$> filter (/= const'key) (keys wmap)
 {-# INLINE v'fromWmap #-}
 
 -- | Get a Wmap from List in forms of [(String, r)]
@@ -59,9 +61,6 @@ wmap'fromList =
     )
     (mempty <~~ unit'const)
 {-# INLINE wmap'fromList #-}
-
-lift'wmap :: Curve i q -> Wmap r -> Wmap (NIL i r q)
-lift'wmap c wmap = extend'wire c <$> wmap
 
 {- | Get vector of all wire-values used in 'circuit':
  This is values corresponding to 'wire'keys' and the same as QAP witness vector
@@ -85,7 +84,7 @@ statement
   -> Circuit (NIL i r q)
   -> r
 statement wmap circuit =
-  unil . w'val $ eval'circuit wmap circuit ~> "return"
+  unil . w'val $ eval'circuit wmap circuit ~> return'key
 {-# INLINE statement #-}
 
 -- | Evaluate Circuit with a given set of @(x, w)@
@@ -192,7 +191,7 @@ eval'mod wmap g =
 eval'end :: Wmap (NIL i r q) -> Gate (NIL i r q) -> Wmap (NIL i r q)
 eval'end wmap Gate {..} =
   let end = set'key "~end" (wmap ~~> g'rwire)
-   in (wmap <~~ end) <~~ set'key "return" end
+   in (wmap <~~ end) <~~ set'key return'key end
 {-# INLINEABLE eval'end #-}
 
 -- | Evaluate hash operator

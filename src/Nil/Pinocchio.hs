@@ -300,10 +300,11 @@ zksetup QAP {..} (s, a, bv, bw, by, r) = ekey `par` vkey `pseq` (ekey, vkey)
   y0 = (|= s) . head $ qap'Y -- Y0(s)
   si = (s ^) <%> ix'gate -- [ s^i ]
   t = qap't |= s -- t(s)
-  ix'gate = [0 .. length (head qap'V)] -- [0 .. d]
-  ix'full = [1 .. pred (length qap'V)] -- [1 .. m-1]
-  ix'inst = [1 .. qap'num'inst] -- [1..n]
-  ix'wit = [succ qap'num'inst .. pred (length qap'V)] -- [n+1 .. m-1]
+  n = qap'num'inst
+  ix'gate = [0 .. length . head $ qap'V] -- [0 .. d]
+  ix'full = [1 .. pred . length $ qap'V] -- [1 .. m-1]
+  ix'inst = [1 .. n] -- [1..(# of instances and out)]
+  ix'wit = [n + 1 .. length qap'V - 1] -- [n+1 .. m-1]
 {-# INLINEABLE zksetup #-}
 
 -- | Generate zkproof
@@ -376,11 +377,7 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
   --    * e( E(W(s)),  E(r * bw) )
   --    * e( E(Y(s)),  E(r * by) ) ]
   checkB =
-    e pEbvwy vEr
-      |=| ( e pEvJ vErbv
-              |*| e pEw vErbw
-              |*| e pEy vErby
-          )
+    e pEbvwy vEr |=| (e pEvJ vErbv |*| e pEw vErbw |*| e pEy vErby)
 
   -- checkD: check QAP divisibility (3-pairings)
   -- e( E(V(s)), E(W(s)) ) / e( E(Y(s)), G ) == e( E(h(s)), E(t(s)) )

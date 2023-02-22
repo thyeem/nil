@@ -12,10 +12,6 @@ module Nil.Circuit where
 -- , Gateop(..)
 -- , Wmap
 -- , circuit'from'ast
--- , v'fromWmap
--- , wmap'fromList
--- ,(!)
--- ,(!~)
 -- , wire'keys
 -- , statement
 -- , const'wirep
@@ -143,6 +139,11 @@ const'key :: String
 const'key = "&1"
 {-# INLINE const'key #-}
 
+-- | The name of specially prepared wire representing end node
+return'key :: String
+return'key = "return"
+{-# INLINE return'key #-}
+
 -- | Name prefix for auxiliary variables
 out'prefix :: Char
 out'prefix = '~'
@@ -259,7 +260,7 @@ symbols'from'ast = \case
   go insts wits = \case
     In Pub (Value (V v)) ast' -> go (v : insts) wits ast'
     In Priv (Value (V v)) ast' -> go insts (v : wits) ast'
-    Null -> (reverse $ "return" : insts, reverse wits)
+    Null -> (reverse $ return'key : insts, reverse wits)
     e -> die $ "Error, invalid AST used" ++ show e
 {-# INLINEABLE symbols'from'ast #-}
 
@@ -296,7 +297,7 @@ conv state = \case
     let (gates, wmap) = conv'expr state x
      in ( Gate
             End
-            (unit'var "return")
+            (unit'var return'key)
             (g'owire . head $ gates)
             (unit'var $ out'prefix : "end")
             : gates
