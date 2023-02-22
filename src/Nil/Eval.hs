@@ -15,42 +15,70 @@ import Data.Maybe (fromJust, fromMaybe)
 import Nil.Base (sqrt'zpz)
 import Nil.Circuit
 import Nil.Curve (Curve (..), Point (..), ap, mulg, p'x, p'y, toA, (~*))
-import Nil.Data (NIL (..), UL (..), nil, unil, unlift)
+import Nil.Data (NIL (..), UL (..), nil, p'from'ul, ul'from'p, unil, unlift)
 import Nil.Field (Field)
 import Nil.Utils (blake2b, bytes'from'int'len, die, int'from'bytes)
 
-lifted'wirep :: Wire (NIL i r q) -> Bool
-lifted'wirep wire = case w'val wire of
-  NIL _ (U _) -> False
-  _ -> True
+{- | Get vector of all wire-values used in 'circuit':
+ This is values corresponding to 'wire'keys' and the same as QAP witness vector
+-}
+wire'vals
+  :: (Integral r, Integral q, Field r, Field q)
+  => Curve i q
+  -> Wmap r
+  -> Circuit r
+  -> [r]
+wire'vals c wmap circuit =
+  unil
+    . w'val
+    . (eval'circuit c wmap circuit ~>)
+    <$> wire'keys circuit
+{-# INLINE wire'vals #-}
+
+-- @statement@ is an circuit evaluation result that a prover can use to prove it
+statement
+  :: (Integral r, Integral q, Field r, Field q)
+  => Curve i q
+  -> Wmap r
+  -> Circuit r
+  -> r
+statement c wmap circuit =
+  unil . w'val $ eval'circuit c wmap circuit ~> return'key
+{-# INLINE statement #-}
+
+-- | Evaluate Circuit with a given set of @(x, w)@
+eval'circuit
+  :: (Integral r, Integral q, Field r, Field q)
+  => Curve i q
+  -> Wmap r
+  -> Circuit r
+  -> Wmap (NIL i r q)
+eval'circuit c wmap Circuit {..} =
+  let gates = extend'gate c <$> c'gates
+   in foldl' eval'gate (extend'wire c <$> wmap) gates
+{-# INLINE eval'circuit #-}
 
 -- | Extends a wire to a NIL-type wire
 extend'wire :: Curve i q -> Wire r -> Wire (NIL i r q)
 extend'wire c w@Wire {..} = w {w'val = nil c w'val}
 {-# INLINE extend'wire #-}
 
--- | Extends all wires from a circuit to NIL-type wires
-extend'circuit :: Curve i q -> Circuit r -> Circuit (NIL i r q)
-extend'circuit c circuit@Circuit {..} =
-  circuit
-    { c'gates =
-        ( \g@Gate {..} ->
-            g
-              { g'lwire = extend'wire c g'lwire
-              , g'rwire = extend'wire c g'rwire
-              , g'owire = extend'wire c g'owire
-              }
-        )
-          <$> c'gates
+-- | Extends all gate wires to NILdata-wire
+extend'gate :: Curve i q -> Gate r -> Gate (NIL i r q)
+extend'gate c g@Gate {..} =
+  g
+    { g'lwire = extend'wire c g'lwire
+    , g'rwire = extend'wire c g'rwire
+    , g'owire = extend'wire c g'owire
     }
-{-# INLINE extend'circuit #-}
+{-# INLINE extend'gate #-}
 
 -- | Get the wire bases vector from Wmap
-v'fromWmap :: Num r => Wmap r -> [r]
-v'fromWmap wmap =
+vec'fromWmap :: Num r => Wmap r -> [r]
+vec'fromWmap wmap =
   w'val . (wmap ~>)
     <$> filter (/= const'key) (keys wmap)
-{-# INLINE v'fromWmap #-}
+{-# INLINE vec'fromWmap #-}
 
 -- | Get a Wmap from List in forms of [(String, r)]
 wmap'fromList :: Num r => [(String, r)] -> Wmap r
@@ -61,40 +89,6 @@ wmap'fromList =
     )
     (mempty <~~ unit'const)
 {-# INLINE wmap'fromList #-}
-
-{- | Get vector of all wire-values used in 'circuit':
- This is values corresponding to 'wire'keys' and the same as QAP witness vector
--}
-wire'vals
-  :: (Integral r, Integral q, Field r, Field q)
-  => Wmap (NIL i r q)
-  -> Circuit (NIL i r q)
-  -> [r]
-wire'vals wmap circuit =
-  unil
-    . w'val
-    . (eval'circuit wmap circuit ~>)
-    <$> wire'keys circuit
-{-# INLINE wire'vals #-}
-
--- @statement@ is an circuit evaluation result that a prover can use to prove it
-statement
-  :: (Integral r, Integral q, Field r, Field q)
-  => Wmap (NIL i r q)
-  -> Circuit (NIL i r q)
-  -> r
-statement wmap circuit =
-  unil . w'val $ eval'circuit wmap circuit ~> return'key
-{-# INLINE statement #-}
-
--- | Evaluate Circuit with a given set of @(x, w)@
-eval'circuit
-  :: (Integral r, Integral q, Field r, Field q)
-  => Wmap (NIL i r q)
-  -> Circuit (NIL i r q)
-  -> Wmap (NIL i r q)
-eval'circuit wmap Circuit {..} = foldl' eval'gate wmap c'gates
-{-# INLINE eval'circuit #-}
 
 -- | Evaluate each gate based on gate operator
 eval'gate
@@ -246,7 +240,8 @@ eval'epx
 eval'epx wmap Gate {..} =
   let (NIL c val) = wmap ~~ g'rwire
       xval = case val of
-        L p -> nil c . fromIntegral . fromJust . p'x $ p
+        L _ 0 -> die "Error, used (:) on point at infinity"
+        L x _ -> nil c . fromIntegral $ x
         U _ -> die $ "Error, used (:) on non-EC point wire: " ++ w'key g'rwire
    in wmap <~~ set'val xval g'owire
 {-# INLINEABLE eval'epx #-}
@@ -260,7 +255,8 @@ eval'epy
 eval'epy wmap Gate {..} =
   let (NIL c val) = wmap ~~ g'rwire
       yval = case val of
-        L p -> nil c . fromIntegral . fromJust . p'y $ p
+        L _ 0 -> die "Error, used (;) on point at infinity"
+        a@L {} -> nil c . fromIntegral . fromJust . p'y . p'from'ul c $ a
         U _ -> die $ "Error, used (;) on non-EC point wire: " ++ w'key g'rwire
    in wmap <~~ set'val yval g'owire
 {-# INLINEABLE eval'epy #-}
@@ -271,12 +267,9 @@ eval'ekg
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'ekg wmap Gate {..} =
-  let (NIL c val) = wmap ~~ g'rwire
-      kg = case val of
-        U v -> NIL c . L . mulg c $ v
-        L _ -> die $ "Error, used ([]) on non-scalar wire: " ++ w'key g'rwire
-   in wmap <~~ set'val kg g'owire
+eval'ekg wmap g =
+  let (NIL c _) = wmap ~~ g'rwire g
+   in eval'scalar (((NIL c . ul'from'p . mulg c) .) . seq) "([])" wmap g
 {-# INLINEABLE eval'ekg #-}
 
 -- | [x,y]
@@ -287,5 +280,5 @@ eval'ecp
   -> Wmap (NIL i r q)
 eval'ecp wmap g =
   let (NIL c _) = wmap ~~ g'rwire g
-   in eval'scalar (((NIL c . L) .) . ap c) "([])" wmap g
+   in eval'scalar (((NIL c . ul'from'p) .) . ap c) "([,])" wmap g
 {-# INLINEABLE eval'ecp #-}

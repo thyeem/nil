@@ -25,10 +25,7 @@ module Nil.Pinocchio where
 
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
-import Control.Parallel
-  ( par
-  , pseq
-  )
+import Control.Parallel (par, pseq)
 import qualified Data.Aeson as J
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
@@ -40,7 +37,14 @@ import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
 import Nil.Data (NIL, UL)
 import Nil.Ecdata (BN254, Fr, G1, G2, bn254'g1, g1, g2)
-import Nil.Eval (extend'circuit, extend'wire, statement, v'fromWmap, wire'vals, wmap'fromList)
+import Nil.Eval
+  ( extend'gate
+  , extend'wire
+  , statement
+  , vec'fromWmap
+  , wire'vals
+  , wmap'fromList
+  )
 import Nil.Field (Primefield)
 import Nil.Lexer (tokenize)
 import Nil.Pairing (pairing)
@@ -73,11 +77,11 @@ import Nil.Utils
  +-----------+----------------------------------------------------+--------+
  | m         | d + n + (# of witness) + 1                         | value  |
  +-----------+----------------------------------------------------+--------+
- | w         | [c0,c1,..,c[m-1]], qap witness of m-degree         | poly   |
+ | w         | [c0,c1,..,c[m-1]], qap witness of (m-1)-degree     | poly   |
  +-----------+----------------------------------------------------+--------+
- | s^i       | [s^0,s^1,..,s^d], (d+1 degree), s from CRS         | poly   |
+ | s^i       | [s^0,s^1,..,s^d], (d-degree), s from CRS           | poly   |
  +-----------+----------------------------------------------------+--------+
- | V, W, Y   | dim of (m x [d+1]) matrices from QAP               |        |
+ | V, W, Y   | dim of (m x d) matrices from QAP                   |        |
  +-----------+----------------------------------------------------+--------+
  | V0        | V[0], 0-th vector of qap'V                         | poly   |
  +-----------+----------------------------------------------------+--------+
@@ -418,15 +422,13 @@ zktest verbose language witnesses instances = do
   when verbose $ do
     stderr mempty
     stderr "Generating zk-proof..."
-  let x'circuit = extend'circuit bn254'g1 circuit
-      x'witness = extend'wire bn254'g1 <$> witnesses
-      out = statement x'witness x'circuit
-      vec'wit = wire'vals x'witness x'circuit
+  let out = statement bn254'g1 witnesses circuit
+      vec'wit = wire'vals bn254'g1 witnesses circuit
       proof = zkprove qap ekey vec'wit
   when verbose $ stderr ("Prover returns: " ++ show out)
 
   -- zk-verify
-  let verified = zkverify proof vkey (v'fromWmap instances)
+  let verified = zkverify proof vkey (vec'fromWmap instances)
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."
@@ -442,12 +444,14 @@ decode'file f =
     <&> decode
     <&> fromRight
       (die $ "Failed to decode data from: " ++ f)
+{-# INLINE decode'file #-}
 
 read'table :: FilePath -> IO (Wmap Fr)
 read'table f =
   L.readFile f >>= \bytes -> case J.decode bytes of
     Just x -> pure (wmap'fromList x)
     Nothing -> die $ "Failed to read table from: " ++ f
+{-# INLINE read'table #-}
 
 instance Pretty EvaluationKey
 

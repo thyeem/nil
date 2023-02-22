@@ -39,7 +39,7 @@ import Nil
   , dot'header
   , err
   , export'graph
-  , extend'circuit
+  , extend'gate
   , extend'wire
   , hex'from'bytes
   , info'io
@@ -51,7 +51,7 @@ import Nil
   , stderr
   , str'from'bytes
   , toxicwaste
-  , v'fromWmap
+  , vec'fromWmap
   , wire'vals
   , wmap'fromList
   , write'dot
@@ -136,10 +136,8 @@ prove Opts {..} = do
   ekey_ <- decode'file ekey :: IO EvaluationKey
   witness_ <- read'table wit :: IO (Wmap Fr)
   let qap = qap'from'circuit circuit_
-      x'circuit = extend'circuit bn254'g1 circuit_
-      x'witness = extend'wire bn254'g1 <$> witness_
-      out = statement x'witness x'circuit
-      vec'wit = wire'vals x'witness x'circuit
+      out = statement bn254'g1 witness_ circuit_
+      vec'wit = wire'vals bn254'g1 witness_ circuit_
       proof = zkprove qap ekey_ vec'wit
       path = takeDirectory ekey
       pfID = hex'from'bytes . sha256 . encode $ proof
@@ -157,7 +155,7 @@ verify Opts {..} = do
   vkey_ <- decode'file vkey :: IO VerificationKey
   instance_ <- read'table inst :: IO (Wmap Fr)
   let claim = w'val $ instance_ ~> "return"
-      verified = zkverify proof_ vkey_ (v'fromWmap instance_)
+      verified = zkverify proof_ vkey_ (vec'fromWmap instance_)
   unless o'quite $ do
     info'io
       ["Statement", "Verified" :: String]

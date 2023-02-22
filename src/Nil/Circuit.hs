@@ -196,46 +196,6 @@ out'wirep Wire {..} = case w'key of
   _ -> False
 {-# INLINE out'wirep #-}
 
-{- | Check if both gate input wires are extended wires
- and'ext'wirep :: Integral a => Wmap a -> Gate a -> Bool
- and'ext'wirep wmap = and' $ ext'wirep . (wmap ~~>)
--}
-
-{- | Check if one of gate input wires is an extended wire
- xor'ext'wirep :: Integral a => Wmap a -> Gate a -> Bool
- xor'ext'wirep wmap = xor' $ ext'wirep . (wmap ~~>)
--}
-
-{- | Check if none of gate input wires is an extended wire
- nor'ext'wirep :: Integral a => Wmap a -> Gate a -> Bool
- nor'ext'wirep wmap = nor' $ ext'wirep . (wmap ~~>)
--}
-
--- | Test logical operator (AND) with a predicate and input wires
-and' :: (Wire r -> Bool) -> Gate r -> Bool
-and' p Gate {..} = p g'lwire && p g'rwire
-{-# INLINE and' #-}
-
--- | Test logical operator (XOR) with a predicate and input wires
-xor' :: (Wire r -> Bool) -> Gate r -> Bool
-xor' p g = not (and' p g) && not (nor' p g)
-{-# INLINE xor' #-}
-
--- | Test logical operator (NOR) with a predicate and input wires
-nor' :: (Wire r -> Bool) -> Gate r -> Bool
-nor' p Gate {..} = not $ p g'lwire || p g'rwire
-{-# INLINE nor' #-}
-
-{- | Classfy input wires satisfying the given predicate: (pass, fail)
-   The result is valid only when applied input wires hold XOR
--}
-either'by :: (Wire r -> Bool) -> Gate r -> (Wire r, Wire r)
-either'by p g@Gate {..}
-  | xor' p g = if p g'lwire then (g'lwire, g'rwire) else (g'rwire, g'lwire)
-  | otherwise =
-      die $
-        unwords ["Error, not XOR between:", w'key g'lwire, "and", w'key g'rwire]
-
 {- | Construct a 'circuit' from 'AST'
 
  @Language -> Lexeme -> AST -> 'Arithmetic Circuit' -> R1CS -> QAP@

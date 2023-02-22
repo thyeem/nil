@@ -8,289 +8,299 @@
 
 module Nil.Sign where
 
--- import Control.DeepSeq (NFData)
--- import Control.Monad (foldM)
--- import Data.ByteString (append)
--- import Data.List (foldl', nub, sortOn)
--- import Data.Map (Map, assocs, elems, member)
--- import Nil.Circuit
--- import Nil.Curve (Curve, Point (..), c'g, toA, (~*))
--- import Nil.Eval (p'from'wire, wire'from'p)
--- import Nil.Field (Field)
--- import Nil.Reorg
---   ( O'table
---   , amp'wirep
---   , entry'wirep
---   , freeze
---   , otab'from'gates
---   , reorg'circuit
---   , shift'wirep
---   )
--- import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, ranf, sha256, tmap)
--- import System.Random (Random)
+import Control.DeepSeq (NFData)
+import Control.Monad (foldM)
+import Data.ByteString (append)
+import Data.List (foldl', nub, sortOn)
+import Data.Map (Map, assocs, elems, member)
+import Nil.Circuit
+import Nil.Curve (Curve, Point (..), c'g, p'curve, toA, (~*))
+import Nil.Data (NIL (NIL), lift, nil)
+import Nil.Eval (extend'gate, extend'wire)
+import Nil.Field (Field)
+import Nil.Reorg
+  ( Omap
+  , amp'wirep
+  , and'
+  , either'by
+  , entry'wirep
+  , freeze
+  , nor'
+  , omap'from'gates
+  , reorg'circuit
+  , shift'wirep
+  , xor'
+  )
+import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, ranf, sha256, tmap)
+import System.Random (Random)
 
--- -- | Multiple-signature object for nil-sign
--- data NilSig i f k = NilSig
---   { nil'hash :: String
---   , nil'key :: NilKey i f k
---   , nil'circuit :: Circuit f
---   }
---   deriving (Eq, Show)
+-- | Aggregable-signature object for nilsign
+data Nilsig i r q p = Nilsig
+  { nil'hash :: String
+  , nil'key :: Nilkey i q p
+  , nil'circuit :: Circuit (NIL i r q)
+  }
+  deriving (Eq, Show)
 
--- instance (Show f, Show k) => Pretty (NilSig i f k)
+instance (Show q, Field q, Show p, Field p, Show r) => Pretty (Nilsig i r q p)
 
--- -- | Aggregable verification key of nilsig
--- type NilKey i f k = (Point i f, Point i k)
+-- | Aggregable verification key of nilsig
+type Nilkey i q p = (Point i q, Point i p)
 
--- instance (Show f, Pretty f, Show k, Pretty k) => Pretty (NilKey i f k) where
---   pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
+instance
+  (Show q, Pretty q, Field q, Show p, Pretty p, Field p)
+  => Pretty (Nilkey i q p)
+  where
+  pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
 
--- -- | Lookup table describing a circuit as DAG
--- type G'table f = Map String [Gate f]
+-- | Map describing a circuit as DAG
+type Gmap a = Map String [Gate a]
 
--- {- | Put an edge record to the graph-table
---  key -> out-wire of [FROM gate]
---  gate -> [TO gate]
--- -}
--- (<<~) :: Eq f => G'table f -> (String, Gate f) -> G'table f
--- (<<~) table (key, gate)
---   | member key table =
---       let gates = table ~> key
---        in table <~ (key, nub $ gate : gates)
---   | otherwise = table <~ (key, [gate])
--- {-# INLINE (<<~) #-}
+{- | Put an edge record to the graph-map
+ key -> out-wire of [FROM gate]
+ gate -> [TO gate]
+-}
+(<<~) :: Eq a => Gmap a -> (String, Gate a) -> Gmap a
+(<<~) map (key, gate)
+  | member key map =
+      let gates = map ~> key
+       in map <~ (key, nub $ gate : gates)
+  | otherwise = map <~ (key, [gate])
+{-# INLINE (<<~) #-}
 
--- -- | Follow a wire to traverse graph
--- (~>>) :: G'table f -> String -> [Gate f]
--- (~>>) table key
---   | member key table = table ~> key
---   | otherwise = die $ "Error, reached a deadend wire: " ++ key
+-- | Follow a wire to traverse graph
+(~>>) :: Gmap a -> String -> [Gate a]
+(~>>) map key
+  | member key map = map ~> key
+  | otherwise = die $ "Error, reached a deadend wire: " ++ key
 
--- -- | Overwrite/replace previous gate with the new evaluated one
--- (<<<) :: Eq f => O'table f -> (String, Gate f) -> O'table f
--- (<<<) table (key, gate)
---   | member key table =
---       let (_, height) = table ~> key
---        in table <~ (key, (gate, height))
---   | otherwise = die $ "Error, not found gate-key: " ++ key
--- {-# INLINE (<<<) #-}
+-- | Overwrite/replace previous gate with the new evaluated one
+(<<<) :: Eq a => Omap a -> (String, Gate a) -> Omap a
+(<<<) map (key, gate)
+  | member key map =
+      let (_, height) = map ~> key
+       in map <~ (key, (gate, height))
+  | otherwise = die $ "Error, not found gate-key: " ++ key
+{-# INLINE (<<<) #-}
 
--- -- | Homomorphically hide using a base point of the given elliptic curve
--- hide :: (Integral f, Field f) => Curve i f -> Wire f -> Wire f
--- hide curve =
---   freeze
---     . wire'from'p
---     . p'from'wire curve
+-- | Eval nil-signature
+verify'sig :: Nilsig i r q p -> Wmap (NIL i r q) -> Wire (NIL i r q)
+verify'sig Nilsig {..} pubs = undefined
 
--- -- | Shift a value of wire over field using crypto-safe random variables
--- shift'wire :: Num f => f -> f -> Wire f -> Wire f
--- shift'wire delta epsilon wire@Wire {..} =
---   freeze
---     . set'val (delta * (w'val + epsilon))
---     $ wire
+-- | Initialize nil-signature
+init'sig
+  :: (Field q, Field p, Eq r, Num r, Show r)
+  => Curve i q
+  -> Curve i p
+  -> Circuit r
+  -> IO (Nilsig i r q p)
+init'sig curve'q curve'p circuit = do
+  reorged@Circuit {..} <- reorg'circuit circuit
+  pure $
+    Nilsig
+      mempty
+      (c'g curve'q, c'g curve'p)
+      (reorged {c'gates = extend'gate curve'q <$> c'gates})
+{-# INLINE init'sig #-}
 
--- -- | Eval nil-signature
--- eval'nilsig :: NilSig i f k -> W'table f -> Wire f
--- eval'nilsig NilSig {..} pubs =
---   foldl' go pubs (c'gates nil'circuit) ~> "return"
---  where
---   go table g@Gate {..} =
---     case g'op of
---       Add -> undefined
---       Mul -> undefined
---       a -> die "Error,"
+{- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
+ Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
+-}
+nilsign
+  :: ( Field q
+     , Bounded q
+     , Random q
+     , Integral q
+     , Eq r
+     , Integral r
+     , Field p
+     , Random r
+     , Bounded r
+     , Field r
+     )
+  => Nilsig i r q p
+  -> Wmap r
+  -> IO (Nilsig i r q p)
+nilsign
+  sig@Nilsig {nil'key = (phi'p, chi'p), ..}
+  secrets = do
+    phi <- ranf
+    chi <- ranf
+    let c = p'curve phi'p
+        x'secrets = extend'wire c <$> secrets
+        omap = omap'from'gates . c'gates $ nil'circuit
+        gmap = gmap'from'omap omap
+        entries = find'entries omap
+    signed <- foldM (sign'gate x'secrets gmap) omap entries
+    let amps = find'amps signed
+        done = foldl' (update'kappa phi chi) signed amps
+    pure $
+      sig
+        { nil'key =
+            ( toA $ phi'p ~* (phi + chi)
+            , toA $ chi'p ~* (phi - chi)
+            )
+        , nil'hash
+        , nil'circuit =
+            nil'circuit {c'gates = (fst <$>) . sortOn snd . elems $ done}
+        }
+{-# INLINE nilsign #-}
 
--- -- | Initialize nil-signature
--- init'nilsig
---   :: (Field f, Field k)
---   => Curve i f
---   -> Curve i k
---   -> Circuit f
---   -> IO (NilSig i f k)
--- init'nilsig curve'f curve'k circuit =
---   NilSig mempty (c'g curve'f, c'g curve'k) <$> reorg'circuit circuit
--- {-# INLINE init'nilsig #-}
+gmap'from'omap :: Eq a => Omap a -> Gmap a
+gmap'from'omap omap =
+  let gates = fst <$> sortOn (negate . snd) (elems omap)
+      go'wire gate gmap wire
+        | out'wirep wire = gmap <<~ (w'key wire, gate)
+        | otherwise = gmap
+      update gmap gate@Gate {..} =
+        foldl' (go'wire gate) gmap [g'lwire, g'rwire]
+   in foldl' update mempty gates
+{-# INLINEABLE gmap'from'omap #-}
 
--- {- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
---  Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
--- -}
--- nilsign
---   :: (Field f, Bounded f, Random f, Integral f)
---   => Curve i f
---   -> NilSig i f k
---   -> W'table f
---   -> IO (NilSig i f k)
--- nilsign
---   curve
---   nilsig@NilSig {nil'key = (point'k, point'q), ..}
---   secrets = do
---     phi <- ranf
---     chi <- ranf
---     let o'tab = otab'from'gates . c'gates $ nil'circuit
---         g'tab = gtab'from'otab o'tab
---         entries = find'entries o'tab
---     signed <- foldM (sign curve secrets g'tab) o'tab entries
---     let amps = find'amps signed
---         done = foldl' (update'kappa phi chi) signed amps
---     pure $
---       nilsig
---         { nil'key =
---             -- ( toA $ point'k .* (phi + chi)
---             -- , toA $ point'q .* (phi - chi)
---             -- )
---             (point'k, point'q)
---         , nil'hash
---         , nil'circuit =
---             nil'circuit {c'gates = (fst <$>) . sortOn snd . elems $ done}
---         }
--- {-# INLINE nilsign #-}
+-- | Find a list of entry gates
+find'entries :: Omap a -> [Gate a]
+find'entries map =
+  [ g | (g, _) <- elems map, g'op g /= End, xor' entry'wirep g
+  ]
+{-# INLINE find'entries #-}
 
--- -- | Find a list of entry gates
--- find'entries :: O'table f -> [Gate f]
--- find'entries table =
---   [ g | (g, _) <- elems table, g'op g /= End, xor' entry'wirep g
---   ]
--- {-# INLINE find'entries #-}
+-- | Find a list of amplifier gates
+find'amps :: Omap a -> [Gate a]
+find'amps map = foldl' go [] (assocs map)
+ where
+  go gates (_, (gate, _))
+    | xor' amp'wirep gate = gate : gates
+    | otherwise = gates
+{-# INLINE find'amps #-}
 
--- -- | Find a list of amplifier gates
--- find'amps :: O'table f -> [Gate f]
--- find'amps table = foldl' go [] (assocs table)
---  where
---   go gates (_, (gate, _))
---     | xor' amp'wirep gate = gate : gates
---     | otherwise = gates
--- {-# INLINE find'amps #-}
+{- | Update kappa value in each amplifier gates and finalize amplifiers
+ Kappa := Pi_j (phi + chi) * (phi - chi)
+-}
+update'kappa
+  :: (Eq r, Num r, Eq q, Integral r, Integral q, Field r, Field q)
+  => r
+  -> r
+  -> Omap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> Omap (NIL i r q)
+update'kappa phi chi omap g@Gate {..} =
+  let (NIL c _) = w'val g'rwire
+      rwire =
+        g'rwire
+          { w'val =
+              w'val g'rwire
+                * nil c (phi + chi)
+                * nil c (phi - chi)
+          }
+   in omap <<< (w'key g'owire, g {g'rwire = rwire})
+{-# INLINE update'kappa #-}
 
--- {- | Update kappa value in each amplifier gates and finalize amplifiers
---  Kappa := Pi_j (phi + chi) * (phi - chi)
--- -}
--- update'kappa :: (Eq f, Num f) => f -> f -> O'table f -> Gate f -> O'table f
--- update'kappa phi chi o'tab g@Gate {..} =
---   let rwire =
---         -- g'rwire
---         -- { w'val = w'val g'rwire * (phi + chi) * (phi - chi)
---         -- }
---         g'rwire
---    in o'tab <<< (w'key g'owire, g {g'rwire = rwire})
--- {-# INLINE update'kappa #-}
+-- | Sign each entry gate assigned for a signer
+sign'gate
+  :: Wmap (NIL i r q)
+  -> Gmap (NIL i r q)
+  -> Omap (NIL i r q)
+  -> Gate (NIL i r q)
+  -> IO (Omap a)
+sign'gate secrets gmap omap g@Gate {..} = undefined
+-- delta <- pure 1 -- ranf
+-- epsilon <- pure 2 -- ranf
+-- let (entry, other) = either'by entry'wirep g
+-- if not (member (w'key entry) secrets) && not (const'wirep entry)
+-- then pure omap -- do not sign secret variables for others
+-- else do
+-- let secret = secrets ~~> entry
+-- randomize = shift'wire delta epsilon
+-- lift = hide curve . randomize
+-- gate = case g'op of
+-- Add ->
+-- let rwire
+-- \| shift'wirep other =
+-- lift $ val'const (negate $ delta * epsilon)
+-- \| otherwise = other
+-- in g {g'lwire = lift secret, g'rwire = rwire}
+-- Mul -> g {g'lwire = randomize secret, g'rwire = other}
+-- a -> die $ "Error, found unexpected gate op: " ++ show a
+-- pure
+-- . update'rho delta g gmap
+-- . update'shift curve delta epsilon g gmap
+-- \$ omap <<< (w'key g'owire, gate)
+{-# INLINEABLE sign'gate #-}
 
--- -- | Sign each entry gate assigned for a signer
--- sign
---   :: (Integral f, Field f, Random f, Bounded f)
---   => Curve i f
---   -> W'table f
---   -> G'table f
---   -> O'table f
---   -> Gate f
---   -> IO (O'table f)
--- sign curve secrets g'tab o'tab g@Gate {..} = do
---   delta <- pure 1 -- ranf
---   epsilon <- pure 2 -- ranf
---   let (entry, other) = either'by entry'wirep g
---   if not (member (w'key entry) secrets) && not (const'wirep entry)
---     then pure o'tab -- do not sign secret variables for others
---     else do
---       let secret = secrets ~~> entry
---           randomize = shift'wire delta epsilon
---           lift = hide curve . randomize
---           gate = case g'op of
---             Add ->
---               let rwire
---                     | shift'wirep other =
---                         lift $ val'const (negate $ delta * epsilon)
---                     | otherwise = other
---                in g {g'lwire = lift secret, g'rwire = rwire}
---             Mul -> g {g'lwire = randomize secret, g'rwire = other}
---             a -> die $ "Error, found unexpected gate op: " ++ show a
---       pure
---         -- . update'rho delta g g'tab
---         . update'shift curve delta epsilon g g'tab
---         $ o'tab <<< (w'key g'owire, gate)
--- {-# INLINEABLE sign #-}
+update'shift
+  :: (Field q, Integral r, Integral q)
+  => r
+  -> r
+  -> Gate (NIL i r q)
+  -> Gmap (NIL i r q)
+  -> Omap (NIL i r q)
+  -> Omap (NIL i r q)
+update'shift delta epsilon g gmap omap
+  | shift'wirep . g'rwire $ g = omap
+  | otherwise =
+      let shift@Gate {..} = get'shift omap gmap g
+          (NIL c _) = w'val g'rwire
+          val = nil c . negate $ delta * epsilon
+          rwire =
+            freeze
+              g'rwire
+                { w'val = case g'op of
+                    Add -> lift val
+                    Mul -> val
+                    _ -> die "Error, unexpected operator"
+                }
+       in omap <<< (w'key g'owire, shift {g'rwire = rwire})
+{-# INLINE update'shift #-}
 
--- update'shift
---   :: (Integral f, Field f)
---   => Curve i f
---   -> f
---   -> f
---   -> Gate f
---   -> G'table f
---   -> O'table f
---   -> O'table f
--- update'shift curve delta epsilon g g'tab o'tab
---   | shift'wirep . g'rwire $ g = o'tab
---   | otherwise =
---       let shift@Gate {..} = get'shift o'tab g'tab g
---           rwire =
---             -- g'rwire
---             -- { w'val = negate $ delta * epsilon
---             -- }
---             g'rwire
---           updater
---             | g'op == Add = hide curve
---             | otherwise = freeze
---        in o'tab <<< (w'key g'owire, shift {g'rwire = updater rwire})
--- {-# INLINE update'shift #-}
+update'rho
+  :: (Field r, Integral r, Integral q, Field q)
+  => r
+  -> Gate (NIL i r q)
+  -> Gmap (NIL i r q)
+  -> Omap (NIL i r q)
+  -> Omap (NIL i r q)
+update'rho delta g gmap omap =
+  let amp@Gate {..} = get'amp gmap g
+      (NIL c _) = w'val g'rwire
+      rwire = g'rwire {w'val = w'val g'rwire * nil c (recip delta)}
+   in omap <<< (w'key g'owire, amp {g'rwire = rwire})
+{-# INLINE update'rho #-}
 
--- update'rho
---   :: (Eq f, Fractional f)
---   => f
---   -> Gate f
---   -> G'table f
---   -> O'table f
---   -> O'table f
--- update'rho delta g g'tab o'tab =
---   let amp@Gate {..} = get'amp g'tab g
---       rwire = g'rwire {w'val = w'val g'rwire * recip delta}
---    in o'tab <<< (w'key g'owire, amp {g'rwire = rwire})
--- {-# INLINE update'rho #-}
+-- | Find the amplifier gate related to the given gate
+get'amp :: Gmap a -> Gate a -> Gate a
+get'amp map g@Gate {..}
+  | amp'wirep g'rwire = g
+  | otherwise = get'amp map (head $ map ~>> w'key g'owire)
+{-# INLINEABLE get'amp #-}
 
--- gtab'from'otab :: Eq f => O'table f -> G'table f
--- gtab'from'otab o'tab =
---   let gates = fst <$> sortOn (negate . snd) (elems o'tab)
---       go'wire gate g'tab wire
---         | out'wirep wire = g'tab <<~ (w'key wire, gate)
---         | otherwise = g'tab
---       update g'tab gate@Gate {..} =
---         foldl' (go'wire gate) g'tab [g'lwire, g'rwire]
---    in foldl' update mempty gates
--- {-# INLINEABLE gtab'from'otab #-}
+-- | Find the shift gate related to the given gate
+get'shift :: Eq a => Omap a -> Gmap a -> Gate a -> Gate a
+get'shift omap gmap g@Gate {..}
+  | xor' entry'wirep g =
+      case g'op of
+        Add
+          | shift'wirep g'rwire -> g
+          | otherwise ->
+              let (ext, _) = either'by out'wirep g
+               in fst $ omap ~> w'key ext
+        Mul ->
+          let next = head $ gmap ~>> w'key g'owire
+              (wire, _) = either'by (/= g'owire) next
+           in fst $ omap ~> w'key wire
+        a -> die $ "Error, found unexpected gate op: " ++ show a
+  | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
+{-# INLINEABLE get'shift #-}
 
--- -- | Find the amplifier gate related to the given gate
--- get'amp :: G'table f -> Gate f -> Gate f
--- get'amp table g@Gate {..}
---   | amp'wirep g'rwire = g
---   | otherwise = get'amp table (head $ table ~>> w'key g'owire)
--- {-# INLINEABLE get'amp #-}
-
--- -- | Find the shift gate related to the given gate
--- get'shift :: Eq f => O'table f -> G'table f -> Gate f -> Gate f
--- get'shift o'tab g'tab g@Gate {..}
---   | xor' entry'wirep g =
---       case g'op of
---         Add
---           | shift'wirep g'rwire -> g
---           | otherwise ->
---               let (ext, _) = either'by out'wirep g
---                in fst $ o'tab ~> w'key ext
---         Mul ->
---           let next = head $ g'tab ~>> w'key g'owire
---               (wire, _) = either'by (/= g'owire) next
---            in fst $ o'tab ~> w'key wire
---         a -> die $ "Error, found unexpected gate op: " ++ show a
---   | otherwise = die $ "Error, not a shifted gate of: " ++ w'key g'owire
--- {-# INLINEABLE get'shift #-}
-
--- -- | Get a hash value from a given circuit
--- hash'circuit :: String -> Circuit f -> String
--- hash'circuit salt Circuit {..} =
---   let from'str = sha256 . bytes'from'str
---       from'ba = foldl1 ((sha256 .) . append)
---       hash'wire Wire {..} = from'str (w'key ++ salt)
---       hash'gate Gate {..} =
---         case g'op of
---           Add -> from'ba $ hash'wire <$> [g'lwire, g'rwire, g'owire]
---           Mul -> from'ba $ hash'wire <$> [g'rwire, g'lwire, g'owire]
---           _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
---    in hex'from'bytes . from'ba $ hash'gate <$> c'gates
--- {-# INLINE hash'circuit #-}
+-- | Get a hash value from a given circuit
+hash'gates :: String -> [Gate a] -> String
+hash'gates salt gates =
+  let from'str = sha256 . bytes'from'str
+      from'ba = foldl1 ((sha256 .) . append)
+      hash'wire Wire {..} = from'str (w'key ++ salt)
+      hash'gate Gate {..} =
+        case g'op of
+          Add -> from'ba $ hash'wire <$> [g'lwire, g'rwire, g'owire]
+          Mul -> from'ba $ hash'wire <$> [g'rwire, g'lwire, g'owire]
+          _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
+   in hex'from'bytes . from'ba $ hash'gate <$> gates
+{-# INLINE hash'gates #-}

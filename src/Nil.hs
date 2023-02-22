@@ -113,21 +113,10 @@ lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
     , "let k = (z + r * e) / s"
-    , "let P = [e]"
-    , "let R = [k]"
-    , "let o = if (:R - r) == 0 then :P else :R"
-    , "return o"
+    , "return k"
     ]
 
 c = compile'language lang :: Circuit Fr
-
-xc = extend'circuit bn254'g1 c
-
-xw = extend'wire bn254'g1 <$> t
-
-out = statement xw xc
-
-vec'wit = wire'vals xw xc
 
 t =
   wmap'fromList
@@ -150,19 +139,10 @@ t =
     ]
     :: Wmap Fr
 
-inst =
-  wmap'fromList
-    [
-      ( "return"
-      , 20546328083791890245710917085664594543309426573230401055874323960053340664311
-      )
-    ,
-      ( "z"
-      , 4025919241471660438673811488519877818316526842848831811191175453074037299584
-      )
-    ]
-    :: Wmap Fr
+rc = reorg'circuit c
 
-zkt = zktest True lang t inst
+p = export'graph "p.pdf" (write'dot dot'header c)
 
-qap = qap'from'circuit c
+q = do
+  dot <- write'dot dot'header <$> reorg'circuit c
+  export'graph "q.pdf" dot

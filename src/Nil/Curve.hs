@@ -27,7 +27,7 @@ module Nil.Curve where
 -- , p'y
 -- , oncurve
 -- , atinf
--- , yfromx
+-- , y'from'x
 -- , findp
 -- , (.*)
 -- , (<.*>)
@@ -233,6 +233,13 @@ p'y = \case
   p -> p'y . toA $ p
 {-# INLINE p'y #-}
 
+p'curve :: Point i f -> Curve i f
+p'curve = \case
+  O -> die "Error, cannot specify a curve from O"
+  A c _ _ -> c
+  J c _ _ _ -> c
+{-# INLINE p'curve #-}
+
 -- | Point scalar multiplication infix operator
 (~*) :: (Field f, Integral a) => Point i f -> a -> Point i f
 (~*) = mulp
@@ -421,15 +428,16 @@ dbljp _ = die "Error, invalid points used"
 {-# INLINEABLE dbljp #-}
 
 {- | Get @y@ coordinate of a @Affine@ point on curve from @x@
-
  Used Tonelli-Shanks method to calculate @Sqrt@ over @/GF(p)/@
 -}
-yfromx :: (Integral f, Field f) => Curve i f -> f -> Maybe (f, f)
-yfromx curve x = case a of
-  Just s -> Just (fromInteger s, fromInteger . negate $ s)
+y'from'x :: (Integral f, Field f) => Curve i f -> f -> Maybe (f, f)
+y'from'x curve x = case a of
+  Just s -> Just . odd'even . fromIntegral $ s
   Nothing -> Nothing
  where
+  odd'even o = if odd o then (o, negate o) else (negate o, o)
   a = sqrt'zpz (toInteger $ (x * x + c'a curve) * x + c'b curve) (char x)
+{-# INLINE y'from'x #-}
 
 -- | Find all points on a given curve using brute-force method
 findp
@@ -442,13 +450,14 @@ findp curve =
           . concat
           $ [ split (x, y, y')
             | (x, Just (y, y')) <-
-                (\x -> (x,) (yfromx curve x)) <%> [minBound .. maxBound]
+                (\x -> (x,) (y'from'x curve x)) <%> [minBound .. maxBound]
             ]
       )
  where
   split (x, y, y')
     | y == zero y = [A curve x y]
     | otherwise = [A curve x y, A curve x y']
+{-# INLINEABLE findp #-}
 
 instance Show f => Show (Curve i f) where
   show = c'name
