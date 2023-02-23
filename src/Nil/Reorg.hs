@@ -169,6 +169,18 @@ frozen'expr :: String
 frozen'expr = "##"
 {-# INLINE frozen'expr #-}
 
+freeze :: Wire a -> Wire a
+freeze = set'expr frozen'expr . set'key const'key
+{-# INLINE freeze #-}
+
+shifter :: Num a => Wire a
+shifter = set'expr shift'expr unit'const
+{-# INLINE shifter #-}
+
+amplifier :: Num a => Wire a
+amplifier = set'expr amp'expr unit'const
+{-# INLINE amplifier #-}
+
 -- | Predicate for a delta-shifter
 shift'wirep :: Wire a -> Bool
 shift'wirep Wire {..} =
@@ -183,6 +195,10 @@ amp'wirep Wire {..} =
     && w'expr == amp'expr
 {-# INLINE amp'wirep #-}
 
+frozen'wirep :: Wire a -> Bool
+frozen'wirep Wire {..} = w'expr == frozen'expr
+{-# INLINE frozen'wirep #-}
+
 entry'wirep :: Wire a -> Bool
 entry'wirep wire =
   and $
@@ -193,22 +209,6 @@ entry'wirep wire =
     ]
       <*> [wire]
 {-# INLINE entry'wirep #-}
-
-frozen'wirep :: Wire a -> Bool
-frozen'wirep Wire {..} = w'expr == frozen'expr
-{-# INLINE frozen'wirep #-}
-
-freeze :: Wire a -> Wire a
-freeze = set'expr frozen'expr . set'key const'key
-{-# INLINE freeze #-}
-
-shifter :: Num a => Wire a
-shifter = set'expr shift'expr unit'const
-{-# INLINE shifter #-}
-
-amplifier :: Num a => Wire a
-amplifier = set'expr amp'expr unit'const
-{-# INLINE amplifier #-}
 
 -- | nilify-circuit
 nilify'circuit :: Num a => Circuit a -> IO (Circuit a)

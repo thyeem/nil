@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -13,6 +15,7 @@ import Control.Monad (foldM, (<=<))
 import Data.ByteString (ByteString, append)
 import Data.List (foldl', nub, sortOn)
 import Data.Map (Map, assocs, elems, member)
+import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point (..), c'g, p'curve, toA, (~*))
 import Nil.Data (NIL (NIL), lift, nil)
@@ -21,18 +24,16 @@ import Nil.Field (Field)
 import Nil.Reorg
   ( Omap
   , amp'wirep
-  , and'
   , either'by
   , entry'wirep
   , freeze
   , nilify'circuit
-  , nor'
   , omap'from'gates
   , reorg'circuit
   , shift'wirep
   , xor'
   )
-import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256, tmap)
+import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256)
 import System.Random (Random)
 
 -- | Aggregable-signature object for nilsign
@@ -41,9 +42,9 @@ data Nilsig i r q p = Nilsig
   , nil'key :: Nilkey i q p
   , nil'circuit :: Circuit (NIL i r q)
   }
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
-instance (Show q, Field q, Show p, Field p, Show r) => Pretty (Nilsig i r q p)
+-- instance (Show q, Field q, Show p, Field p, Show r) => Pretty (Nilsig i r q p)
 
 -- | Aggregable verification key of nilsig
 type Nilkey i q p = (Point i q, Point i p)
@@ -62,25 +63,25 @@ type Gmap a = Map String [Gate a]
  gate -> [TO gate]
 -}
 (<<~) :: Eq a => Gmap a -> (String, Gate a) -> Gmap a
-(<<~) map (key, gate)
-  | member key map =
-      let gates = map ~> key
-       in map <~ (key, nub $ gate : gates)
-  | otherwise = map <~ (key, [gate])
+(<<~) gmap (key, gate)
+  | member key gmap =
+      let gates = gmap ~> key
+       in gmap <~ (key, nub $ gate : gates)
+  | otherwise = gmap <~ (key, [gate])
 {-# INLINE (<<~) #-}
 
 -- | Follow a wire to traverse graph
 (~>>) :: Gmap a -> String -> [Gate a]
-(~>>) map key
-  | member key map = map ~> key
+(~>>) gmap key
+  | member key gmap = gmap ~> key
   | otherwise = die $ "Error, reached a deadend wire: " ++ key
 
 -- | Overwrite/replace previous gate with the new evaluated one
 (<<<) :: Eq a => Omap a -> (String, Gate a) -> Omap a
-(<<<) map (key, gate)
-  | member key map =
-      let (_, height) = map ~> key
-       in map <~ (key, (gate, height))
+(<<<) omap (key, gate)
+  | member key omap =
+      let (_, height) = omap ~> key
+       in omap <~ (key, (gate, height))
   | otherwise = die $ "Error, not found gate-key: " ++ key
 {-# INLINE (<<<) #-}
 
@@ -160,13 +161,13 @@ gmap'from'omap omap =
 
 -- | Find a list of entry gates
 find'entries :: Omap a -> [Gate a]
-find'entries map =
-  [g | (g, _) <- elems map, g'op g /= End, xor' entry'wirep g]
+find'entries omap =
+  [g | (g, _) <- elems omap, g'op g /= End, xor' entry'wirep g]
 {-# INLINE find'entries #-}
 
 -- | Find a list of amplifier gates
 find'amps :: Omap a -> [Gate a]
-find'amps map = foldl' go [] (assocs map)
+find'amps omap = foldl' go [] (assocs omap)
  where
   go gates (_, (gate, _))
     | xor' amp'wirep gate = gate : gates
@@ -247,7 +248,7 @@ update'shift
 update'shift delta epsilon g gmap omap
   | shift'wirep . g'rwire $ g = omap
   | otherwise =
-      let g@Gate {..} = get'shift omap gmap g
+      let gate@Gate {..} = get'shift omap gmap gate
           (NIL c _) = w'val g'rwire
           val =
             (if g'op == Add then lift else id)
@@ -255,14 +256,14 @@ update'shift delta epsilon g gmap omap
               . negate
               $ delta * epsilon
           rwire = freeze g'rwire {w'val = val}
-       in omap <<< (w'key g'owire, g {g'rwire = rwire})
+       in omap <<< (w'key g'owire, gate {g'rwire = rwire})
 {-# INLINE update'shift #-}
 
 -- | Find the amplifier gate related to the given gate
 get'amp :: Gmap a -> Gate a -> Gate a
-get'amp map g@Gate {..}
+get'amp gmap g@Gate {..}
   | amp'wirep g'rwire = g
-  | otherwise = get'amp map (head $ map ~>> w'key g'owire)
+  | otherwise = get'amp gmap (head $ gmap ~>> w'key g'owire)
 {-# INLINEABLE get'amp #-}
 
 -- | Find the shift gate related to the given gate

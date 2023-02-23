@@ -16,11 +16,7 @@ import Nil.Lexer
   , Symbols (..)
   , Token (..)
   )
-import Nil.Utils
-  ( Pretty (..)
-  , die
-  , splitby
-  )
+import Nil.Utils (Pretty (..), die, splitby)
 
 -- | Abstract Syntax Tree (AST)
 data AST

@@ -35,17 +35,8 @@ import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
-import Nil.Data (NIL, UL)
 import Nil.Ecdata (BN254, Fr, G1, G2, bn254'g1, g1, g2)
-import Nil.Eval
-  ( extend'gate
-  , extend'wire
-  , statement
-  , vec'fromWmap
-  , wire'vals
-  , wmap'fromList
-  )
-import Nil.Field (Primefield)
+import Nil.Eval (statement, vec'fromWmap, wire'vals, wmap'fromList)
 import Nil.Lexer (tokenize)
 import Nil.Pairing (pairing)
 import Nil.Parser (parse)

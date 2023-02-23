@@ -1,5 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-
 {- |
  Module      : Nil
  License     : MIT
@@ -31,7 +29,6 @@ module Nil
 where
 
 import Control.Monad ((<=<))
-import Data.Map (elems)
 import Nil.Base
 import Nil.Circuit
 import Nil.Curve
@@ -51,10 +48,6 @@ import Nil.Reorg
 import Nil.Shamir
 import Nil.Sign
 import Nil.Utils
-
-type NP =
-  Primefield
-    21888242871839275222246405745257275088696311157297823662689037894645226208583
 
 -- lang =
 --   unlines
