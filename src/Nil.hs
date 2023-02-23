@@ -30,6 +30,7 @@ module Nil
   )
 where
 
+import Control.Monad ((<=<))
 import Data.Map (elems)
 import Nil.Base
 import Nil.Circuit
@@ -112,37 +113,39 @@ type NP =
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , "let k = (z + r * e) / s"
-    , "return k"
+    , "return e^2 + (e + r) / (z * r * s)"
     ]
 
 c = compile'language lang :: Circuit Fr
 
-t =
-  wmap'fromList
-    [
-      ( "e"
-      , 8464813805670834410435113564993955236359239915934467825032129101731355555480
-      )
-    ,
-      ( "r"
-      , 13405614924655214385005113554925375156635891943694728320775177413191146574283
-      )
-    ,
-      ( "s"
-      , 13078933289364958062289426192340813952257377699664878821853496586753686181509
-      )
-    ,
-      ( "z"
-      , 4025919241471660438673811488519877818316526842848831811191175453074037299584
-      )
-    ]
-    :: Wmap Fr
+e = 8464813805670834410435113564993955236359239915934467825032129101731355555480 :: Fr
 
-rc = reorg'circuit c
+r = 13405614924655214385005113554925375156635891943694728320775177413191146574283 :: Fr
 
-p = export'graph "p.pdf" (write'dot dot'header c)
+s = 13078933289364958062289426192340813952257377699664878821853496586753686181509 :: Fr
+
+z = 4025919241471660438673811488519877818316526842848831811191175453074037299584 :: Fr
+
+t = wmap'fromList [("e", e), ("r", r), ("s", s), ("z", z)] :: Wmap Fr
+
+ret = e ^ 2 + (e + r) / (z * r * s)
+
+out = do
+  r <- reorg'circuit c
+  pure $ eval'circuit bn254'g1 t r ~> return'key
+
+p = export'graph "orig.pdf" (write'dot dot'header c)
 
 q = do
   dot <- write'dot dot'header <$> reorg'circuit c
-  export'graph "q.pdf" dot
+  export'graph "reorg.pdf" dot
+
+n = do
+  dot <- write'dot dot'header <$> (nilify'circuit <=< reorg'circuit $ c)
+  export'graph "nil.pdf" dot
+
+sig = init'sig bn254'g1 bn254'g2 c
+
+omap = omap'from'gates . c'gates . nil'circuit
+
+ff = undefined

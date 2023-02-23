@@ -13,7 +13,6 @@ import Nil.Curve
   , Point (..)
   , c'g
   )
-import Nil.Data (NIL)
 import Nil.Field
   ( Extensionfield (..)
   , Irreduciblepoly (..)

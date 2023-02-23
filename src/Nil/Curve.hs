@@ -12,51 +12,43 @@
 {-# OPTIONS -Wno-unused-top-binds #-}
 
 -- | Defines @Weierstrass Elliptic@ 'Curve' and 'Point' over @/GF(p)/@
-module Nil.Curve where
-
--- ( Point (..)
--- , Curve (..)
--- , c'g
--- , ap
--- , ap'
--- , jp
--- , jp'
--- , toA
--- , toJ
--- , p'x
--- , p'y
--- , oncurve
--- , atinf
--- , y'from'x
--- , findp
--- , (.*)
--- , (<.*>)
--- , addp
--- , dblp
--- , invp
--- , mulp
--- , subp
--- , mulg
--- , apbq'sum
--- , randp
--- , frobp
--- )
+module Nil.Curve
+  ( Point (..)
+  , Curve (..)
+  , c'g
+  , ap
+  , ap'
+  , jp
+  , jp'
+  , toA
+  , toJ
+  , p'x
+  , p'y
+  , p'curve
+  , oncurve
+  , atinf
+  , y'from'x
+  , findp
+  , (~*)
+  , (<~*>)
+  , addp
+  , dblp
+  , invp
+  , mulp
+  , subp
+  , mulg
+  , apbq'sum
+  , randp
+  , frobp
+  )
+where
 
 import Control.DeepSeq (NFData)
 import Data.List (nub)
 import GHC.Generics (Generic)
 import Nil.Base (sqrt'zpz)
-import Nil.Field (Field (..), Primefield)
-import Nil.Utils
-  ( Pretty (..)
-  , die
-  , info
-  , pfold
-  , pzip'with
-  , twocols
-  , (<%>)
-  , (|+|)
-  )
+import Nil.Field (Field (..))
+import Nil.Utils (Pretty (..), die, info, pfold, pzip'with, (<%>), (|+|))
 import System.Random (randomRIO)
 
 {- | Elliptic Curve over @/GF(p)/@ in short Weierstrass form: @y^2 = x^3 + a*x + b@
@@ -465,7 +457,7 @@ instance Show f => Show (Curve i f) where
 instance (Show f, Field f) => Show (Point i f) where
   show = \case
     O -> "O"
-    A _ x y -> unwords [show x, show y]
+    A _ x y -> unlines [show x, show y]
     a -> show . toA $ a
 
 instance (Show f, Pretty f) => Pretty (Curve i f) where

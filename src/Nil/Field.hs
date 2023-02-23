@@ -164,16 +164,6 @@ instance KnownNat p => Enum (Primefield p) where
   fromEnum = fromInteger . toInteger
   {-# INLINE fromEnum #-}
 
-instance KnownNat p => Show (Primefield p) where
-  showsPrec n (P !x) = showString "`" . showsPrec n x
-
-instance KnownNat p => Read (Primefield p) where
-  readsPrec n ('`' : s) = [(pf a, s') | (a, s') <- readsPrec n s]
-  readsPrec _ a = die $ "Failed to read a Primefield element: " ++ a
-
-instance KnownNat p => Pretty (Primefield p) where
-  pretty = show
-
 {- | Extension field, GF(p^k, k > 1)
 
   F = Prime Field of characteristic p (base field)
@@ -193,10 +183,10 @@ instance KnownNat p => Pretty (Primefield p) where
   +----+--------------------------------------------------------------------+
 -}
 data Extensionfield f i = E (Irreduciblepoly f i) [f]
-  deriving (Eq, Ord, Show, Read, Generic, NFData)
+  deriving (Eq, Ord, Generic, NFData)
 
 -- Irreducible polynomial over primefield f
-newtype Irreduciblepoly f i = I [f] deriving (Eq, Ord, Show, Read, Generic, NFData)
+newtype Irreduciblepoly f i = I [f] deriving (Eq, Ord, Generic, NFData)
 
 {- | Construct Extensionfield f i
 
@@ -260,8 +250,24 @@ instance Field f => Fractional (Extensionfield f i) where
     g = head $ fx * x + px * y
   {-# INLINE recip #-}
 
-instance Show f => Pretty (Irreduciblepoly f i) where
-  pretty (I ip) = pretty ip
+instance KnownNat p => Show (Primefield p) where
+  showsPrec n (P !x) = showString "`" . showsPrec n x
+
+instance KnownNat p => Read (Primefield p) where
+  readsPrec n ('`' : s) = [(pf a, s') | (a, s') <- readsPrec n s]
+  readsPrec _ a = die $ "Failed to read a Primefield element: " ++ a
+
+instance KnownNat p => Pretty (Primefield p) where
+  pretty = show
+
+instance Show f => Show (Extensionfield f i) where
+  show (E _ fx) = show fx
 
 instance Show f => Pretty (Extensionfield f i) where
   pretty (E _ fx) = pretty fx
+
+instance Show f => Show (Irreduciblepoly f i) where
+  show (I ip) = show ip
+
+instance Show f => Pretty (Irreduciblepoly f i) where
+  pretty (I ip) = pretty ip

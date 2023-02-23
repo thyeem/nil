@@ -20,55 +20,35 @@ module Nil.Circuit where
 
 import Control.DeepSeq (NFData)
 import Data.Aeson (ToJSON)
-import Data.List
-  ( foldl'
-  , sort
-  )
-import Data.Map
-  ( Map
-  , fromList
-  , insert
-  , member
-  , (!?)
-  )
+import Data.List (foldl', sort)
+import Data.Map (Map, fromList, insert, member, (!?))
 import Data.Maybe (fromMaybe)
 import GHC.Generics (Generic)
-import Nil.Curve (Curve)
-import Nil.Lexer
-  ( Keywords (..)
-  , Ops (..)
-  , Prims (..)
-  )
-import Nil.Parser
-  ( AST (..)
-  , Expr (..)
-  )
-import Nil.Utils
-  ( Pretty (..)
-  , die
-  )
+import Nil.Lexer (Keywords (..), Ops (..), Prims (..))
+import Nil.Parser (AST (..), Expr (..))
+import Nil.Utils (Pretty (..), die)
 
-{- | @Arithmetic@ 'Circuit' over any data type @r@
+{- | @Arithmetic@ 'Circuit' over any data type @a@
  A circuit is simply a compound of gates and wires,
  which can be represented as a /directed acyclic graph/ or @DAG@.
 
  'c'symbols' == ( { symbols for @instance@ }, { symbols for @witness@ } )
 -}
-data Circuit r = Circuit
+data Circuit a = Circuit
   { c'privs :: [String]
   , c'pubs :: [String]
-  , c'gates :: [Gate r]
+  , c'gates :: [Gate a]
   }
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
-instance Show r => Pretty (Circuit r)
+instance Show a => Pretty (Circuit a)
 
 -- | Gates are vertices having several arithmetic operation in Circuit
-data Gate r = Gate
+data Gate a = Gate
   { g'op :: Gateop
-  , g'lwire :: Wire r
-  , g'rwire :: Wire r
-  , g'owire :: Wire r
+  , g'lwire :: Wire a
+  , g'rwire :: Wire a
+  , g'owire :: Wire a
   }
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
@@ -99,36 +79,36 @@ data Gateop
 {- | Wires are edges connecting gates each other with coefficients
  Two input wires (left, right) and one output wire in each gate
 -}
-data Wire r = Wire
+data Wire a = Wire
   { w'key :: String
   , w'expr :: String
   , w'recip :: Bool
-  , w'val :: r
+  , w'val :: a
   }
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
 -- | Map from string keys to wires
-type Wmap r = Map String (Wire r)
+type Wmap a = Map String (Wire a)
 
 -- | Data type for collecting gates while traversing AST
-type State r = ([Gate r], Wmap r)
+type State a = ([Gate a], Wmap a)
 
 (<~) :: Ord k => Map k a -> (k, a) -> Map k a
 (<~) = flip (uncurry insert)
 {-# INLINE (<~) #-}
 
 (~>) :: (Ord k, Show k) => Map k a -> k -> a
-(~>) map key =
-  fromMaybe (die $ "Error, not found key: " ++ show key) (map !? key)
+(~>) map_ key =
+  fromMaybe (die $ "Error, not found key: " ++ show key) (map_ !? key)
 {-# INLINE (~>) #-}
 
 -- | Put a wire to the wire map
-(<~~) :: Wmap r -> Wire r -> Wmap r
+(<~~) :: Wmap a -> Wire a -> Wmap a
 (<~~) wmap wire = wmap <~ (w'key wire, wire)
 {-# INLINE (<~~) #-}
 
 -- | Replace wires in a Wamp with what previously bound wires
-(~~>) :: Wmap r -> Wire r -> Wire r
+(~~>) :: Wmap a -> Wire a -> Wire a
 (~~>) wmap wire@Wire {..}
   | const'wirep wire = wire
   | otherwise = wmap ~> w'key
@@ -150,45 +130,45 @@ out'prefix = '~'
 {-# INLINE out'prefix #-}
 
 -- | Set a given wire's key
-set'key :: String -> Wire r -> Wire r
+set'key :: String -> Wire a -> Wire a
 set'key key wire@Wire {} = wire {w'key = key}
 {-# INLINE set'key #-}
 
 -- | Set a given wire's value
-set'val :: r -> Wire r -> Wire r
+set'val :: a -> Wire a -> Wire a
 set'val val wire@Wire {} = wire {w'val = val}
 {-# INLINE set'val #-}
 
 -- | Set a given wire's recip flag
-set'recip :: Bool -> Wire r -> Wire r
+set'recip :: Bool -> Wire a -> Wire a
 set'recip flag wire@Wire {} = wire {w'recip = flag}
 
 -- | Set a given wire's expression
-set'expr :: String -> Wire r -> Wire r
+set'expr :: String -> Wire a -> Wire a
 set'expr expr wire@Wire {} = wire {w'expr = expr}
 
 -- | Get a unit-value const wire
-unit'const :: Num r => Wire r
+unit'const :: Num a => Wire a
 unit'const = Wire const'key const'key False 1
 {-# INLINE unit'const #-}
 
 -- | Get a unit-value wire with a given key
-unit'var :: Num r => String -> Wire r
+unit'var :: Num a => String -> Wire a
 unit'var key = Wire key key False 1
 {-# INLINE unit'var #-}
 
 -- | Get a const wire of a given value
-val'const :: Num r => r -> Wire r
+val'const :: Num a => a -> Wire a
 val'const val = set'val val unit'const
 {-# INLINE val'const #-}
 
 -- | Predicate for a const-wire
-const'wirep :: Wire r -> Bool
+const'wirep :: Wire a -> Bool
 const'wirep Wire {..} = w'key == const'key
 {-# INLINE const'wirep #-}
 
 -- | Predicate for a out-wire
-out'wirep :: Wire r -> Bool
+out'wirep :: Wire a -> Bool
 out'wirep Wire {..} = case w'key of
   x : _
     | x == out'prefix -> True
@@ -200,7 +180,7 @@ out'wirep Wire {..} = case w'key of
 
  @Language -> Lexeme -> AST -> 'Arithmetic Circuit' -> R1CS -> QAP@
 -}
-circuit'from'ast :: Num r => AST -> Circuit r
+circuit'from'ast :: Num a => AST -> Circuit a
 circuit'from'ast ast =
   Circuit
     { c'pubs = pubs
@@ -225,7 +205,7 @@ symbols'from'ast = \case
 {-# INLINEABLE symbols'from'ast #-}
 
 -- | Initialize circuit parser state
-init'state :: Num r => [String] -> [String] -> State r
+init'state :: Num a => [String] -> [String] -> State a
 init'state pubs privs =
   ( []
   , fromList $
@@ -235,7 +215,7 @@ init'state pubs privs =
 {-# INLINE init'state #-}
 
 -- | Construct Gates by traversing AST
-gates'from'ast :: Num r => State r -> AST -> [Gate r]
+gates'from'ast :: Num a => State a -> AST -> [Gate a]
 gates'from'ast state = \case
   Root _ body out ->
     let statements = reverse $ foldl' go [] [body, out]
@@ -250,7 +230,7 @@ gates'from'ast state = \case
 {-# INLINEABLE gates'from'ast #-}
 
 -- | Convert AST into gates
-conv :: Num r => State r -> AST -> State r
+conv :: Num a => State a -> AST -> State a
 conv state = \case
   Bind a@(Value V {}) b -> conv'expr state (Ebin Assign a b)
   Out Return x ->
@@ -267,7 +247,7 @@ conv state = \case
 {-# INLINEABLE conv #-}
 
 -- | Convert Expr into gates
-conv'expr :: Num r => State r -> Expr -> State r
+conv'expr :: Num a => State a -> Expr -> State a
 conv'expr state = \case
   Value {} -> state
   Euna Minus a -> conv'expr state (Ebin Star (Value (N (-1))) a)
@@ -289,7 +269,7 @@ conv'expr state = \case
 {-# INLINEABLE conv'expr #-}
 
 -- | Convert if-expression into gates
-conv'if :: Num r => State r -> Expr -> Expr -> Expr -> State r
+conv'if :: Num a => State a -> Expr -> Expr -> Expr -> State a
 conv'if state a b c =
   let outer = g'owire . head . fst
       [before'a, after'a, after'b, _] = scanl conv'expr state [a, b, c]
@@ -301,7 +281,7 @@ conv'if state a b c =
 {-# INLINEABLE conv'if #-}
 
 -- | Convert expressions into wires based on the given state
-from'expr :: Num r => State r -> Expr -> Wire r
+from'expr :: Num a => State a -> Expr -> Wire a
 from'expr state = \case
   Value (N n) -> val'const (fromIntegral n)
   Value (V v) -> unit'var v
@@ -311,7 +291,7 @@ from'expr state = \case
 {- | Construct a gate with given wires and add to the given state
  This is tail-call where every recursive 'conv'expr' call ends
 -}
-add'gate :: Num r => Ops -> State r -> Wire r -> Wire r -> State r
+add'gate :: Num a => Ops -> State a -> Wire a -> Wire a -> State a
 add'gate op (gates, wmap) lwire rwire = case op of
   Assign -> (gates, bind'wires wmap lwire rwire)
   _ ->
@@ -355,7 +335,7 @@ gate'op = \case
 {-# INLINE gate'op #-}
 
 -- | Generate an out wire for next gate based on a given accumulated gates
-out'wire :: Num r => [Gate r] -> Wire r
+out'wire :: Num a => [Gate a] -> Wire a
 out'wire = \case
   [] -> unit'var (out'prefix : "1")
   (g : _) -> unit'var (next . w'key . g'owire $ g)
@@ -368,7 +348,7 @@ out'wire = \case
 {-# INLINEABLE out'wire #-}
 
 -- | Bind two wires together and register them to Wmap a
-bind'wires :: Wmap r -> Wire r -> Wire r -> Wmap r
+bind'wires :: Wmap a -> Wire a -> Wire a -> Wmap a
 bind'wires wmap Wire {..} rwire
   | member w'key wmap =
       die . unwords $
@@ -381,14 +361,14 @@ bind'wires wmap Wire {..} rwire
  @[const (&1), instances.., witnesses.., auxiliary symbols (~1,~2,..)..]@
  This is exactly the same as QAP bases
 -}
-wire'keys :: Circuit r -> [String]
+wire'keys :: Circuit a -> [String]
 wire'keys Circuit {..} =
   const'key
     : concat [sort c'pubs, sort c'privs, w'key . g'owire <$> c'gates]
 {-# INLINE wire'keys #-}
 
 -- | Clean up all of wire exprs in circuit
-rm'expr :: Circuit r -> Circuit r
+rm'expr :: Circuit a -> Circuit a
 rm'expr circuit@Circuit {..} =
   let rm'expr'wire = set'expr mempty
       rm'expr'gate gate@Gate {..} =

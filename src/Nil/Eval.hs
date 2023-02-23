@@ -1,6 +1,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 --------------------------------------------------------------------------------
 --- zk-SNARKs circuit evaluator
@@ -8,14 +9,12 @@
 
 module Nil.Eval where
 
-import Control.DeepSeq (NFData)
 import Data.List (foldl')
-import Data.Map (elems, keys)
-import Data.Maybe (fromJust, fromMaybe)
-import Nil.Base (sqrt'zpz)
+import Data.Map (keys)
+import Data.Maybe (fromJust)
 import Nil.Circuit
-import Nil.Curve (Curve (..), Point (..), ap, mulg, p'x, p'y, toA, (~*))
-import Nil.Data (NIL (..), UL (..), nil, p'from'ul, ul'from'p, unil, unlift)
+import Nil.Curve (Curve (..), ap, mulg, p'y)
+import Nil.Data (NIL (..), UL (..), nil, p'from'ul, ul'from'p, unil)
 import Nil.Field (Field)
 import Nil.Utils (blake2b, bytes'from'int'len, die, int'from'bytes)
 
@@ -58,7 +57,7 @@ eval'circuit c wmap Circuit {..} =
    in foldl' eval'gate (extend'wire c <$> wmap) gates
 {-# INLINE eval'circuit #-}
 
--- | Extends a wire to a NIL-type wire
+-- | Extends a wire to a NILdata wire
 extend'wire :: Curve i q -> Wire r -> Wire (NIL i r q)
 extend'wire c w@Wire {..} = w {w'val = nil c w'val}
 {-# INLINE extend'wire #-}
@@ -74,14 +73,14 @@ extend'gate c g@Gate {..} =
 {-# INLINE extend'gate #-}
 
 -- | Get the wire bases vector from Wmap
-vec'fromWmap :: Num r => Wmap r -> [r]
+vec'fromWmap :: Num a => Wmap a -> [a]
 vec'fromWmap wmap =
   w'val . (wmap ~>)
     <$> filter (/= const'key) (keys wmap)
 {-# INLINE vec'fromWmap #-}
 
 -- | Get a Wmap from List in forms of [(String, r)]
-wmap'fromList :: Num r => [(String, r)] -> Wmap r
+wmap'fromList :: Num a => [(String, a)] -> Wmap a
 wmap'fromList =
   foldr
     ( \(key, val) wmap ->
@@ -111,13 +110,9 @@ eval'gate wmap gate@Gate {..} =
     _ -> eval'rop wmap gate
 {-# INLINEABLE eval'gate #-}
 
--- | Evaluate a NIL-wire with a given wmap
-(~~)
-  :: (Integral r, Field r, Integral q, Field q)
-  => Wmap (NIL i r q)
-  -> Wire (NIL i r q)
-  -> NIL i r q
-(~~) wmap wire@Wire {w'key, w'expr} =
+-- | Evaluate a wire with a given Wmap
+(~~) :: Fractional a => Wmap a -> Wire a -> a
+(~~) wmap wire@Wire {w'key} =
   let val
         | const'wirep wire = w'val wire
         | otherwise = w'val wire * w'val (wmap ~> w'key)
@@ -125,12 +120,7 @@ eval'gate wmap gate@Gate {..} =
 {-# INLINE (~~) #-}
 
 -- | Evaluate gate
-eval
-  :: (Integral r, Integral q, Field r, Field q)
-  => (NIL i r q -> NIL i r q -> NIL i r q)
-  -> Wmap (NIL i r q)
-  -> Gate (NIL i r q)
-  -> Wmap (NIL i r q)
+eval :: Fractional a => (a -> a -> a) -> Wmap a -> Gate a -> Wmap a
 eval op wmap Gate {..} =
   let val = (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
    in wmap <~~ set'val val g'owire
@@ -182,7 +172,7 @@ eval'mod wmap g =
 {-# INLINEABLE eval'mod #-}
 
 -- | Evaluate the last gate of circuit
-eval'end :: Wmap (NIL i r q) -> Gate (NIL i r q) -> Wmap (NIL i r q)
+eval'end :: Wmap a -> Gate a -> Wmap a
 eval'end wmap Gate {..} =
   let end = set'key "~end" (wmap ~~> g'rwire)
    in (wmap <~~ end) <~~ set'key return'key end
@@ -269,7 +259,7 @@ eval'ekg
   -> Wmap (NIL i r q)
 eval'ekg wmap g =
   let (NIL c _) = wmap ~~ g'rwire g
-   in eval'scalar (((NIL c . ul'from'p . mulg c) .) . seq) "([])" wmap g
+   in eval'scalar @Integer (((NIL c . ul'from'p . mulg c) .) . seq) "([])" wmap g
 {-# INLINEABLE eval'ekg #-}
 
 -- | [x,y]

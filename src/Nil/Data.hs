@@ -18,7 +18,7 @@ where
 import Control.DeepSeq (NFData)
 import Data.Maybe (fromMaybe)
 import GHC.Generics (Generic)
-import Nil.Curve (Curve, Point (..), ap, c'g, p'x, toA, y'from'x, (~*))
+import Nil.Curve (Curve, Point (..), ap, c'g, toA, y'from'x, (~*))
 import Nil.Field (Field)
 import Nil.Utils (Pretty (..), die)
 
@@ -75,9 +75,9 @@ nil c = NIL c . U
 
 -- | unil
 unil :: (Integral r, Integral q, Field q) => NIL i r q -> r
-unil nil = case unlift nil of
+unil o = case unlift o of
   NIL _ (U a) -> a
-  a -> die "Error, failed to unload from NIL-object"
+  _ -> die "Error, failed to unload from NIL-object"
 {-# INLINE unil #-}
 
 -- | lift
@@ -99,7 +99,7 @@ unlift (NIL c val) = case val of
 ul'from'p :: (Integral q, Field q) => Point i q -> UL r q
 ul'from'p = \case
   O -> L 0 0
-  A c x y -> L x (if even y then 2 else 3)
+  A _ x y -> L x (if even y then 2 else 3)
   a -> ul'from'p (toA a)
 {-# INLINE ul'from'p #-}
 
@@ -118,23 +118,23 @@ p'from'ul c = \case
 
 -- | add
 add :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
-add a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
+add a_@(NIL c a) b_@(NIL _ b) = case (a, b) of
   (U x, U y) -> NIL c . U $ x + y
   (x@L {}, y@L {}) -> NIL c . ul'from'p $ p'from'ul c x + p'from'ul c y
-  _ -> add (lift a) (lift b)
+  _ -> add (lift a_) (lift b_)
 {-# INLINE add #-}
 
 -- | sub
 sub :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
-sub a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
+sub a_@(NIL c a) b_@(NIL _ b) = case (a, b) of
   (U x, U y) -> NIL c . U $ x - y
   (x@L {}, y@L {}) -> NIL c . ul'from'p $ p'from'ul c x - p'from'ul c y
-  _ -> sub (lift a) (lift b)
+  _ -> sub (lift a_) (lift b_)
 {-# INLINE sub #-}
 
 -- | mul
 mul :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
-mul a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
+mul (NIL c a) (NIL _ b) = case (a, b) of
   (U x, U y) -> NIL c . U $ x * y
   (U x, y@L {}) -> NIL c . ul'from'p $ p'from'ul c y ~* x
   (x@L {}, U y) -> NIL c . ul'from'p $ p'from'ul c x ~* y
@@ -152,7 +152,7 @@ negate' (NIL c val) = case val of
 recip' :: (Fractional r, Field q) => NIL i r q -> NIL i r q
 recip' (NIL c val) = case val of
   U a -> NIL c . U . recip $ a
-  a -> die "Error, undefined 'recip' operation on a lifted value"
+  _ -> die "Error, undefined 'recip' operation on a lifted value"
 {-# INLINE recip' #-}
 
 instance (Show r, Show q, Pretty q, Field q) => Pretty (UL r q) where
@@ -161,4 +161,4 @@ instance (Show r, Show q, Pretty q, Field q) => Pretty (UL r q) where
     L a parity -> show (a, parity)
 
 instance (Show r, Show q, Pretty q, Field q) => Pretty (NIL i r q) where
-  pretty (NIL c val) = pretty val
+  pretty (NIL _ val) = pretty val

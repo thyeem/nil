@@ -444,14 +444,12 @@ decode'file f =
     <&> decode
     <&> fromRight
       (die $ "Failed to decode data from: " ++ f)
-{-# INLINE decode'file #-}
 
 read'table :: FilePath -> IO (Wmap Fr)
 read'table f =
   L.readFile f >>= \bytes -> case J.decode bytes of
     Just x -> pure (wmap'fromList x)
     Nothing -> die $ "Failed to read table from: " ++ f
-{-# INLINE read'table #-}
 
 instance Pretty EvaluationKey
 

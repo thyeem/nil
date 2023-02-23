@@ -14,11 +14,7 @@ import Control.Monad.Extra (unlessM)
 import qualified Data.ByteString as B
 import Data.Either (fromRight, isRight)
 import Data.List (intercalate)
-import Data.Store
-  ( PeekException
-  , decode
-  , encode
-  )
+import Data.Store (PeekException, decode, encode)
 import Nil
   ( BN254
   , Circuit

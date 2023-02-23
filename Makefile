@@ -24,11 +24,6 @@ install:
 	make release
 	make deploy
 
-.PHONY: dev
-dev:
-	make build
-	make deploy
-
 .PHONY: deploy
 deploy:
 	cp -f $(shell cabal list-bin $(bin)) app

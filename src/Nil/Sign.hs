@@ -9,8 +9,8 @@
 module Nil.Sign where
 
 import Control.DeepSeq (NFData)
-import Control.Monad (foldM)
-import Data.ByteString (append)
+import Control.Monad (foldM, (<=<))
+import Data.ByteString (ByteString, append)
 import Data.List (foldl', nub, sortOn)
 import Data.Map (Map, assocs, elems, member)
 import Nil.Circuit
@@ -25,13 +25,14 @@ import Nil.Reorg
   , either'by
   , entry'wirep
   , freeze
+  , nilify'circuit
   , nor'
   , omap'from'gates
   , reorg'circuit
   , shift'wirep
   , xor'
   )
-import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, ranf, sha256, tmap)
+import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256, tmap)
 import System.Random (Random)
 
 -- | Aggregable-signature object for nilsign
@@ -95,12 +96,12 @@ init'sig
   -> Circuit r
   -> IO (Nilsig i r q p)
 init'sig curve'q curve'p circuit = do
-  reorged@Circuit {..} <- reorg'circuit circuit
+  nilified@Circuit {..} <- nilify'circuit <=< reorg'circuit $ circuit
   pure $
     Nilsig
       mempty
       (c'g curve'q, c'g curve'p)
-      (reorged {c'gates = extend'gate curve'q <$> c'gates})
+      (nilified {c'gates = extend'gate curve'q <$> c'gates})
 {-# INLINE init'sig #-}
 
 {- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
@@ -160,8 +161,7 @@ gmap'from'omap omap =
 -- | Find a list of entry gates
 find'entries :: Omap a -> [Gate a]
 find'entries map =
-  [ g | (g, _) <- elems map, g'op g /= End, xor' entry'wirep g
-  ]
+  [g | (g, _) <- elems map, g'op g /= End, xor' entry'wirep g]
 {-# INLINE find'entries #-}
 
 -- | Find a list of amplifier gates
@@ -185,13 +185,8 @@ update'kappa
   -> Omap (NIL i r q)
 update'kappa phi chi omap g@Gate {..} =
   let (NIL c _) = w'val g'rwire
-      rwire =
-        g'rwire
-          { w'val =
-              w'val g'rwire
-                * nil c (phi + chi)
-                * nil c (phi - chi)
-          }
+      val = w'val g'rwire * nil c (phi + chi) * nil c (phi - chi)
+      rwire = g'rwire {w'val = val}
    in omap <<< (w'key g'owire, g {g'rwire = rwire})
 {-# INLINE update'kappa #-}
 
@@ -227,31 +222,6 @@ sign'gate secrets gmap omap g@Gate {..} = undefined
 -- \$ omap <<< (w'key g'owire, gate)
 {-# INLINEABLE sign'gate #-}
 
-update'shift
-  :: (Field q, Integral r, Integral q)
-  => r
-  -> r
-  -> Gate (NIL i r q)
-  -> Gmap (NIL i r q)
-  -> Omap (NIL i r q)
-  -> Omap (NIL i r q)
-update'shift delta epsilon g gmap omap
-  | shift'wirep . g'rwire $ g = omap
-  | otherwise =
-      let shift@Gate {..} = get'shift omap gmap g
-          (NIL c _) = w'val g'rwire
-          val = nil c . negate $ delta * epsilon
-          rwire =
-            freeze
-              g'rwire
-                { w'val = case g'op of
-                    Add -> lift val
-                    Mul -> val
-                    _ -> die "Error, unexpected operator"
-                }
-       in omap <<< (w'key g'owire, shift {g'rwire = rwire})
-{-# INLINE update'shift #-}
-
 update'rho
   :: (Field r, Integral r, Integral q, Field q)
   => r
@@ -265,6 +235,28 @@ update'rho delta g gmap omap =
       rwire = g'rwire {w'val = w'val g'rwire * nil c (recip delta)}
    in omap <<< (w'key g'owire, amp {g'rwire = rwire})
 {-# INLINE update'rho #-}
+
+update'shift
+  :: (Field q, Integral r, Integral q)
+  => r
+  -> r
+  -> Gate (NIL i r q)
+  -> Gmap (NIL i r q)
+  -> Omap (NIL i r q)
+  -> Omap (NIL i r q)
+update'shift delta epsilon g gmap omap
+  | shift'wirep . g'rwire $ g = omap
+  | otherwise =
+      let g@Gate {..} = get'shift omap gmap g
+          (NIL c _) = w'val g'rwire
+          val =
+            (if g'op == Add then lift else id)
+              . nil c
+              . negate
+              $ delta * epsilon
+          rwire = freeze g'rwire {w'val = val}
+       in omap <<< (w'key g'owire, g {g'rwire = rwire})
+{-# INLINE update'shift #-}
 
 -- | Find the amplifier gate related to the given gate
 get'amp :: Gmap a -> Gate a -> Gate a
@@ -292,15 +284,15 @@ get'shift omap gmap g@Gate {..}
 {-# INLINEABLE get'shift #-}
 
 -- | Get a hash value from a given circuit
-hash'gates :: String -> [Gate a] -> String
+hash'gates :: ByteString -> [Gate a] -> ByteString
 hash'gates salt gates =
   let from'str = sha256 . bytes'from'str
       from'ba = foldl1 ((sha256 .) . append)
-      hash'wire Wire {..} = from'str (w'key ++ salt)
+      hash'wire wire = from'str (w'key wire) `append` salt
       hash'gate Gate {..} =
         case g'op of
           Add -> from'ba $ hash'wire <$> [g'lwire, g'rwire, g'owire]
-          Mul -> from'ba $ hash'wire <$> [g'rwire, g'lwire, g'owire]
+          Mul -> from'ba $ hash'wire <$> [g'rwire, g'owire, g'lwire]
           _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
-   in hex'from'bytes . from'ba $ hash'gate <$> gates
+   in from'ba $ hash'gate <$> gates
 {-# INLINE hash'gates #-}
