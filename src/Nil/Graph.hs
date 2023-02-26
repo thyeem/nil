@@ -93,14 +93,14 @@ write'gate instances witnesses Gate {..}
     | shift'wirep wire =
         unwords
           [ key wire
-          , "[shape=egg,color=salmon,fontsize=18,"
+          , "[shape=egg,style=filled,fillcolor=none,fontsize=18,"
               ++ "label=<-&delta;<sub>i</sub>&epsilon;<sub>i</sub>>];"
           ]
     | amp'wirep wire =
         unwords
           [ key wire
-          , "[shape=egg,color=orange,fontsize=18,"
-              ++ "label=<&Pi;<sub>ij</sub>&kappa;<sub>j</sub>&rho;<sub>ij</sub>>];"
+          , "[shape=egg,style=filled,fillcolor=lightcyan,fontsize=18,"
+              ++ "label=<&Pi;<sub>ij</sub>&phi;<sub>j</sub>&rho;<sub>ij</sub>>];"
           ]
     | const'wirep wire =
         unwords

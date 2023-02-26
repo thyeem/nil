@@ -235,10 +235,13 @@ conv state = \case
   Bind a@(Value V {}) b -> conv'expr state (Ebin Assign a b)
   Out Return x ->
     let (gates, wmap) = conv'expr state x
+        latest'outwire
+          | null gates = die "Error, not found gate. There must be at least one."
+          | otherwise = g'owire . head $ gates
      in ( Gate
             End
             (unit'var return'key)
-            (g'owire . head $ gates)
+            latest'outwire
             (unit'var $ out'prefix : "end")
             : gates
         , wmap

@@ -106,7 +106,7 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , "return e^2 + (e + r) / (z * r * s)"
+    , "return e^2 + (e + (r + s))^2 / (z * r * s)"
     ]
 
 c = compile'language lang :: Circuit Fr
@@ -142,3 +142,38 @@ sig = init'sig bn254'g1 bn254'g2 c
 omap = omap'from'gates . c'gates . nil'circuit
 
 ff = undefined
+
+-- dummy sign test
+
+tt = do
+  let w = 1 :: Fr
+  a@(aw, ad, ae) <- triple_ 1
+  let shift_a = shift_ ad ae
+  let net_a = lift_ (w * ad)
+  -- pure $ lift_ aw + shift_a == net_a
+
+  b@(bw, bd, be) <- triple_ aw
+  let shift_b = (shift_a ~* bd) + shift_ bd be
+  let net_b = lift_ (w * ad * bd)
+
+  c@(cw, cd, ce) <- triple_ bw
+  let shift_c = (shift_b ~* cd) + shift_ cd ce
+  let net_c = lift_ (w * ad * bd * cd)
+
+  -- pure $ lift_ cw + shift_c == net_c
+
+  let secret = 123328478237492374239847123123 :: Fr
+  s@(sw, sd, se) <- triple_ secret
+  let entry = sw * cw
+  let shift_s = shift_c ~* sw + lift_ (-ad * bd * cd * sd * se)
+  let net_s = lift_ (secret * ad * bd * cd * sd)
+  pure $ lift_ entry + shift_s == net_s
+
+shift_ delta epsilon = c'g bn254'g1 ~* (-delta * epsilon)
+
+lift_ = (c'g bn254'g1 ~*)
+
+triple_ w = do
+  d <- ranf :: IO Fr
+  e <- ranf :: IO Fr
+  pure (d * (w + e), d, e)

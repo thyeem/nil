@@ -266,6 +266,11 @@ get'amp gmap g@Gate {..}
   | otherwise = get'amp gmap (head $ gmap ~>> w'key g'owire)
 {-# INLINEABLE get'amp #-}
 
+entry'amp'gatep :: Omap a -> Gate a -> Bool
+entry'amp'gatep omap g@Gate {}
+  | xor' amp'wirep g = undefined
+  | otherwise = die "Error,"
+
 -- | Find the shift gate related to the given gate
 get'shift :: Eq a => Omap a -> Gmap a -> Gate a -> Gate a
 get'shift omap gmap g@Gate {..}

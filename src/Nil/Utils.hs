@@ -299,9 +299,9 @@ info'io :: [String] -> [String] -> IO ()
 info'io = (putStrLn .) . info
 {-# INLINE info'io #-}
 
--- | Generate a random element except for additive identity
+-- | Generate a random element except for additive/multiplicative identity
 ranf :: (Num f, Random f, Bounded f) => IO f
-ranf = randomRIO (minBound + 1, maxBound - 1)
+ranf = randomRIO (minBound + 2, maxBound - 1)
 
 -- | Random sampling of k from [p]
 sample :: [p] -> Int -> IO [p]
