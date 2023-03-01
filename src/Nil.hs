@@ -165,7 +165,8 @@ tt = do
   let secret = 123328478237492374239847123123 :: Fr
   s@(sw, sd, se) <- triple_ secret
   let entry = sw * cw
-  let shift_s = shift_c ~* sw + lift_ (-ad * bd * cd * sd * se)
+  -- let shift_s = shift_c ~* sw + lift_ (-ad * bd * cd * sd * se)
+  let shift_s = shift_c ~* sw + net_c ~* (-sd * se)
   let net_s = lift_ (secret * ad * bd * cd * sd)
   pure $ lift_ entry + shift_s == net_s
 

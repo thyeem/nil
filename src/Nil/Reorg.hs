@@ -82,7 +82,7 @@ tip'cut omap key =
 {-# INLINE tip'cut #-}
 
 -- | nil-circuit
-reorg'circuit :: (Eq a, Num a, Show a) => Circuit a -> IO (Circuit a)
+reorg'circuit :: (Eq a, Num a) => Circuit a -> IO (Circuit a)
 reorg'circuit circuit@Circuit {..} = do
   let key = w'key . g'owire . last $ c'gates
       omap = omap'from'gates c'gates
@@ -103,7 +103,7 @@ omap'from'gates = foldl' update mempty
 {-# INLINE omap'from'gates #-}
 
 -- | Reconstruct gates and wires of a given circuit for use of nilsign
-reorg :: (Eq a, Num a, Show a) => Omap a -> String -> IO [Gate a]
+reorg :: (Eq a, Num a) => Omap a -> String -> IO [Gate a]
 reorg omap key
   | member key omap = do
       let (g@Gate {..}, _) = omap ~> key

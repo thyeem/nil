@@ -119,11 +119,16 @@ eval'gate wmap gate@Gate {..} =
    in if w'recip wire then recip val else val
 {-# INLINE (~~) #-}
 
+-- | Evaluate a wire with a given weight then return the wire
+(~~~) :: Num a => a -> Wire a -> Wire a
+(~~~) val wire@Wire {w'val} = set'val (val * w'val) wire
+{-# INLINE (~~~) #-}
+
 -- | Evaluate gate
 eval :: Fractional a => (a -> a -> a) -> Wmap a -> Gate a -> Wmap a
 eval op wmap Gate {..} =
   let val = (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
-   in wmap <~~ set'val val g'owire
+   in wmap <~~ (val ~~~ g'owire)
 {-# INLINEABLE eval #-}
 
 -- | Evaluate only when both wires are scalars
@@ -147,7 +152,7 @@ eval'scalar op label wmap Gate {..} =
               ]
       lval = val g'lwire
       rval = val g'rwire
-   in wmap <~~ set'val (op lval rval) g'owire
+   in wmap <~~ (op lval rval ~~~ g'owire)
 {-# INLINEABLE eval'scalar #-}
 
 eval'exp
@@ -194,7 +199,7 @@ eval'hash wmap Gate {..} =
           . bytes'from'int'len 32
           . fromIntegral
           . unil
-   in wmap <~~ set'val (hash $ wmap ~~ g'rwire) g'owire
+   in wmap <~~ (hash (wmap ~~ g'rwire) ~~~ g'owire)
 {-# INLINEABLE eval'hash #-}
 
 -- | Evalate gates of relational operators
@@ -209,7 +214,7 @@ eval'rop wmap Gate {..} =
         if (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
           then nil c 1
           else nil c 0
-   in wmap <~~ set'val val g'owire
+   in wmap <~~ (val ~~~ g'owire)
  where
   op = case g'op of
     GT' -> (>)
@@ -233,7 +238,7 @@ eval'epx wmap Gate {..} =
         L _ 0 -> die "Error, used (:) on point at infinity"
         L x _ -> nil c . fromIntegral $ x
         U _ -> die $ "Error, used (:) on non-EC point wire: " ++ w'key g'rwire
-   in wmap <~~ set'val xval g'owire
+   in wmap <~~ (xval ~~~ g'owire)
 {-# INLINEABLE eval'epx #-}
 
 -- | Evaluate operator of getting y-coordinate from elliptic curve points
@@ -248,7 +253,7 @@ eval'epy wmap Gate {..} =
         L _ 0 -> die "Error, used (;) on point at infinity"
         a@L {} -> nil c . fromIntegral . fromJust . p'y . p'from'ul c $ a
         U _ -> die $ "Error, used (;) on non-EC point wire: " ++ w'key g'rwire
-   in wmap <~~ set'val yval g'owire
+   in wmap <~~ (yval ~~~ g'owire)
 {-# INLINEABLE eval'epy #-}
 
 -- | [k]G

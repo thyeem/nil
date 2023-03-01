@@ -9,8 +9,10 @@ module Nil.Field
   ( Field (..)
   , Primefield (..)
   , pf
+  , unpf
   , Extensionfield (..)
   , ef
+  , unef
   , Irreduciblepoly (..)
   )
 where
@@ -78,6 +80,10 @@ pf :: KnownNat p => Integer -> Primefield p
 pf n = f where f = P $ n `mod` char f
 {-# INLINEABLE pf #-}
 
+unpf :: KnownNat p => Primefield p -> Integer
+unpf (P n) = n
+{-# INLINEABLE unpf #-}
+
 instance KnownNat p => Field (Primefield p) where
   char = natVal
   {-# INLINE char #-}
@@ -124,7 +130,7 @@ instance KnownNat p => Fractional (Primefield p) where
   fromRational = undefined
 
 instance KnownNat p => Integral (Primefield p) where
-  toInteger (P n) = n
+  toInteger = unpf
   {-# INLINE toInteger #-}
 
   quotRem (P !a) (P !b) = (pf $ quot a b, pf $ rem a b)
@@ -202,6 +208,10 @@ ef
 ef p@(I !px) !fx = E p fx' where (_, fx') = fx |/ px
 {-# INLINEABLE ef #-}
 
+unef :: (Eq f, Fractional f, Field f) => Extensionfield f i -> [f]
+unef (E _ fx) = fx
+{-# INLINEABLE unef #-}
+
 instance Field f => Semigroup (Extensionfield f i) where
   (<>) = (*)
 
@@ -251,7 +261,7 @@ instance Field f => Fractional (Extensionfield f i) where
   {-# INLINE recip #-}
 
 instance KnownNat p => Show (Primefield p) where
-  showsPrec n (P !x) = showString "`" . showsPrec n x
+  showsPrec n p = showString "`" . showsPrec n (unpf p)
 
 instance KnownNat p => Read (Primefield p) where
   readsPrec n ('`' : s) = [(pf a, s') | (a, s') <- readsPrec n s]
@@ -260,11 +270,11 @@ instance KnownNat p => Read (Primefield p) where
 instance KnownNat p => Pretty (Primefield p) where
   pretty = show
 
-instance Show f => Show (Extensionfield f i) where
-  show (E _ fx) = show fx
+instance (Show f, Field f) => Show (Extensionfield f i) where
+  show = show . unef
 
-instance Show f => Pretty (Extensionfield f i) where
-  pretty (E _ fx) = pretty fx
+instance (Show f, Field f) => Pretty (Extensionfield f i) where
+  pretty = pretty . unef
 
 instance Show f => Show (Irreduciblepoly f i) where
   show (I ip) = show ip
