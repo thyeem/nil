@@ -18,7 +18,7 @@ import Data.Map (Map, assocs, elems, member)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point (..), c'g, p'curve, toA, (~*))
-import Nil.Data (NIL (NIL), lift, nil, unil)
+import Nil.Data (NIL (NIL), lift, nil, unil, unitp)
 import Nil.Eval (extend'gate, extend'wire)
 import Nil.Field (Field)
 import Nil.Reorg
@@ -77,12 +77,12 @@ type Gmap a = Map String [Gate a]
   | otherwise = die $ "Error, not found wire-key or reached a deadend: " ++ key
 
 -- | Overwrite/replace previous gate with the new evaluated one
-(<<<) :: Eq a => Omap a -> (String, Gate a) -> Omap a
-(<<<) omap (key, gate)
-  | member key omap =
-      let (_, height) = omap ~> key
-       in omap <~ (key, (gate, height))
-  | otherwise = die $ "Error, not found gate-key: " ++ key
+(<<<) :: Eq a => Omap a -> Gate a -> Omap a
+(<<<) omap gate@Gate {g'owire = Wire {w'key}}
+  | member w'key omap =
+      let (_, height) = omap ~> w'key
+       in omap <~ (w'key, (gate, height))
+  | otherwise = die $ "Error, not found gate-key: " ++ w'key
 {-# INLINE (<<<) #-}
 
 -- | Eval nil-signature
@@ -181,7 +181,7 @@ find'amps omap = foldl' go [] (assocs omap)
     | otherwise = gates
 {-# INLINE find'amps #-}
 
--- | Global update of phi-coefficient in each entry amplifier gates
+-- | Global update of phi for each principal amplifiers
 update'phi
   :: (Integral q, Field q, Random r, Bounded r, Integral r, Field r)
   => r
@@ -189,15 +189,15 @@ update'phi
   -> Gate (NIL i r q)
   -> IO (Omap (NIL i r q))
 update'phi gamma omap g@Gate {..}
-  | entry'amp'gatep omap g = do
+  | prin'amp'p omap g = do
       let (NIL c _) = w'val g'rwire
           val = w'val g'rwire * nil c gamma
           rwire = g'rwire {w'val = val}
-      pure $ omap <<< (w'key g'owire, g {g'rwire = rwire})
+      pure $ omap <<< g {g'rwire = rwire}
   | otherwise = backprop'beta omap g
 {-# INLINE update'phi #-}
 
--- | Update non-entry amp with random beta and then backpropagate it
+-- | Update non-principal amp with random beta and then backpropagate it
 backprop'beta
   :: (Integral q, Field q, Random r, Bounded r, Integral r, Field r)
   => Omap (NIL i r q)
@@ -210,7 +210,7 @@ backprop'beta omap g = do
       update rand m Gate {..} =
         let val = w'val g'rwire * nil c rand
             rwire = g'rwire {w'val = val}
-         in m <<< (w'key g'owire, g {g'rwire = rwire})
+         in m <<< g {g'rwire = rwire}
   pure $ foldl' (update (recip beta)) (update beta omap g) amps
 {-# INLINE backprop'beta #-}
 
@@ -226,41 +226,20 @@ sign'gate wmap gmap omap g@Gate {..} = do
   delta <- ranf
   epsilon <- ranf
   let (entry, other) = either'by entry'wirep g
-      (NIL c _) = w'val entry
-  if member (w'key entry) wmap && not (const'wirep entry)
-    then do
-      -- when entries for signer's own
-      let secret = wmap ~~> entry
-          lval = w'val g'lwire * (nil c delta * (w'val secret + nil c epsilon))
-          lwire = g'lwire {w'val = lval}
-          -- rwire =
-          -- if shift'wirep other
-          -- then g'rwire {w'val = lift . nil c $ -delta * epsilon}
-          -- else other
-          gate = g {g'lwire = lwire, g'rwire = other}
-
-          shifter = get'shifter omap gmap g
-      pure
-        . update'rho (recip delta) g gmap
-        . update'shifter delta epsilon g gmap
-        $ omap <<< (w'key g'owire, gate)
-    else do
-      -- when entries for others
-      undefined
+      entry'val@(NIL c _) = w'val entry
+      owner'p = member (w'key entry) wmap && not (const'wirep entry)
+      tampered'p = not . unitp . w'val $ entry
+      sigma =
+        if owner'p
+          then entry'val * (nil c delta * (w'val (wmap ~~> entry) + nil c epsilon))
+          else nil c delta * (entry'val + nil c epsilon)
+      lwire = (if owner'p then freeze else id) $ entry {w'val = sigma}
+      gate = g {g'lwire = lwire, g'rwire = other}
+  pure
+    . update'rho (recip delta) gate gmap
+    . update'shifter owner'p tampered'p entry'val delta epsilon gate gmap
+    $ omap <<< gate
 {-# INLINEABLE sign'gate #-}
-
--- shift'wire
--- :: (Integral r, Integral q, Integral q, Field r, Field q)
--- => r
--- -> r
--- -> Wire (NIL i r q)
--- -> Wire (NIL i r q)
--- shift'wire delta epsilon wire@Wire {..} =
--- let (NIL c _) = w'val
--- in wire {w'val = nil c delta * (w'val + nil c epsilon)}
-
--- lift'wire :: (Field q, Integral r, Integral q) => Wire (NIL i r q) -> Wire (NIL i r q)
--- lift'wire wire = wire {w'val = lift . w'val $ wire}
 
 -- | Local update of the involved amplifier gate by normalizing it
 update'rho
@@ -274,29 +253,34 @@ update'rho rho g gmap omap =
   let amp@Gate {..} = next'amp gmap g
       (NIL c _) = w'val g'rwire
       rwire = g'rwire {w'val = w'val g'rwire * nil c rho}
-   in omap <<< (w'key g'owire, amp {g'rwire = rwire})
+   in omap <<< amp {g'rwire = rwire}
 {-# INLINE update'rho #-}
 
 update'shifter
-  :: (Field q, Integral r, Integral q)
-  => r
-  -> r
-  -> Gate (NIL i r q)
+  :: (Integral r, Field r, Integral q, Field q)
+  => Bool -- Is the signer's own entry?
+  -> Bool -- Is the entry tampered?
+  -> NIL i r q -- previous entry value
+  -> r -- delta
+  -> r -- epsilon
+  -> Gate (NIL i r q) -- gate starts from
   -> Gmap (NIL i r q)
   -> Omap (NIL i r q)
   -> Omap (NIL i r q)
-update'shifter delta epsilon g gmap omap
-  | shift'wirep . g'rwire $ g = omap
-  | otherwise =
-      let gate@Gate {..} = get'shifter omap gmap gate
-          (NIL c _) = w'val g'rwire
-          val =
-            (if g'op == Add then lift else id)
-              . nil c
-              . negate
-              $ delta * epsilon
-          rwire = freeze g'rwire {w'val = val}
-       in omap <<< (w'key g'owire, gate {g'rwire = rwire})
+update'shifter owner'p tampered'p entry'val delta epsilon g gmap omap =
+  let sh@Gate {g'rwire = shifter} = get'shifter omap gmap g
+      shifter'val@(NIL c _) = w'val shifter
+      rval
+        | tampered'p =
+            if owner'p
+              then
+                let net'val = entry'val + shifter'val
+                    sigma = w'val (g'lwire g)
+                 in shifter'val * sigma + (entry'val * nil c (-delta * epsilon))
+              else (shifter'val * nil c delta) + nil c (-delta * epsilon)
+        | otherwise = nil c $ -delta * epsilon
+      rwire = (if owner'p then freeze else id) $ shifter {w'val = rval}
+   in omap <<< sh {g'rwire = rwire}
 {-# INLINE update'shifter #-}
 
 -- | Find next amplifier gate directly involved with the given gate
@@ -320,9 +304,23 @@ prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
     | otherwise = []
 {-# INLINE prev'amps #-}
 
--- | Check if the given amplifier is an entry-amplifier (1st-amp from entries)
-entry'amp'gatep :: Omap a -> Gate a -> Bool
-entry'amp'gatep omap g
+-- | Find the shifter gate involved in a given entry gate
+get'shifter :: Eq a => Omap a -> Gmap a -> Gate a -> Gate a
+get'shifter omap gmap g@Gate {..} =
+  case g'op of
+    Add
+      | shift'wirep g'rwire -> g
+      | otherwise -> die $ "Error, no shifter: " ++ w'key g'lwire
+    Mul ->
+      let unshifter = head $ gmap ~>> w'key g'owire
+          (shifter'out, _) = either'by (/= g'owire) unshifter
+       in fst $ omap ~> w'key shifter'out
+    a -> die $ "Error, found unexpected gate op: " ++ show a
+{-# INLINEABLE get'shifter #-}
+
+-- | Check if the given amp is one of principal amps
+prin'amp'p :: Omap a -> Gate a -> Bool
+prin'amp'p omap g
   | xor' amp'wirep g = find (g'lwire g)
   | otherwise = die $ "Error, not amplifier wire" ++ w'key (g'rwire g)
  where
@@ -331,23 +329,7 @@ entry'amp'gatep omap g
         let (Gate {..}, _) = omap ~> w'key
          in not (amp'wirep g'rwire) && (find g'lwire && find g'rwire)
     | otherwise = True
-{-# INLINE entry'amp'gatep #-}
-
--- | Find the shifter gate related to the given entry gate
-get'shifter :: Eq a => Omap a -> Gmap a -> Gate a -> Gate a
-get'shifter omap gmap g@Gate {..}
-  | xor' entry'wirep g =
-      case g'op of
-        Add
-          | shift'wirep g'rwire -> g
-          | otherwise -> die $ "Error, no shifter: " ++ w'key g'lwire
-        Mul ->
-          let next = head $ gmap ~>> w'key g'owire
-              (wire, _) = either'by (/= g'owire) next
-           in fst $ omap ~> w'key wire
-        a -> die $ "Error, found unexpected gate op: " ++ show a
-  | otherwise = die $ "Error, not an entry gate: " ++ w'key g'lwire
-{-# INLINEABLE get'shifter #-}
+{-# INLINE prin'amp'p #-}
 
 -- | Get a hash value from a given circuit
 hash'gates :: ByteString -> [Gate a] -> ByteString
