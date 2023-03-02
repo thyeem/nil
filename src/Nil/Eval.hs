@@ -179,7 +179,7 @@ eval'mod wmap g =
 -- | Evaluate the last gate of circuit
 eval'end :: Wmap a -> Gate a -> Wmap a
 eval'end wmap Gate {..} =
-  let end = set'key "~end" (wmap ~~> g'rwire)
+  let end = set'key end'key (wmap ~~> g'rwire)
    in (wmap <~~ end) <~~ set'key return'key end
 {-# INLINEABLE eval'end #-}
 

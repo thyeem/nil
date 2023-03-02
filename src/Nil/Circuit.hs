@@ -114,15 +114,20 @@ type State a = ([Gate a], Wmap a)
   | otherwise = wmap ~> w'key
 {-# INLINE (~~>) #-}
 
--- | The name of specially prepared wire representing constant basis
+-- | The name prepared wire representing constant basis
 const'key :: String
 const'key = "&1"
 {-# INLINE const'key #-}
 
--- | The name of specially prepared wire representing end node
+-- | The name prepared wire representing end node
 return'key :: String
 return'key = "return"
 {-# INLINE return'key #-}
+
+-- | The name prepared wire representing outwire of end node
+end'key :: String
+end'key = "~end"
+{-# INLINE end'key #-}
 
 -- | Name prefix for auxiliary variables
 out'prefix :: Char

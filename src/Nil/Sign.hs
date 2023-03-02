@@ -207,10 +207,12 @@ backprop'beta omap g = do
   beta <- ranf
   let (NIL c _) = w'val (g'rwire g)
       amps = prev'amps omap g
-      update rand m Gate {..} =
-        let val = w'val g'rwire * nil c rand
-            rwire = g'rwire {w'val = val}
-         in m <<< g {g'rwire = rwire}
+      update rand m gate@Gate {..}
+        | final'amp'p m gate = m
+        | otherwise =
+            let val = w'val g'rwire * nil c rand
+                rwire = g'rwire {w'val = val}
+             in m <<< g {g'rwire = rwire}
   pure $ foldl' (update (recip beta)) (update beta omap g) amps
 {-# INLINE backprop'beta #-}
 
@@ -317,6 +319,11 @@ get'shifter omap gmap g@Gate {..} =
        in fst $ omap ~> w'key shifter'out
     a -> die $ "Error, found unexpected gate op: " ++ show a
 {-# INLINEABLE get'shifter #-}
+
+final'amp'p :: Omap a -> Gate a -> Bool
+final'amp'p omap g =
+  let (Gate {g'rwire = Wire {w'key = amp'key}}, _) = omap ~> end'key
+   in w'key (g'owire g) == amp'key
 
 -- | Check if the given amp is one of principal amps
 prin'amp'p :: Omap a -> Gate a -> Bool
