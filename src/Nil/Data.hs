@@ -6,7 +6,6 @@
 module Nil.Data
   ( nil
   , unil
-  , unitp
   , NIL (..)
   , UL (..)
   , lift
@@ -95,11 +94,6 @@ unlift (NIL c val) = case val of
   L a _ -> NIL c . U . fromIntegral $ a
   a -> NIL c a
 {-# INLINE unlift #-}
-
-unitp :: (Eq r, Num r) => NIL i r q -> Bool
-unitp = \case
-  NIL _ (U 1) -> True
-  _ -> False
 
 -- | Encode EC point to NILdata
 ul'from'p :: (Integral q, Field q) => Point i q -> UL r q
