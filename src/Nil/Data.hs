@@ -6,6 +6,8 @@
 module Nil.Data
   ( nil
   , unil
+  , nil'
+  , unil'
   , NIL (..)
   , UL (..)
   , lift
@@ -68,31 +70,45 @@ instance
   where
   a <= b = unil a <= unil b
 
--- | nil
+-- | Encode NIL object from scalar
 nil :: Curve i q -> r -> NIL i r q
 nil c = NIL c . U
 {-# INLINE nil #-}
 
--- | unil
+-- | Encode NIL object from EC point
+nil'
+  :: (Integral q, Field q, Field q)
+  => Curve i q
+  -> Point i q
+  -> NIL i r q
+nil' c = NIL c . ul'from'p
+{-# INLINE nil' #-}
+
+-- | Decode NIL object to scalar
 unil :: (Integral r, Integral q, Field q) => NIL i r q -> r
 unil o = case unlift o of
   NIL _ (U a) -> a
   _ -> die "Error, failed to unload from NIL-object"
 {-# INLINE unil #-}
 
+-- | Decode NIL object to EC point
+unil' :: (Integral q, Integral q, Field q) => NIL i r q -> Point i q
+unil' (NIL c val) = p'from'ul c val
+{-# INLINE unil' #-}
+
 -- | lift
 lift :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q
-lift (NIL c val) = case val of
-  U a -> NIL c . ul'from'p $ c'g c ~* a
-  a -> NIL c a
+lift o@(NIL c val) = case val of
+  U a -> nil' c $ c'g c ~* a
+  _ -> o
 {-# INLINE lift #-}
 
 -- | unlift
 unlift :: (Integral r, Integral q, Field q) => NIL i r q -> NIL i r q
-unlift (NIL c val) = case val of
-  L _ 0 -> NIL c . U $ 0
-  L a _ -> NIL c . U . fromIntegral $ a
-  a -> NIL c a
+unlift o@(NIL c val) = case val of
+  L _ 0 -> nil c 0
+  L a _ -> nil c . fromIntegral $ a
+  _ -> o
 {-# INLINE unlift #-}
 
 -- | Encode EC point to NILdata
@@ -118,40 +134,40 @@ p'from'ul c = \case
 
 -- | add
 add :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
-add a_@(NIL c a) b_@(NIL _ b) = case (a, b) of
-  (U x, U y) -> NIL c . U $ x + y
-  (x@L {}, y@L {}) -> NIL c . ul'from'p $ p'from'ul c x + p'from'ul c y
-  _ -> add (lift a_) (lift b_)
+add a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
+  (U x, U y) -> nil c (x + y)
+  (L {}, L {}) -> nil' c (unil' a + unil' b)
+  _ -> add (lift a) (lift b)
 {-# INLINE add #-}
 
 -- | sub
 sub :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
-sub a_@(NIL c a) b_@(NIL _ b) = case (a, b) of
-  (U x, U y) -> NIL c . U $ x - y
-  (x@L {}, y@L {}) -> NIL c . ul'from'p $ p'from'ul c x - p'from'ul c y
-  _ -> sub (lift a_) (lift b_)
+sub a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
+  (U x, U y) -> nil c (x - y)
+  (L {}, L {}) -> nil' c (unil' a - unil' b)
+  _ -> sub (lift a) (lift b)
 {-# INLINE sub #-}
 
 -- | mul
 mul :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
-mul (NIL c a) (NIL _ b) = case (a, b) of
-  (U x, U y) -> NIL c . U $ x * y
-  (U x, y@L {}) -> NIL c . ul'from'p $ p'from'ul c y ~* x
-  (x@L {}, U y) -> NIL c . ul'from'p $ p'from'ul c x ~* y
+mul a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
+  (U x, U y) -> nil c (x * y)
+  (U x, L {}) -> nil' c (unil' b ~* x)
+  (L {}, U y) -> nil' c (unil' a ~* y)
   _ -> die "Error, undefined (*) operation between lifted values"
 {-# INLINE mul #-}
 
 -- | negate
 negate' :: (Num r, Field q, Integral q) => NIL i r q -> NIL i r q
-negate' (NIL c val) = case val of
-  U a -> NIL c . U . negate $ a
-  a@L {} -> NIL c . ul'from'p $ p'from'ul c a
+negate' o@(NIL c val) = case val of
+  U a -> nil c (negate a)
+  L {} -> nil' c (unil' o)
 {-# INLINE negate' #-}
 
 -- | reciprocal
 recip' :: (Fractional r, Field q) => NIL i r q -> NIL i r q
 recip' (NIL c val) = case val of
-  U a -> NIL c . U . recip $ a
+  U a -> nil c (recip a)
   _ -> die "Error, undefined 'recip' operation on a lifted value"
 {-# INLINE recip' #-}
 

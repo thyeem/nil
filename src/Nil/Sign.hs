@@ -92,7 +92,7 @@ type Gmap a = Map String [Gate a]
 {-# INLINE (>>>) #-}
 
 -- | Eval nil-signature
-verify'sig :: Nilsig i r q p -> Wmap r -> Wire (NIL i r q)
+verify'sig :: Nilsig i r q p -> Wmap (NIL i r q) -> Wire (NIL i r q)
 verify'sig Nilsig {..} pubs = undefined
 
 -- | Initialize nil-signature
@@ -152,7 +152,7 @@ nilsign
      , Field r
      )
   => Nilsig i r q p
-  -> Wmap r
+  -> Wmap (NIL i r q)
   -> IO (Nilsig i r q p)
 nilsign
   sig@Nilsig {..}
@@ -232,7 +232,7 @@ backprop alpha gamma (omap, nilkey) g = do
 -- | Sign each entry gate assigned for a signer
 sign'gate
   :: (Random r, Bounded r, Integral r, Integral q, Field r, Field q)
-  => Wmap r
+  => Wmap (NIL i r q)
   -> Gmap (NIL i r q)
   -> Omap (NIL i r q)
   -> Gate (NIL i r q)
@@ -243,13 +243,13 @@ sign'gate secrets gmap omap g = do
   let (entry, other) = either'by entry'wirep g
   if member (w'key entry) secrets
     then do
-      let rho = recip delta
-          shifted = -delta * epsilon
-          hidden = delta * w'val (secrets ~> w'key entry) + epsilon
+      let multiplier = recip delta
+          unshifter = -delta * epsilon
+          shifted = delta * unil (w'val (secrets ~> w'key entry)) + epsilon
        in pure
-            . nilify False False (next'amp gmap g) rho
-            . nilify False True (get'shifter omap gmap g) shifted
-            . nilify True True g hidden
+            . nilify False False (next'amp gmap g) multiplier
+            . nilify False True (get'shifter omap gmap g) unshifter
+            . nilify True True g shifted
             $ omap
     else pure omap
 {-# INLINEABLE sign'gate #-}
@@ -264,14 +264,14 @@ nilify
   -> Omap (NIL i r q)
   -> Omap (NIL i r q)
 nilify right fin g val omap =
-  let g@Gate {g'lwire = gl, g'rwire = gr} = omap >>> g
+  let gate@Gate {g'lwire = gl, g'rwire = gr} = omap >>> g
       NIL c _ = w'val gl
       finish = if fin then freeze else id
-      gate =
+      gate' =
         if right
-          then g {g'lwire = finish $ gl {w'val = w'val gl * nil c val}}
-          else g {g'rwire = finish $ gr {w'val = w'val gr * nil c val}}
-   in omap <<< gate
+          then gate {g'lwire = finish $ gl {w'val = w'val gl * nil c val}}
+          else gate {g'rwire = finish $ gr {w'val = w'val gr * nil c val}}
+   in omap <<< gate'
 {-# INLINE nilify #-}
 
 -- | Find next amplifier gate directly involved with the given gate

@@ -5,7 +5,7 @@ module Nil.PolyS
   , poly'
   , nilpoly
   , atmostc
-  , nilc
+  , zeroc
   , nil
   , shiftp
   , addpoly
@@ -108,12 +108,12 @@ getc p i = case M.lookup i (coeff p) of
 atmostc :: Num p => Poly p -> p
 atmostc p = getc p (deg p)
 
--- | Check if the coefficient at a given degree is nil
-nilc :: Num p => Poly p -> Int -> Bool
-nilc p i = case M.lookup i (coeff p) of
+-- | Check if the coefficient at a given degree is zero
+zeroc :: Num p => Poly p -> Int -> Bool
+zeroc p i = case M.lookup i (coeff p) of
   Just _ -> False
   _ -> True
-{-# INLINE nilc #-}
+{-# INLINE zeroc #-}
 
 -- | Adjust and update degree of polynomial
 update'deg :: (Eq p, Num p) => Poly p -> Int -> Poly p
