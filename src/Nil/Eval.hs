@@ -14,7 +14,7 @@ import Data.Map (keys)
 import Data.Maybe (fromJust)
 import Nil.Circuit
 import Nil.Curve (Curve (..), ap, mulg, p'y)
-import Nil.Data (NIL (..), UL (..), nil, p'from'ul, ul'from'p, unil)
+import Nil.Data (NIL (..), UL (..), nil, nil', unil, unil')
 import Nil.Field (Field)
 import Nil.Utils (blake2b, bytes'from'int'len, die, int'from'bytes)
 
@@ -112,11 +112,13 @@ eval'gate wmap gate@Gate {..} =
 
 -- | Evaluate a wire with a given Wmap
 (~~) :: Fractional a => Wmap a -> Wire a -> a
-(~~) wmap wire@Wire {w'key} =
-  let val
-        | const'wirep wire = w'val wire
-        | otherwise = w'val wire * w'val (wmap ~> w'key)
-   in if w'recip wire then recip val else val
+(~~) wmap wire@Wire {w'key}
+  | w'recip wire = recip val
+  | otherwise = val
+ where
+  val
+    | const'wirep wire = w'val wire
+    | otherwise = w'val wire * w'val (wmap ~> w'key)
 {-# INLINE (~~) #-}
 
 -- | Evaluate a wire with a given weight then return the wire
@@ -126,9 +128,9 @@ eval'gate wmap gate@Gate {..} =
 
 -- | Evaluate gate
 eval :: Fractional a => (a -> a -> a) -> Wmap a -> Gate a -> Wmap a
-eval op wmap Gate {..} =
-  let val = (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
-   in wmap <~~ (val ~~~ g'owire)
+eval op wmap Gate {..} = wmap <~~ (val ~~~ g'owire)
+ where
+  val = (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
 {-# INLINEABLE eval #-}
 
 -- | Evaluate only when both wires are scalars
@@ -139,20 +141,16 @@ eval'scalar
   -> Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'scalar op label wmap Gate {..} =
-  let val wire = case wmap ~~ wire of
-        NIL _ (U v) -> fromIntegral v
-        _ ->
-          die $
-            unwords
-              [ "Error, used"
-              , label
-              , "on non-scalar wire:"
-              , w'key wire
-              ]
-      lval = val g'lwire
-      rval = val g'rwire
-   in wmap <~~ (op lval rval ~~~ g'owire)
+eval'scalar op label wmap Gate {..} = wmap <~~ (op lval rval ~~~ g'owire)
+ where
+  lval = val g'lwire
+  rval = val g'rwire
+  val wire = case wmap ~~ wire of
+    NIL _ (U v) -> fromIntegral v
+    _ ->
+      die $
+        unwords
+          ["Error, used", label, "on non-scalar wire:", w'key wire]
 {-# INLINEABLE eval'scalar #-}
 
 eval'exp
@@ -160,9 +158,9 @@ eval'exp
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'exp wmap g =
-  let (NIL c _) = wmap ~~ g'rwire g
-   in eval'scalar ((nil c .) . (^)) "(^)" wmap g
+eval'exp wmap g = eval'scalar ((nil c .) . (^)) "(^)" wmap g
+ where
+  NIL c _ = wmap ~~ g'rwire g
 {-# INLINEABLE eval'exp #-}
 
 -- | Evaluate modulo operator
@@ -171,16 +169,16 @@ eval'mod
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'mod wmap g =
-  let (NIL c _) = wmap ~~ g'rwire g
-   in eval'scalar ((nil c .) . mod) "'mod'" wmap g
+eval'mod wmap g = eval'scalar ((nil c .) . mod) "'mod'" wmap g
+ where
+  NIL c _ = wmap ~~ g'rwire g
 {-# INLINEABLE eval'mod #-}
 
 -- | Evaluate the last gate of circuit
 eval'end :: Wmap a -> Gate a -> Wmap a
-eval'end wmap Gate {..} =
-  let end = set'key end'key (wmap ~~> g'rwire)
-   in (wmap <~~ end) <~~ set'key return'key end
+eval'end wmap Gate {..} = (wmap <~~ end) <~~ set'key return'key end
+ where
+  end = set'key end'key (wmap ~~> g'rwire)
 {-# INLINEABLE eval'end #-}
 
 -- | Evaluate hash operator
@@ -189,17 +187,17 @@ eval'hash
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'hash wmap Gate {..} =
-  let (NIL c _) = wmap ~~ g'lwire
-      hash =
-        nil c
-          . fromIntegral
-          . int'from'bytes
-          . blake2b 32 mempty
-          . bytes'from'int'len 32
-          . fromIntegral
-          . unil
-   in wmap <~~ (hash (wmap ~~ g'rwire) ~~~ g'owire)
+eval'hash wmap Gate {..} = wmap <~~ (hash (wmap ~~ g'rwire) ~~~ g'owire)
+ where
+  NIL c _ = wmap ~~ g'lwire
+  hash =
+    nil c
+      . fromIntegral
+      . int'from'bytes
+      . blake2b 32 mempty
+      . bytes'from'int'len 32
+      . fromIntegral
+      . unil
 {-# INLINEABLE eval'hash #-}
 
 -- | Evalate gates of relational operators
@@ -208,14 +206,12 @@ eval'rop
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'rop wmap Gate {..} =
-  let (NIL c _) = wmap ~~ g'lwire
-      val =
-        if (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire)
-          then nil c 1
-          else nil c 0
-   in wmap <~~ (val ~~~ g'owire)
+eval'rop wmap Gate {..} = wmap <~~ (val ~~~ g'owire)
  where
+  NIL c _ = wmap ~~ g'lwire
+  val
+    | (wmap ~~ g'lwire) `op` (wmap ~~ g'rwire) = nil c 1
+    | otherwise = nil c 0
   op = case g'op of
     GT' -> (>)
     LT' -> (<)
@@ -232,13 +228,13 @@ eval'epx
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'epx wmap Gate {..} =
-  let (NIL c val) = wmap ~~ g'rwire
-      xval = case val of
-        L _ 0 -> die "Error, used (:) on point at infinity"
-        L x _ -> nil c . fromIntegral $ x
-        U _ -> die $ "Error, used (:) on non-EC point wire: " ++ w'key g'rwire
-   in wmap <~~ (xval ~~~ g'owire)
+eval'epx wmap Gate {..} = wmap <~~ (xval ~~~ g'owire)
+ where
+  NIL c val = wmap ~~ g'rwire
+  xval = case val of
+    L _ 0 -> die "Error, used (:) on point at infinity"
+    L x _ -> nil c . fromIntegral $ x
+    U _ -> die $ "Error, used (:) on non-EC point wire: " ++ w'key g'rwire
 {-# INLINEABLE eval'epx #-}
 
 -- | Evaluate operator of getting y-coordinate from elliptic curve points
@@ -247,13 +243,13 @@ eval'epy
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'epy wmap Gate {..} =
-  let (NIL c val) = wmap ~~ g'rwire
-      yval = case val of
-        L _ 0 -> die "Error, used (;) on point at infinity"
-        a@L {} -> nil c . fromIntegral . fromJust . p'y . p'from'ul c $ a
-        U _ -> die $ "Error, used (;) on non-EC point wire: " ++ w'key g'rwire
-   in wmap <~~ (yval ~~~ g'owire)
+eval'epy wmap Gate {..} = wmap <~~ (yval ~~~ g'owire)
+ where
+  o@(NIL c val) = wmap ~~ g'rwire
+  yval = case val of
+    L _ 0 -> die "Error, used (;) on point at infinity"
+    L {} -> nil c . fromIntegral . fromJust . p'y . unil' $ o
+    U _ -> die $ "Error, used (;) on non-EC point wire: " ++ w'key g'rwire
 {-# INLINEABLE eval'epy #-}
 
 -- | [k]G
@@ -263,8 +259,9 @@ eval'ekg
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
 eval'ekg wmap g =
-  let (NIL c _) = wmap ~~ g'rwire g
-   in eval'scalar @Integer (((NIL c . ul'from'p . mulg c) .) . seq) "([])" wmap g
+  eval'scalar @Integer (((nil' c . mulg c) .) . seq) "([])" wmap g
+ where
+  NIL c _ = wmap ~~ g'rwire g
 {-# INLINEABLE eval'ekg #-}
 
 -- | [x,y]
@@ -273,7 +270,7 @@ eval'ecp
   => Wmap (NIL i r q)
   -> Gate (NIL i r q)
   -> Wmap (NIL i r q)
-eval'ecp wmap g =
-  let (NIL c _) = wmap ~~ g'rwire g
-   in eval'scalar (((NIL c . ul'from'p) .) . ap c) "([,])" wmap g
+eval'ecp wmap g = eval'scalar ((nil' c .) . ap c) "([,])" wmap g
+ where
+  NIL c _ = wmap ~~ g'rwire g
 {-# INLINEABLE eval'ecp #-}
