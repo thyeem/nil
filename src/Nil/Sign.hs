@@ -5,7 +5,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 -----------------------------------------------------------------------------
--- nilsign: partially evaluate circuit with secrets
+-- nil'sign: partially evaluate circuit with secrets
 --------------------------------------------------------------------------------
 
 module Nil.Sign where
@@ -37,11 +37,11 @@ import Nil.Reorg
 import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256)
 import System.Random (Random)
 
--- | Aggregable-signature object for nilsign
+-- | Aggregable-signature object for nil'sign
 data Nilsig i r q p = Nilsig
-  { nil'hash :: String
-  , nil'key :: Nilkey i q p
-  , nil'circuit :: Circuit (NIL i r q)
+  { n'hash :: String
+  , n'key :: Nilkey i q p
+  , n'circuit :: Circuit (NIL i r q)
   }
   deriving (Eq, Show, Generic, NFData)
 
@@ -91,12 +91,8 @@ type Gmap a = Map String [Gate a]
   | otherwise = die $ "Error, not found gate of outwire: " ++ w'key
 {-# INLINE (>>>) #-}
 
--- | Eval nil-signature
-verify'sig :: Nilsig i r q p -> Wmap (NIL i r q) -> Wire (NIL i r q)
-verify'sig Nilsig {..} pubs = undefined
-
 -- | Initialize nil-signature
-init'sig
+nil'init
   :: ( Integral q
      , Field q
      , Field p
@@ -109,7 +105,7 @@ init'sig
   -> Curve i p
   -> Circuit r
   -> IO (Nilsig i r q p)
-init'sig curve'q curve'p circuit = do
+nil'init curve'q curve'p circuit = do
   phi <- ranf
   chi <- ranf
   nilified <- nilify'circuit <=< reorg'circuit $ circuit
@@ -120,7 +116,7 @@ init'sig curve'q curve'p circuit = do
   -- forced initial backpropagation
   (gate'map, nilkey) <- foldM (backprop 1 phi) (omap, key) amps
   pure $ Nilsig mempty nilkey (nilified {c'gates = sort'omap gate'map})
-{-# INLINE init'sig #-}
+{-# INLINE nil'init #-}
 
 update'nilkey
   :: (Integral r, Field p, Field q)
@@ -139,43 +135,40 @@ sort'omap = (fst <$>) . sortOn snd . elems
 {- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
  Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
 -}
-nilsign
+nil'sign
   :: ( Field q
      , Bounded q
      , Random q
      , Integral q
-     , Eq r
      , Integral r
-     , Field p
      , Random r
      , Bounded r
      , Field r
+     , Field p
      )
-  => Nilsig i r q p
-  -> Wmap (NIL i r q)
+  => Wmap (NIL i r q)
+  -> Nilsig i r q p
   -> IO (Nilsig i r q p)
-nilsign
-  sig@Nilsig {..}
-  secrets = do
-    alpha <- ranf
-    gamma <- ranf
-    let omap = omap'from'gates . c'gates $ nil'circuit
-        gmap = gmap'from'omap omap
-        entries = find'entries omap
-        amps = find'amps omap
+nil'sign secrets sig@Nilsig {..} = do
+  alpha <- ranf
+  gamma <- ranf
+  let omap = omap'from'gates . c'gates $ n'circuit
+      gmap = gmap'from'omap omap
+      entries = find'entries omap
+      amps = find'amps omap
 
-    -- sign each entry gate with signer's own secret
-    signed <- foldM (sign'gate secrets gmap) omap entries
+  -- sign each entry gate with signer's own secret
+  signed <- foldM (sign'gate secrets gmap) omap entries
 
-    -- randomize all amplifier gates (obfuscation)
-    (gate'map, nilkey) <- foldM (backprop alpha gamma) (signed, nil'key) amps
-    pure $
-      sig
-        { nil'key = nilkey
-        , nil'hash
-        , nil'circuit = nil'circuit {c'gates = sort'omap gate'map}
-        }
-{-# INLINE nilsign #-}
+  -- randomize all amplifier gates (obfuscation)
+  (gate'map, nilkey) <- foldM (backprop alpha gamma) (signed, n'key) amps
+  pure $
+    sig
+      { n'key = nilkey
+      , n'hash
+      , n'circuit = n'circuit {c'gates = sort'omap gate'map}
+      }
+{-# INLINE nil'sign #-}
 
 gmap'from'omap :: Eq a => Omap a -> Gmap a
 gmap'from'omap omap = foldl' update mempty gates
@@ -341,3 +334,7 @@ hash'gates salt gates =
           _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
    in from'ba $ hash'gate <$> gates
 {-# INLINE hash'gates #-}
+
+-- | Eval nil-signature
+nil'eval :: Nilsig i r q p -> Wmap (NIL i r q) -> Wire (NIL i r q)
+nil'eval Nilsig {..} pubs = undefined

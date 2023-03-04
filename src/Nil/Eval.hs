@@ -27,11 +27,14 @@ wire'vals
   -> Wmap r
   -> Circuit r
   -> [r]
-wire'vals c wmap circuit =
+wire'vals c wmap circuit@Circuit {..} =
   unil
     . w'val
-    . (eval'circuit c wmap circuit ~>)
+    . (eval'circuit xmap xcirc ~>)
     <$> wire'keys circuit
+ where
+  xmap = extend'wire c <$> wmap
+  xcirc = circuit {c'gates = extend'gate c <$> c'gates}
 {-# INLINE wire'vals #-}
 
 -- @statement@ is an circuit evaluation result that a prover can use to prove it
@@ -41,20 +44,20 @@ statement
   -> Wmap r
   -> Circuit r
   -> r
-statement c wmap circuit =
-  unil . w'val $ eval'circuit c wmap circuit ~> return'key
+statement c wmap circuit@Circuit {..} =
+  unil . w'val $ eval'circuit xmap xcirc ~> return'key
+ where
+  xmap = extend'wire c <$> wmap
+  xcirc = circuit {c'gates = extend'gate c <$> c'gates}
 {-# INLINE statement #-}
 
 -- | Evaluate Circuit with a given set of @(x, w)@
 eval'circuit
   :: (Integral r, Integral q, Field r, Field q)
-  => Curve i q
-  -> Wmap r
-  -> Circuit r
+  => Wmap (NIL i r q)
+  -> Circuit (NIL i r q)
   -> Wmap (NIL i r q)
-eval'circuit c wmap Circuit {..} =
-  let gates = extend'gate c <$> c'gates
-   in foldl' eval'gate (extend'wire c <$> wmap) gates
+eval'circuit wmap Circuit {..} = foldl' eval'gate wmap c'gates
 {-# INLINE eval'circuit #-}
 
 -- | Extends a wire to a NILdata wire

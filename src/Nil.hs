@@ -133,8 +133,9 @@ wmap = extend'wire bn254'g1 <$> w
 ret = e + r
 
 out = do
-  r <- reorg'circuit c
-  pure $ eval'circuit bn254'g1 w r ~> return'key
+  r@Circuit {..} <- reorg'circuit c
+  let xr = r {c'gates = extend'gate bn254'g1 <$> c'gates}
+  pure $ eval'circuit wmap xr ~> return'key
 
 p = export'graph "orig.pdf" (write'dot dot'header c)
 
@@ -146,12 +147,12 @@ n = do
   dot <- write'dot dot'header <$> (nilify'circuit <=< reorg'circuit $ c)
   export'graph "nil.pdf" dot
 
-isig = init'sig bn254'g1 bn254'g2 c
+isig = nil'init bn254'g1 bn254'g2 c
 
 test = do
   sig@Nilsig {..} <- isig
 
-  let omap = omap'from'gates . c'gates $ nil'circuit
+  let omap = omap'from'gates . c'gates $ n'circuit
       gmap = gmap'from'omap omap
       entries = find'entries omap
       amps = find'amps omap

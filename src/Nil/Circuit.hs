@@ -4,19 +4,30 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Nil.Circuit where
-
--- ( Circuit(..)
--- , Wire(..)
--- , Gate(..)
--- , Gateop(..)
--- , Wmap
--- , circuit'from'ast
--- , wire'keys
--- , statement
--- , const'wirep
--- , eval'circuit
--- ) where
+module Nil.Circuit
+  ( Circuit (..)
+  , Wire (..)
+  , Gate (..)
+  , Gateop (..)
+  , Wmap
+  , (~>)
+  , (<~)
+  , (~~>)
+  , (<~~)
+  , circuit'from'ast
+  , const'key
+  , const'wirep
+  , out'wirep
+  , set'key
+  , set'expr
+  , set'val
+  , unit'const
+  , unit'var
+  , wire'keys
+  , return'key
+  , end'key
+  )
+where
 
 import Control.DeepSeq (NFData)
 import Data.Aeson (ToJSON)
