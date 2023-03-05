@@ -149,12 +149,14 @@ sub a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
 {-# INLINE sub #-}
 
 -- | mul
-mul :: (Integral r, Field q, Integral q) => NIL i r q -> NIL i r q -> NIL i r q
+mul :: (Integral r, Field q, Integral q, Show r) => NIL i r q -> NIL i r q -> NIL i r q
 mul a@(NIL c a_) b@(NIL _ b_) = case (a_, b_) of
   (U x, U y) -> nil c (x * y)
   (U x, L {}) -> nil' c (unil' b ~* x)
   (L {}, U y) -> nil' c (unil' a ~* y)
-  _ -> die "Error, undefined (*) operation between lifted values"
+  _ ->
+    die . unlines $
+      ["Error, undefined (*) operation between lifted values", show a, show b]
 {-# INLINE mul #-}
 
 -- | negate
@@ -165,10 +167,12 @@ negate' o@(NIL c val) = case val of
 {-# INLINE negate' #-}
 
 -- | reciprocal
-recip' :: (Fractional r, Field q) => NIL i r q -> NIL i r q
-recip' (NIL c val) = case val of
+recip' :: (Fractional r, Field q, Show r) => NIL i r q -> NIL i r q
+recip' o@(NIL c val) = case val of
   U a -> nil c (recip a)
-  _ -> die "Error, undefined 'recip' operation on a lifted value"
+  _ ->
+    die . unlines $
+      ["Error, undefined 'recip' operation on a lifted value", show o]
 {-# INLINE recip' #-}
 
 instance (Show r, Show q, Pretty q, Field q) => Pretty (UL r q) where

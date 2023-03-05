@@ -108,18 +108,18 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , "return e + r"
-    -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
+    , -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
+      "return z * s + r * z^5 + (e+r)"
     ]
 
 c = compile'language lang :: Circuit Fr
 
 -- e = 8464813805670834410435113564993955236359239915934467825032129101731355555480 :: Fr
-e = 1 :: Fr
+e = 323874982374982374987239479283749872397429392472893749 :: Fr
 
 -- r = 13405614924655214385005113554925375156635891943694728320775177413191146574283 :: Fr
 
-r = 1 :: Fr
+r = 234728397239847289374892374982374972398749823749872394328472389479823748923794274 :: Fr
 
 s = 13078933289364958062289426192340813952257377699664878821853496586753686181509 :: Fr
 
@@ -130,7 +130,9 @@ w = wmap'fromList [("e", e), ("r", r), ("s", s), ("z", z)] :: Wmap Fr
 wmap = extend'wire bn254'g1 <$> w
 
 -- ret = e ^ 2 + (e + r) / (z * r * s)
-ret = e + r
+ret = z * s + r * z ^ 5 + (e + r) ^ 2
+
+-- ret = e ^ 2 + (e + (r + s)) ^ 2 / (z * r * s)
 
 out = do
   r@Circuit {..} <- reorg'circuit c
@@ -149,6 +151,17 @@ n = do
 
 isig = nil'init bn254'g1 bn254'g2 c
 
+omap = omap'from'gates . (c'gates . n'circuit)
+
+t = do
+  s <- isig
+  signed <- nil'sign wmap s
+  let m = eval'circuit wmap (n'circuit signed)
+
+  let _R = unil' . w'val $ m ~> "return"
+  let (_P, _C) = n'key signed
+  pure $ pairing _R _C == pairing _P _C ^ ret
+
 test = do
   sig@Nilsig {..} <- isig
 
@@ -161,11 +174,4 @@ test = do
       epsilon = 2
       alpha = 2
       beta = 2
-
-  let g = entries !! 0
-      (entry, other) = either'by entry'wirep g
-      multiplier = recip delta
-      unshifter = -delta * epsilon
-      shifted = delta * unil (w'val (wmap ~> w'key entry)) + epsilon
-
-  pure $ nilify True True g shifted omap
+  undefined

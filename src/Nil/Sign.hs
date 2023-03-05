@@ -111,10 +111,8 @@ nil'init curve'q curve'p circuit = do
   nilified <- nilify'circuit <=< reorg'circuit $ circuit
   let omap = omap'from'gates . (extend'gate curve'q <$>) . c'gates $ nilified
       amps = find'amps omap
-      key = update'nilkey phi chi (c'g curve'q, c'g curve'p)
-
-  -- forced initial backpropagation
-  (gate'map, nilkey) <- foldM (backprop 1 phi) (omap, key) amps
+      nilkey = update'nilkey phi chi (c'g curve'q, c'g curve'p)
+  gate'map <- foldM (backprop 1 phi) omap amps -- forced initial backpropagation
   pure $ Nilsig mempty nilkey (nilified {c'gates = sort'omap gate'map})
 {-# INLINE nil'init #-}
 
@@ -156,12 +154,13 @@ nil'sign secrets sig@Nilsig {..} = do
       gmap = gmap'from'omap omap
       entries = find'entries omap
       amps = find'amps omap
-
-  -- sign each entry gate with signer's own secret
-  signed <- foldM (sign'gate secrets gmap) omap entries
-
-  -- randomize all amplifier gates (obfuscation)
-  (gate'map, nilkey) <- foldM (backprop alpha gamma) (signed, n'key) amps
+      nilkey =
+        -- randomize nilkey (key-aggregation)
+        update'nilkey (recip alpha) alpha
+          . update'nilkey gamma (recip gamma)
+          $ n'key
+  signed <- foldM (sign'gate secrets gmap) omap entries -- sign each entry
+  gate'map <- foldM (backprop alpha gamma) signed amps -- randomize each amp
   pure $
     sig
       { n'key = nilkey
@@ -198,28 +197,22 @@ find'amps omap = foldl' go [] (assocs omap)
 
 -- | Randomize the end amp and backpropagate to the other amps
 backprop
-  :: (Integral q, Field q, Random r, Bounded r, Integral r, Field r, Field p)
+  :: (Integral q, Field q, Random r, Bounded r, Integral r, Field r)
   => r
   -> r
-  -> (Omap (NIL i r q), Nilkey i q p)
+  -> Omap (NIL i r q)
   -> Gate (NIL i r q)
-  -> IO (Omap (NIL i r q), Nilkey i q p)
-backprop alpha gamma (omap, nilkey) g = do
-  beta <- ranf
-  let amps = prev'amps omap g
-      update rand (m, k) gate =
-        let gate'@Gate {..} = m >>> gate
-            val = w'val g'rwire * nil (p'curve . fst $ k) rand
-            rwire = g'rwire {w'val = val}
-         in (m <<< gate' {g'rwire = rwire}, nilkey)
-      acc
-        | final'amp'p omap g = (omap, update'nilkey 1 (recip alpha) nilkey)
-        | prin'amp'p omap g =
-            ( fst $ update gamma (omap, nilkey) g
-            , update'nilkey gamma (recip gamma) nilkey
-            )
-        | otherwise = update beta (omap, nilkey) g
-  pure $ foldl' (update (recip beta)) acc amps
+  -> IO (Omap (NIL i r q))
+backprop alpha gamma omap g
+  | final'amp'p omap g = pure $ foldr (updater (recip alpha)) omap amps
+  | prin'amp'p omap g = pure $ updater gamma g omap
+  | otherwise = do
+      beta <- ranf
+      pure $ foldr (updater (recip beta)) (updater beta g omap) amps
+ where
+  NIL c _ = w'val (g'rwire g)
+  updater v = nilify False False (nil c v)
+  amps = prev'amps omap g
 {-# INLINE backprop #-}
 
 -- | Sign each entry gate assigned for a signer
@@ -234,15 +227,18 @@ sign'gate secrets gmap omap g = do
   delta <- ranf
   epsilon <- ranf
   let (entry, other) = either'by entry'wirep g
+      NIL c _ = w'val entry
   if member (w'key entry) secrets
     then do
-      let multiplier = recip delta
-          unshifter = -delta * epsilon
-          shifted = delta * unil (w'val (secrets ~> w'key entry)) + epsilon
+      let lifter = if g'op g == Add then lift else id
+          secret = w'val $ secrets ~> w'key entry
+          multiplier = nil c $ recip delta
+          unshifter = lifter . nil c $ -delta * epsilon
+          shifted = nil c delta * (secret + nil c epsilon)
        in pure
-            . nilify False False (next'amp gmap g) multiplier
-            . nilify False True (get'shifter omap gmap g) unshifter
-            . nilify True True g shifted
+            . nilify False False multiplier (next'amp gmap g)
+            . nilify False True unshifter (get'shifter omap gmap g)
+            . nilify True True shifted g
             $ omap
     else pure omap
 {-# INLINEABLE sign'gate #-}
@@ -252,18 +248,17 @@ nilify
   :: (Integral r, Integral q, Field r, Field q)
   => Bool -- which side to update? lwire -> True, rwire: False
   -> Bool -- the wire to be frozen?
+  -> NIL i r q
   -> Gate (NIL i r q)
-  -> r
   -> Omap (NIL i r q)
   -> Omap (NIL i r q)
-nilify right fin g val omap =
+nilify leftp closep val g omap =
   let gate@Gate {g'lwire = gl, g'rwire = gr} = omap >>> g
-      NIL c _ = w'val gl
-      finish = if fin then freeze else id
+      finish = if closep then freeze else id
       gate' =
-        if right
-          then gate {g'lwire = finish $ gl {w'val = w'val gl * nil c val}}
-          else gate {g'rwire = finish $ gr {w'val = w'val gr * nil c val}}
+        if leftp
+          then gate {g'lwire = finish $ gl {w'val = w'val gl * val}}
+          else gate {g'rwire = finish $ gr {w'val = w'val gr * val}}
    in omap <<< gate'
 {-# INLINE nilify #-}
 
