@@ -204,8 +204,8 @@ backprop
   -> Gate (NIL i r q)
   -> IO (Omap (NIL i r q))
 backprop alpha gamma omap g
-  | final'amp'p omap g = pure $ foldr (updater (recip alpha)) omap amps
-  | prin'amp'p omap g = pure $ updater gamma g omap
+  | end'amp'p omap g = pure $ foldr (updater (recip alpha)) omap amps
+  | entry'amp'p omap g = pure $ updater gamma g omap
   | otherwise = do
       beta <- ranf
       pure $ foldr (updater (recip beta)) (updater beta g omap) amps
@@ -297,15 +297,27 @@ get'shifter omap gmap g@Gate {..} =
     a -> die $ "Error, found unexpected gate op: " ++ show a
 {-# INLINE get'shifter #-}
 
-final'amp'p :: Omap a -> Gate a -> Bool
-final'amp'p omap g =
-  let (Gate {g'rwire = Wire {w'key = amp'key}}, _) = omap ~> end'key
-   in w'key (g'owire g) == amp'key
-{-# INLINE final'amp'p #-}
+get'end'amp :: Omap a -> Gate a
+get'end'amp omap
+  | length amps == 1 = head amps
+  | otherwise = die "Error, not found an end amplifier"
+ where
+  amps = filter (end'amp'p omap) (find'amps omap)
+{-# INLINE get'end'amp #-}
+
+end'amp'p :: Omap a -> Gate a -> Bool
+end'amp'p omap g = w'key (g'owire g) == amp'key
+ where
+  (Gate {g'rwire = Wire {w'key = amp'key}}, _) = omap ~> end'key
+{-# INLINE end'amp'p #-}
 
 -- | Check if the given amp is one of principal amps
-prin'amp'p :: Omap a -> Gate a -> Bool
-prin'amp'p omap g
+prin'amp'p :: Eq a => Omap a -> Gate a -> Bool
+prin'amp'p omap = (`elem` prev'amps omap (get'end'amp omap))
+{-# INLINE prin'amp'p #-}
+
+entry'amp'p :: Omap a -> Gate a -> Bool
+entry'amp'p omap g
   | xor' amp'wirep g = find (g'lwire g)
   | otherwise = die $ "Error, not amplifier wire: " ++ w'key (g'rwire g)
  where
@@ -314,7 +326,7 @@ prin'amp'p omap g
         let (Gate {..}, _) = omap ~> w'key
          in not (amp'wirep g'rwire) && (find g'lwire && find g'rwire)
     | otherwise = True
-{-# INLINE prin'amp'p #-}
+{-# INLINE entry'amp'p #-}
 
 -- | Get a hash value from a given circuit
 hash'gates :: ByteString -> [Gate a] -> ByteString
@@ -329,7 +341,3 @@ hash'gates salt gates =
           _ -> from'ba $ hash'wire <$> [g'owire, g'lwire, g'rwire]
    in from'ba $ hash'gate <$> gates
 {-# INLINE hash'gates #-}
-
--- | Eval nil-signature
-nil'eval :: Nilsig i r q p -> Wmap (NIL i r q) -> Wire (NIL i r q)
-nil'eval Nilsig {..} pubs = undefined
