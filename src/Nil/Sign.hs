@@ -204,11 +204,14 @@ backprop
   -> Gate (NIL i r q)
   -> IO (Omap (NIL i r q))
 backprop alpha gamma omap g
-  | end'amp'p omap g = pure $ foldr (updater (recip alpha)) omap amps
-  | entry'amp'p omap g = pure $ updater gamma g omap
-  | otherwise = do
-      beta <- ranf
-      pure $ foldr (updater (recip beta)) (updater beta g omap) amps
+  | entry'amp'p omap g = pure $ updater (recip alpha) g omap
+  | otherwise =
+      if series'amp'p omap g
+        then do
+          beta <- ranf
+          let beta' = if end'amp'p omap g then gamma / beta else recip beta
+          pure $ foldr (updater beta) (updater beta' g omap) amps
+        else do pure omap
  where
   NIL c _ = w'val (g'rwire g)
   updater v = nilify False False (nil c v)
@@ -236,7 +239,7 @@ sign'gate secrets gmap omap g = do
           unshifter = lifter . nil c $ -delta * epsilon
           shifted = nil c delta * (secret + nil c epsilon)
        in pure
-            . nilify False False multiplier (next'amp gmap g)
+            . nilify False False multiplier (get'amp gmap g)
             . nilify False True unshifter (get'shifter omap gmap g)
             . nilify True True shifted g
             $ omap
@@ -262,16 +265,6 @@ nilify leftp closep val g omap =
    in omap <<< gate'
 {-# INLINE nilify #-}
 
--- | Find next amplifier gate directly involved with the given gate
-next'amp :: Gmap a -> Gate a -> Gate a
-next'amp gmap g@Gate {g'owire = Wire {w'key = out}, ..}
-  | amp'wirep g'rwire = g
-  | otherwise =
-      if member out gmap
-        then next'amp gmap (head $ gmap ~>> out)
-        else die $ "Error, not found any amp gate following: " ++ out
-{-# INLINE next'amp #-}
-
 -- | Find all previous amplifier gates directly involved with the given gate
 prev'amps :: Eq a => Omap a -> Gate a -> [Gate a]
 prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
@@ -282,6 +275,27 @@ prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
          in if amp'wirep g'rwire then [gate] else prev'amps omap gate
     | otherwise = []
 {-# INLINE prev'amps #-}
+
+next'amps :: Eq a => Gmap a -> Gate a -> [Gate a]
+next'amps gmap g = find g
+ where
+  find Gate {g'owire = Wire {w'key = out}, ..}
+    | member out gmap =
+        if amp'wirep g'rwire
+          then [g]
+          else nub . concat $ next'amps gmap <$> (gmap ~>> out)
+    | otherwise = die $ "Error, not found any amp gate following: " ++ out
+{-# INLINE next'amps #-}
+
+-- | Find next amplifier gate directly involved with the given gate
+get'amp :: Gmap a -> Gate a -> Gate a
+get'amp gmap g@Gate {g'owire = Wire {w'key = out}, ..}
+  | amp'wirep g'rwire = g
+  | otherwise =
+      if member out gmap
+        then get'amp gmap (head $ gmap ~>> out)
+        else die $ "Error, not found any amp gate following: " ++ out
+{-# INLINE get'amp #-}
 
 -- | Find the shifter gate involved in a given entry gate
 get'shifter :: Eq a => Omap a -> Gmap a -> Gate a -> Gate a
@@ -297,13 +311,13 @@ get'shifter omap gmap g@Gate {..} =
     a -> die $ "Error, found unexpected gate op: " ++ show a
 {-# INLINE get'shifter #-}
 
-get'end'amp :: Omap a -> Gate a
-get'end'amp omap
+find'end'amp :: Omap a -> Gate a
+find'end'amp omap
   | length amps == 1 = head amps
   | otherwise = die "Error, not found an end amplifier"
  where
   amps = filter (end'amp'p omap) (find'amps omap)
-{-# INLINE get'end'amp #-}
+{-# INLINE find'end'amp #-}
 
 end'amp'p :: Omap a -> Gate a -> Bool
 end'amp'p omap g = w'key (g'owire g) == amp'key
@@ -313,20 +327,33 @@ end'amp'p omap g = w'key (g'owire g) == amp'key
 
 -- | Check if the given amp is one of principal amps
 prin'amp'p :: Eq a => Omap a -> Gate a -> Bool
-prin'amp'p omap = (`elem` prev'amps omap (get'end'amp omap))
+prin'amp'p omap = (`elem` prev'amps omap (find'end'amp omap))
 {-# INLINE prin'amp'p #-}
 
 entry'amp'p :: Omap a -> Gate a -> Bool
 entry'amp'p omap g
-  | xor' amp'wirep g = find (g'lwire g)
+  | xor' amp'wirep g = test (g'lwire g)
   | otherwise = die $ "Error, not amplifier wire: " ++ w'key (g'rwire g)
  where
-  find wire@Wire {..}
+  test wire@Wire {..}
     | member w'key omap =
         let (Gate {..}, _) = omap ~> w'key
-         in not (amp'wirep g'rwire) && (find g'lwire && find g'rwire)
+         in not (amp'wirep g'rwire) && (test g'lwire && test g'rwire)
     | otherwise = True
 {-# INLINE entry'amp'p #-}
+
+series'amp'p :: Omap a -> Gate a -> Bool
+series'amp'p omap g
+  | xor' amp'wirep g = test (g'lwire g)
+  | otherwise = die $ "Error, not amplifier wire: " ++ w'key (g'rwire g)
+ where
+  test wire@Wire {..}
+    | entry'wirep wire = False
+    | member w'key omap =
+        let (Gate {..}, _) = omap ~> w'key
+         in amp'wirep g'rwire || (test g'lwire && test g'rwire)
+    | otherwise = True
+{-# INLINE series'amp'p #-}
 
 -- | Get a hash value from a given circuit
 hash'gates :: ByteString -> [Gate a] -> ByteString

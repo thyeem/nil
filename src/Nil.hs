@@ -108,8 +108,9 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
-      "return z * s + r * z^5 + (e+r)"
+    , "return (e+r)^2"
+    -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
+    -- ,  "return (e+r)*r*s*z"
     ]
 
 c = compile'language lang :: Circuit Fr
@@ -130,7 +131,8 @@ w = wmap'fromList [("e", e), ("r", r), ("s", s), ("z", z)] :: Wmap Fr
 wmap = extend'wire bn254'g1 <$> w
 
 -- ret = e ^ 2 + (e + r) / (z * r * s)
-ret = z * s + r * z ^ 5 + (e + r) ^ 2
+-- ret = z * s + r * z ^ 5 + (e + r) ^ 2
+ret = (e + r) ^ 2
 
 -- ret = e ^ 2 + (e + (r + s)) ^ 2 / (z * r * s)
 
@@ -149,12 +151,12 @@ n = do
   dot <- write'dot dot'header <$> (nilify'circuit <=< reorg'circuit $ c)
   export'graph "nil.pdf" dot
 
-isig = nil'init bn254'g1 bn254'g2 c
+sig = nil'init bn254'g1 bn254'g2 c
 
 omap = omap'from'gates . (c'gates . n'circuit)
 
 t = do
-  s <- isig
+  s <- sig
   signed <- nil'sign wmap s
   let m = eval'circuit wmap (n'circuit signed)
 
@@ -163,7 +165,7 @@ t = do
   pure $ pairing _R _C == pairing _P _C ^ ret
 
 test = do
-  sig@Nilsig {..} <- isig
+  sig@Nilsig {..} <- sig
 
   let omap = omap'from'gates . c'gates $ n'circuit
       gmap = gmap'from'omap omap
@@ -175,3 +177,19 @@ test = do
       alpha = 2
       beta = 2
   undefined
+
+m = do
+  r@Circuit {..} <- reorg'circuit c
+  shifted <- concat <$> mapM shift'gate c'gates
+  let rc = r {c'gates = shifted}
+  let dot = write'dot dot'header rc
+  export'graph "shifted.pdf" dot
+
+triplet = do
+  s <- sig
+  let o = omap s
+  let amps = find'amps o
+  let p = filter (prin'amp'p o) amps
+  let e = filter (entry'amp'p o) amps
+  let end = find'end'amp o
+  pure (amps, p, e, end)
