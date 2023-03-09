@@ -108,9 +108,8 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , "return (e+r)^2"
-    -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
-    -- ,  "return (e+r)*r*s*z"
+    , -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
+      "return (e+r)^5"
     ]
 
 c = compile'language lang :: Circuit Fr
@@ -132,7 +131,7 @@ wmap = extend'wire bn254'g1 <$> w
 
 -- ret = e ^ 2 + (e + r) / (z * r * s)
 -- ret = z * s + r * z ^ 5 + (e + r) ^ 2
-ret = (e + r) ^ 2
+ret = (e + r) ^ 5
 
 -- ret = e ^ 2 + (e + (r + s)) ^ 2 / (z * r * s)
 

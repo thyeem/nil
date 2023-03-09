@@ -110,9 +110,10 @@ nil'init curve'q curve'p circuit = do
   chi <- ranf
   nilified <- nilify'circuit <=< reorg'circuit $ circuit
   let omap = omap'from'gates . (extend'gate curve'q <$>) . c'gates $ nilified
+      gmap = gmap'from'omap omap
       amps = find'amps omap
       nilkey = update'nilkey phi chi (c'g curve'q, c'g curve'p)
-  gate'map <- foldM (backprop 1 phi) omap amps -- forced initial backpropagation
+  gate'map <- foldM (backprop 1 phi gmap) omap amps -- forced initial backpropagation
   pure $ Nilsig mempty nilkey (nilified {c'gates = sort'omap gate'map})
 {-# INLINE nil'init #-}
 
@@ -160,7 +161,7 @@ nil'sign secrets sig@Nilsig {..} = do
           . update'nilkey gamma (recip gamma)
           $ n'key
   signed <- foldM (sign'gate secrets gmap) omap entries -- sign each entry
-  gate'map <- foldM (backprop alpha gamma) signed amps -- randomize each amp
+  gate'map <- foldM (backprop alpha gamma gmap) signed amps -- randomize each amp
   pure $
     sig
       { n'key = nilkey
@@ -200,22 +201,25 @@ backprop
   :: (Integral q, Field q, Random r, Bounded r, Integral r, Field r)
   => r
   -> r
+  -> Gmap (NIL i r q)
   -> Omap (NIL i r q)
   -> Gate (NIL i r q)
   -> IO (Omap (NIL i r q))
-backprop alpha gamma omap g
+backprop alpha gamma gmap omap g
   | entry'amp'p omap g = pure $ updater (recip alpha) g omap
-  | otherwise =
-      if series'amp'p omap g
-        then do
-          beta <- ranf
-          let beta' = if end'amp'p omap g then gamma / beta else recip beta
-          pure $ foldr (updater beta) (updater beta' g omap) amps
-        else do pure omap
+  | otherwise = do
+      beta <- ranf
+      let acc = if end'amp'p omap g then updater gamma g omap else omap
+      pure $
+        foldr
+          (updater (recip beta))
+          (foldr (updater beta) acc amps)
+          anticones
  where
   NIL c _ = w'val (g'rwire g)
   updater v = nilify False False (nil c v)
   amps = prev'amps omap g
+  anticones = nub . concat $ next'amps gmap <$> amps
 {-# INLINE backprop #-}
 
 -- | Sign each entry gate assigned for a signer
@@ -265,7 +269,7 @@ nilify leftp closep val g omap =
    in omap <<< gate'
 {-# INLINE nilify #-}
 
--- | Find all previous amplifier gates directly involved with the given gate
+-- | Find previous amplifier gates directly involved with the given gate
 prev'amps :: Eq a => Omap a -> Gate a -> [Gate a]
 prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
  where
@@ -276,18 +280,18 @@ prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
     | otherwise = []
 {-# INLINE prev'amps #-}
 
+-- | Find all next amplifier gates directly involved with the given gate
 next'amps :: Eq a => Gmap a -> Gate a -> [Gate a]
-next'amps gmap g = find g
+next'amps gmap Gate {g'owire = Wire {w'key = out}}
+  | member out gmap = nub . concat $ go <$> (gmap ~>> out)
+  | otherwise = die $ "Error, not found any amp gate following: " ++ out
  where
-  find Gate {g'owire = Wire {w'key = out}, ..}
-    | member out gmap =
-        if amp'wirep g'rwire
-          then [g]
-          else nub . concat $ next'amps gmap <$> (gmap ~>> out)
-    | otherwise = die $ "Error, not found any amp gate following: " ++ out
+  go gate
+    | amp'wirep (g'rwire gate) = [gate]
+    | otherwise = next'amps gmap gate
 {-# INLINE next'amps #-}
 
--- | Find next amplifier gate directly involved with the given gate
+-- | Find next amplifier gates directly involved with the given gate
 get'amp :: Gmap a -> Gate a -> Gate a
 get'amp gmap g@Gate {g'owire = Wire {w'key = out}, ..}
   | amp'wirep g'rwire = g
@@ -341,19 +345,6 @@ entry'amp'p omap g
          in not (amp'wirep g'rwire) && (test g'lwire && test g'rwire)
     | otherwise = True
 {-# INLINE entry'amp'p #-}
-
-series'amp'p :: Omap a -> Gate a -> Bool
-series'amp'p omap g
-  | xor' amp'wirep g = test (g'lwire g)
-  | otherwise = die $ "Error, not amplifier wire: " ++ w'key (g'rwire g)
- where
-  test wire@Wire {..}
-    | entry'wirep wire = False
-    | member w'key omap =
-        let (Gate {..}, _) = omap ~> w'key
-         in amp'wirep g'rwire || (test g'lwire && test g'rwire)
-    | otherwise = True
-{-# INLINE series'amp'p #-}
 
 -- | Get a hash value from a given circuit
 hash'gates :: ByteString -> [Gate a] -> ByteString
