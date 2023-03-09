@@ -108,8 +108,7 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , -- , "return e^2 + (e + (r + s))^2 / (z * r * s)"
-      "return (e+r)^5"
+    , "return e^2 + (e + (r + s))^2 * (z * r * s)"
     ]
 
 c = compile'language lang :: Circuit Fr
@@ -131,9 +130,7 @@ wmap = extend'wire bn254'g1 <$> w
 
 -- ret = e ^ 2 + (e + r) / (z * r * s)
 -- ret = z * s + r * z ^ 5 + (e + r) ^ 2
-ret = (e + r) ^ 5
-
--- ret = e ^ 2 + (e + (r + s)) ^ 2 / (z * r * s)
+ret = e ^ 2 + (e + (r + s)) ^ 2 * (z * r * s)
 
 out = do
   r@Circuit {..} <- reorg'circuit c
@@ -188,7 +185,6 @@ triplet = do
   s <- sig
   let o = omap s
   let amps = find'amps o
-  let p = filter (prin'amp'p o) amps
   let e = filter (entry'amp'p o) amps
   let end = find'end'amp o
   pure (amps, p, e, end)

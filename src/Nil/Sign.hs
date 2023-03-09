@@ -209,17 +209,17 @@ backprop alpha gamma gmap omap g
   | entry'amp'p omap g = pure $ updater (recip alpha) g omap
   | otherwise = do
       beta <- ranf
-      let acc = if end'amp'p omap g then updater gamma g omap else omap
+      let acc = if prin'amp'p omap g then updater gamma g omap else omap
       pure $
         foldr
           (updater (recip beta))
-          (foldr (updater beta) acc amps)
+          (foldr (updater beta) acc pasts)
           anticones
  where
   NIL c _ = w'val (g'rwire g)
   updater v = nilify False False (nil c v)
-  amps = prev'amps omap g
-  anticones = nub . concat $ next'amps gmap <$> amps
+  pasts = prev'amps omap g
+  anticones = nub . concat $ next'amps gmap <$> pasts
 {-# INLINE backprop #-}
 
 -- | Sign each entry gate assigned for a signer
@@ -320,20 +320,17 @@ find'end'amp omap
   | length amps == 1 = head amps
   | otherwise = die "Error, not found an end amplifier"
  where
-  amps = filter (end'amp'p omap) (find'amps omap)
+  amps = filter (prin'amp'p omap) (find'amps omap)
 {-# INLINE find'end'amp #-}
 
-end'amp'p :: Omap a -> Gate a -> Bool
-end'amp'p omap g = w'key (g'owire g) == amp'key
+-- | Check if the given amp is one of principal amps
+prin'amp'p :: Omap a -> Gate a -> Bool
+prin'amp'p omap g = w'key (g'owire g) == amp'key
  where
   (Gate {g'rwire = Wire {w'key = amp'key}}, _) = omap ~> end'key
-{-# INLINE end'amp'p #-}
-
--- | Check if the given amp is one of principal amps
-prin'amp'p :: Eq a => Omap a -> Gate a -> Bool
-prin'amp'p omap = (`elem` prev'amps omap (find'end'amp omap))
 {-# INLINE prin'amp'p #-}
 
+-- | Check if the given amp is one of entry amps
 entry'amp'p :: Omap a -> Gate a -> Bool
 entry'amp'p omap g
   | xor' amp'wirep g = test (g'lwire g)
