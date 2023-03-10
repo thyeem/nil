@@ -4,12 +4,16 @@ module Nil.Graph
   ( write'dot
   , export'graph
   , dot'header
+  , g'sig
+  , g'circuit
+  , g'reorged
   )
 where
 
 import Control.Monad (when)
 import Nil.Circuit
-import Nil.Reorg (amp'wirep, frozen'wirep, shift'wirep)
+import Nil.Reorg (amp'wirep, frozen'wirep, reorg'circuit, shift'wirep)
+import Nil.Sign (Nilsig (..))
 import Nil.Utils (die)
 import System.Exit (ExitCode (ExitSuccess))
 import System.Process (readProcessWithExitCode)
@@ -119,3 +123,19 @@ write'gate instances witnesses Gate {..}
           ]
     | otherwise =
         mempty
+
+------------------------
+-- Debugging tool (tmp)
+------------------------
+g'circuit :: Eq a => Circuit a -> String -> IO ()
+g'circuit circuit f = export'graph f (write'dot dot'header circuit)
+
+g'reorged :: (Eq a, Num a) => Circuit a -> String -> IO ()
+g'reorged circuit f = do
+  dot <- write'dot dot'header <$> reorg'circuit circuit
+  export'graph f dot
+
+g'sig :: (Eq q, Eq r) => Nilsig i r q p -> String -> IO ()
+g'sig sig f = do
+  let dot = write'dot dot'header (n'circuit sig)
+  export'graph f dot

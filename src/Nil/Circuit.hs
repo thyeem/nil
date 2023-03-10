@@ -21,6 +21,7 @@ module Nil.Circuit
   , set'key
   , set'expr
   , set'val
+  , set'recip
   , unit'const
   , unit'var
   , wire'keys

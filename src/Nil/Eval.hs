@@ -125,8 +125,12 @@ eval'gate wmap gate@Gate {..} =
 {-# INLINE (~~) #-}
 
 -- | Evaluate a wire with a given weight then return the wire
-(~~~) :: Num a => a -> Wire a -> Wire a
-(~~~) val wire@Wire {w'val} = set'val (val * w'val) wire
+(~~~) :: Fractional a => a -> Wire a -> Wire a
+(~~~) val wire@Wire {w'val} = set'val (val * w'eval) wire
+ where
+  w'eval
+    | w'recip wire = recip w'val
+    | otherwise = w'val
 {-# INLINE (~~~) #-}
 
 -- | Evaluate gate
