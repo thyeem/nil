@@ -29,6 +29,7 @@ library
       , deepseq
       , entropy
       , filepath
+      , hedis
       , parallel
       , pretty-simple
       , process

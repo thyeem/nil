@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -14,13 +15,14 @@ import Control.DeepSeq (NFData)
 import Control.Monad (foldM, (<=<))
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString, append)
+import Data.Function (on)
 import Data.List (foldl', nub)
-import Data.Map (Map, member)
+import Data.Map (Map, delete, member)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point (..), c'g, p'curve, toA, (~*))
 import Nil.Data (NIL (NIL), lift, nil, unil)
-import Nil.Eval (extend'gate, extend'wire, (~~), (~~~))
+import Nil.Eval (eval, extend'gate, extend'wire, wmap'fromList, (~~), (~~~))
 import Nil.Field (Field)
 import Nil.Reorg
 import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256)
@@ -47,13 +49,15 @@ instance
 
 -- | Initialize nil-signature
 nil'init
-  :: ( Integral q
-     , Field q
-     , Field p
-     , Integral r
+  :: ( Integral r
      , Random r
      , Bounded r
      , Field r
+     , Integral q
+     , Bounded q
+     , Random q
+     , Field q
+     , Field p
      )
   => Curve i q
   -> Curve i p
@@ -65,10 +69,13 @@ nil'init curve'q curve'p circuit = do
   nilified <- nilify'circuit <=< reorg'circuit $ circuit
   let omap = omap'from'gates . (extend'gate curve'q <$>) . c'gates $ nilified
       gmap = gmap'from'omap omap
+      -- wmap = extend'wire curve'q <$> wmap'fromList mempty
+      wmap = wmap'fromList mempty
       amps = find'amps omap
       nilkey = update'nilkey phi chi (c'g curve'q, c'g curve'p)
   gates <- foldM (backprop 1 phi gmap) omap amps -- forced initial backpropagation
-  pure $ Nilsig mempty nilkey (nilified {c'gates = sort'omap gates})
+  let sig = Nilsig mempty nilkey (nilified {c'gates = sort'omap gates})
+  nil'sign wmap sig -- forced initial sign (constants)
 {-# INLINE nil'init #-}
 
 update'nilkey
@@ -110,12 +117,13 @@ nil'sign secrets sig@Nilsig {..} = do
           . update'nilkey gamma (recip gamma)
           $ n'key
   signed <- foldM (sign'gate secrets gmap) omap entries -- sign each entry
-  gates <- foldM (backprop alpha gamma gmap) signed amps -- randomize each amp
+  randomized <- foldM (backprop alpha gamma gmap) signed amps -- randomize each ampgates
+  let collapsed = snd . reduce $ randomized -- collapse until irreducible
   pure $
     sig
       { n'key = nilkey
       , n'hash
-      , n'circuit = n'circuit {c'gates = sort'omap gates}
+      , n'circuit = n'circuit {c'gates = sort'omap collapsed}
       }
 {-# INLINE nil'sign #-}
 
@@ -193,6 +201,29 @@ nilify leftp closep val g omap =
           else gate {g'rwire = finish $ val ~~~ gr}
    in omap <<< gate'
 {-# INLINE nilify #-}
+
+-- | Further collapse gates from entries if reducible
+reduce :: (Eq a, Fractional a) => Omap a -> (Wmap a, Omap a)
+reduce o = foldl' update (mempty, o) (sort'omap o)
+ where
+  update (wmap, omap) gate@Gate {..} =
+    let g = gate {g'lwire = rep g'lwire, g'rwire = rep g'rwire}
+        rep wire
+          | member (w'key wire) wmap = wmap ~~> wire
+          | otherwise = wire
+     in if reducible g
+          then
+            ( wmap <~ (w'key g'owire, freeze . val'const $ eval' g)
+            , delete (w'key g'owire) omap
+            )
+          else (wmap, omap <<< g)
+  reducible g = and' const'wirep g && nor' amp'wirep g && nor' shift'wirep g
+  eval' Gate {..} = on op w'val g'lwire g'rwire
+   where
+    op = case g'op of
+      Mul -> (*)
+      Add -> (+)
+      a -> die $ "Error, not evaluable operator: " ++ show a
 
 -- | Defines hash of a wire
 hash'wire :: ByteString -> Omap a -> Wire a -> ByteString

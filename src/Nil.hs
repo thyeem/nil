@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
@@ -54,7 +55,7 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)"
-    , "return e^3 + (7e + (5r - 3s) ^ 2) + (e/r-s)^3 / 3z * 2r * s"
+    , "return e^13 + (7e + (5r - 3s) ^ 12) + (e/r-s)^13 / 3z * 2r * s"
     ]
 
 c = compile'language lang :: Circuit Fr
@@ -95,12 +96,11 @@ m sig' = do
 
 t = do
   s <- sig
-  signed' <- nil'sign wmap1 s
-  signed <- nil'sign wmap2 signed'
-  let m = eval'circuit wmap (n'circuit signed)
-
+  ss <- nil'sign wmap1 s
+  sss <- nil'sign wmap2 ss
+  let m = eval'circuit wmap (n'circuit sss)
   let _R = unil' . w'val $ m ~> "return"
-  let (_P, _C) = n'key signed
+  let (_P, _C) = n'key sss
   pure $ pairing _R _C == pairing _P _C ^ ret
 
 wmap1 = extend'wire bn254'g1 <$> wmap'fromList [("e", e), ("r", r)]

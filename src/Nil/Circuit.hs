@@ -26,6 +26,7 @@ module Nil.Circuit
   , unit'var
   , wire'keys
   , return'key
+  , val'const
   , end'key
   )
 where
