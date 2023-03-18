@@ -30,9 +30,9 @@ import System.Random (Random)
 
 -- | Aggregable-signature object for nil'sign
 data Nilsig i r q p = Nilsig
-  { n'hash :: String
-  , n'key :: Nilkey i q p
-  , n'circuit :: Circuit (NIL i r q)
+  { n'hash :: String,
+    n'key :: Nilkey i q p,
+    n'circuit :: Circuit (NIL i r q)
   }
   deriving (Eq, Show, Generic, NFData)
 
@@ -42,27 +42,27 @@ instance (Show q, Field q, Show p, Field p, Show r) => Pretty (Nilsig i r q p)
 type Nilkey i q p = (Point i q, Point i p)
 
 instance
-  (Show q, Pretty q, Field q, Show p, Pretty p, Field p)
-  => Pretty (Nilkey i q p)
+  (Show q, Pretty q, Field q, Show p, Pretty p, Field p) =>
+  Pretty (Nilkey i q p)
   where
   pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
 
 -- | Initialize nil-signature
-nil'init
-  :: ( Integral r
-     , Random r
-     , Bounded r
-     , Field r
-     , Integral q
-     , Bounded q
-     , Random q
-     , Field q
-     , Field p
-     )
-  => Curve i q
-  -> Curve i p
-  -> Circuit r
-  -> IO (Nilsig i r q p)
+nil'init ::
+  ( Integral r,
+    Random r,
+    Bounded r,
+    Field r,
+    Integral q,
+    Bounded q,
+    Random q,
+    Field q,
+    Field p
+  ) =>
+  Curve i q ->
+  Curve i p ->
+  Circuit r ->
+  IO (Nilsig i r q p)
 nil'init curve'q curve'p circuit = do
   phi <- ranf
   chi <- ranf
@@ -78,32 +78,31 @@ nil'init curve'q curve'p circuit = do
   nil'sign wmap sig -- forced initial sign (constants)
 {-# INLINE nil'init #-}
 
-update'nilkey
-  :: (Integral r, Field p, Field q)
-  => r
-  -> r
-  -> Nilkey i q p
-  -> Nilkey i q p
+update'nilkey ::
+  (Integral r, Field p, Field q) =>
+  r ->
+  r ->
+  Nilkey i q p ->
+  Nilkey i q p
 update'nilkey a b = bimap (~* a) (~* b)
 {-# INLINE update'nilkey #-}
 
-{- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
- Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
--}
-nil'sign
-  :: ( Field q
-     , Bounded q
-     , Random q
-     , Integral q
-     , Integral r
-     , Random r
-     , Bounded r
-     , Field r
-     , Field p
-     )
-  => Wmap (NIL i r q)
-  -> Nilsig i r q p
-  -> IO (Nilsig i r q p)
+-- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
+-- Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
+nil'sign ::
+  ( Field q,
+    Bounded q,
+    Random q,
+    Integral q,
+    Integral r,
+    Random r,
+    Bounded r,
+    Field r,
+    Field p
+  ) =>
+  Wmap (NIL i r q) ->
+  Nilsig i r q p ->
+  IO (Nilsig i r q p)
 nil'sign secrets sig@Nilsig {..} = do
   alpha <- ranf
   gamma <- ranf
@@ -121,21 +120,21 @@ nil'sign secrets sig@Nilsig {..} = do
   let collapsed = snd . reduce $ randomized -- collapse until irreducible
   pure $
     sig
-      { n'key = nilkey
-      , n'hash
-      , n'circuit = n'circuit {c'gates = sort'omap collapsed}
+      { n'key = nilkey,
+        n'hash,
+        n'circuit = n'circuit {c'gates = sort'omap collapsed}
       }
 {-# INLINE nil'sign #-}
 
 -- | Randomize the end amp and backpropagate to the other amps
-backprop
-  :: (Integral q, Field q, Random r, Bounded r, Integral r, Field r)
-  => r
-  -> r
-  -> Gmap (NIL i r q)
-  -> Omap (NIL i r q)
-  -> Gate (NIL i r q)
-  -> IO (Omap (NIL i r q))
+backprop ::
+  (Integral q, Field q, Random r, Bounded r, Integral r, Field r) =>
+  r ->
+  r ->
+  Gmap (NIL i r q) ->
+  Omap (NIL i r q) ->
+  Gate (NIL i r q) ->
+  IO (Omap (NIL i r q))
 backprop alpha gamma gmap omap g
   | entry'amp'p omap g = pure $ updater (recip alpha) g omap
   | otherwise = do
@@ -146,21 +145,21 @@ backprop alpha gamma gmap omap g
           (updater (recip beta))
           (foldr (updater beta) acc pasts)
           anticones
- where
-  NIL c _ = w'val (g'rwire g)
-  updater v = nilify False False (nil c v)
-  pasts = prev'amps omap g
-  anticones = nub . concat $ next'amps gmap <$> pasts
+  where
+    NIL c _ = w'val (g'rwire g)
+    updater v = nilify False False (nil c v)
+    pasts = prev'amps omap g
+    anticones = nub . concat $ next'amps gmap <$> pasts
 {-# INLINE backprop #-}
 
 -- | Sign each entry gate assigned for a signer
-sign'gate
-  :: (Random r, Bounded r, Integral r, Integral q, Field r, Field q)
-  => Wmap (NIL i r q)
-  -> Gmap (NIL i r q)
-  -> Omap (NIL i r q)
-  -> Gate (NIL i r q)
-  -> IO (Omap (NIL i r q))
+sign'gate ::
+  (Random r, Bounded r, Integral r, Integral q, Field r, Field q) =>
+  Wmap (NIL i r q) ->
+  Gmap (NIL i r q) ->
+  Omap (NIL i r q) ->
+  Gate (NIL i r q) ->
+  IO (Omap (NIL i r q))
 sign'gate secrets gmap omap g = do
   delta <- ranf
   epsilon <- ranf
@@ -184,14 +183,14 @@ sign'gate secrets gmap omap g = do
 {-# INLINEABLE sign'gate #-}
 
 -- | Tamper the unlifted value of gates and mix them with random numbers
-nilify
-  :: (Integral r, Integral q, Field r, Field q)
-  => Bool -- which side to update? lwire -> True, rwire: False
-  -> Bool -- the wire to be frozen?
-  -> NIL i r q
-  -> Gate (NIL i r q)
-  -> Omap (NIL i r q)
-  -> Omap (NIL i r q)
+nilify ::
+  (Integral r, Integral q, Field r, Field q) =>
+  Bool -> -- which side to update? lwire -> True, rwire: False
+  Bool -> -- the wire to be frozen?
+  NIL i r q ->
+  Gate (NIL i r q) ->
+  Omap (NIL i r q) ->
+  Omap (NIL i r q)
 nilify leftp closep val g omap =
   let gate@Gate {g'lwire = gl, g'rwire = gr} = omap >>> g
       finish = if closep then freeze . set'recip False else set'recip False
@@ -205,25 +204,25 @@ nilify leftp closep val g omap =
 -- | Further collapse gates from entries if reducible
 reduce :: (Eq a, Fractional a) => Omap a -> (Wmap a, Omap a)
 reduce o = foldl' update (mempty, o) (sort'omap o)
- where
-  update (wmap, omap) gate@Gate {..} =
-    let g = gate {g'lwire = rep g'lwire, g'rwire = rep g'rwire}
-        rep wire
-          | member (w'key wire) wmap = wmap ~~> wire
-          | otherwise = wire
-     in if reducible g
-          then
-            ( wmap <~ (w'key g'owire, freeze . val'const $ eval' g)
-            , delete (w'key g'owire) omap
-            )
-          else (wmap, omap <<< g)
-  reducible g = and' const'wirep g && nor' amp'wirep g && nor' shift'wirep g
-  eval' Gate {..} = on op w'val g'lwire g'rwire
-   where
-    op = case g'op of
-      Mul -> (*)
-      Add -> (+)
-      a -> die $ "Error, not evaluable operator: " ++ show a
+  where
+    update (wmap, omap) gate@Gate {..} =
+      let g = gate {g'lwire = rep g'lwire, g'rwire = rep g'rwire}
+          rep wire
+            | member (w'key wire) wmap = wmap ~~> wire
+            | otherwise = wire
+       in if reducible g
+            then
+              ( wmap <~ (w'key g'owire, freeze . val'const $ eval' g),
+                delete (w'key g'owire) omap
+              )
+            else (wmap, omap <<< g)
+    reducible g = and' const'wirep g && nor' amp'wirep g && nor' shift'wirep g
+    eval' Gate {..} = on op w'val g'lwire g'rwire
+      where
+        op = case g'op of
+          Mul -> (*)
+          Add -> (+)
+          a -> die $ "Error, not evaluable operator: " ++ show a
 
 -- | Defines hash of a wire
 hash'wire :: ByteString -> Omap a -> Wire a -> ByteString
@@ -240,6 +239,6 @@ hash'gate salt omap Gate {..} = case g'op of
   Add -> fold $ hash'wire salt omap <$> [g'lwire, g'rwire, g'owire]
   Mul -> fold $ hash'wire salt omap <$> [g'rwire, g'owire, g'lwire]
   _ -> fold $ hash'wire salt omap <$> [g'owire, g'lwire, g'rwire]
- where
-  fold = foldl' ((sha256 .) . append) mempty
+  where
+    fold = foldl' ((sha256 .) . append) mempty
 {-# INLINEABLE hash'gate #-}

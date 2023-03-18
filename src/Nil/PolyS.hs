@@ -1,45 +1,44 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Nil.PolyS
-  ( poly
-  , poly'
-  , nilpoly
-  , atmostc
-  , zeroc
-  , nil
-  , shiftp
-  , addpoly
-  , subpoly
-  , scalepoly
-  , (|*)
-  , mulpoly
-  , divpoly
-  , (|/)
-  , powpoly
-  , evalpoly
-  , (|=)
+  ( poly,
+    poly',
+    nilpoly,
+    atmostc,
+    zeroc,
+    nil,
+    shiftp,
+    addpoly,
+    subpoly,
+    scalepoly,
+    (|*),
+    mulpoly,
+    divpoly,
+    (|/),
+    powpoly,
+    evalpoly,
+    (|=),
   )
 where
 
 import Control.Exception
-  ( ArithException (..)
-  , throw
+  ( ArithException (..),
+    throw,
   )
 import Data.Bifunctor (first)
 import Data.List (foldl')
 import qualified Data.Map as M
 import Nil.Utils (die)
 
-{- | Monic polynomial representation
- The least significant coefficient is at leftmost in the coeffs-list
- f(x) := c0 + c1*x + ... + ck*x^k = [c0,c1,..,ck]
-
- The same as 'Nil.Poly, but this is for sparse polymonials
- 'coeff' hashmap traces only non-zero coefficients with 'degree' Int key
--}
+-- | Monic polynomial representation
+-- The least significant coefficient is at leftmost in the coeffs-list
+-- f(x) := c0 + c1*x + ... + ck*x^k = [c0,c1,..,ck]
+--
+-- The same as 'Nil.Poly, but this is for sparse polymonials
+-- 'coeff' hashmap traces only non-zero coefficients with 'degree' Int key
 data Poly p = Poly
-  { coeff :: M.Map Int p
-  , deg :: Int
+  { coeff :: M.Map Int p,
+    deg :: Int
   }
   deriving (Eq, Ord)
 
@@ -92,24 +91,24 @@ setc p@Poly {..} (i, x)
   | x == 0 = p
   | otherwise =
       p
-        { coeff = M.insert i x coeff
-        , deg = if i > deg then i else deg
+        { coeff = M.insert i x coeff,
+          deg = if i > deg then i else deg
         }
 {-# INLINE setc #-}
 
 -- | Get a coefficient of polynomial at a given degree
-getc :: Num p => Poly p -> Int -> p
+getc :: (Num p) => Poly p -> Int -> p
 getc p i = case M.lookup i (coeff p) of
   Just x -> x
   _ -> 0
 {-# INLINE getc #-}
 
 -- | Get a coefficient of polynomial at the highest degree
-atmostc :: Num p => Poly p -> p
+atmostc :: (Num p) => Poly p -> p
 atmostc p = getc p (deg p)
 
 -- | Check if the coefficient at a given degree is zero
-zeroc :: Num p => Poly p -> Int -> Bool
+zeroc :: (Num p) => Poly p -> Int -> Bool
 zeroc p i = case M.lookup i (coeff p) of
   Just _ -> False
   _ -> True
@@ -133,9 +132,8 @@ nil :: Poly p -> Bool
 nil = M.null . coeff
 {-# INLINE nil #-}
 
-{- | Pairwise binary opteration with the same-degree zipped coefficients.
- This is different from 'zipWith' as this function plays with the longest one.
--}
+-- | Pairwise binary opteration with the same-degree zipped coefficients.
+-- This is different from 'zipWith' as this function plays with the longest one.
 zip'with :: (Eq p, Num p) => (p -> p -> p) -> Poly p -> Poly p -> Poly p
 zip'with op f g =
   poly $
@@ -178,24 +176,23 @@ scalepoly f@Poly {..} k
 (|*) = scalepoly
 {-# INLINE (|*) #-}
 
-{- | f(x) / g(x)
- Divide polynomials one another, then returns (quotient, remainder)
--}
+-- | f(x) / g(x)
+-- Divide polynomials one another, then returns (quotient, remainder)
 divpoly :: (Eq p, Fractional p) => Poly p -> Poly p -> (Poly p, Poly p)
 divpoly f g
   | nil g = throw DivideByZero
   | deg g == 0 = (f |* (1 / getc g 0), nilpoly)
   | deg f >= deg g = go nilpoly f g
   | otherwise = (nilpoly, f)
- where
-  go q a b
-    | deg a >= deg b =
-        let n = deg a - deg b
-            d = shiftp b n
-            k = atmostc a / atmostc d
-         in go (setc q (n, k)) (a - (d |* k)) b
-    | otherwise =
-        (q, a)
+  where
+    go q a b
+      | deg a >= deg b =
+          let n = deg a - deg b
+              d = shiftp b n
+              k = atmostc a / atmostc d
+           in go (setc q (n, k)) (a - (d |* k)) b
+      | otherwise =
+          (q, a)
 {-# INLINE divpoly #-}
 
 -- | Infix divpoly
@@ -211,8 +208,8 @@ powpoly f k
   | k == 1 = f
   | even k = g * g
   | otherwise = f * (g * g)
- where
-  g = powpoly f (div k 2)
+  where
+    g = powpoly f (div k 2)
 {-# INLINE powpoly #-}
 
 -- | f(x=x0): evaluate the polynomial at a given fixed x0

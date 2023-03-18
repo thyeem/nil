@@ -2,39 +2,39 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Nil.Pairing
-  ( miller'loop
-  , twist
-  , pairing
-  , from'fq
+  ( miller'loop,
+    twist,
+    pairing,
+    from'fq,
   )
 where
 
 import Data.List (foldl')
 import Nil.Curve
-  ( Curve (..)
-  , Point (..)
-  , frobp
-  , jp
-  , toJ
-  , (~*)
+  ( Curve (..),
+    Point (..),
+    frobp,
+    jp,
+    toJ,
+    (~*),
   )
 import Nil.Ecdata
-  ( BN254
-  , G1
-  , G2
-  , GT
-  , bn254'g1
-  , bn254'gt
-  , field'gt
+  ( BN254,
+    G1,
+    G2,
+    GT,
+    bn254'g1,
+    bn254'gt,
+    field'gt,
   )
 import Nil.Field
-  ( Extensionfield (..)
-  , Field (..)
+  ( Extensionfield (..),
+    Field (..),
   )
 import Nil.Utils
-  ( bits'from'int
-  , die
-  , (|+|)
+  ( bits'from'int,
+    die,
+    (|+|),
   )
 
 {-
@@ -67,111 +67,108 @@ loop'count :: Integer
 loop'count = 29793968203157093288
 
 -- | Element-wise operation of (*) on 2-elem tuples
-(*|*) :: Num a => (a, a) -> (a, a) -> (a, a)
+(*|*) :: (Num a) => (a, a) -> (a, a) -> (a, a)
 ta *|* tb = (o * q, p * r) where ((o, p), (q, r)) = (ta, tb)
 
-{- | Miller's algorithm based on optimal Ate pairing:  aT(Q, P) -> f
- https://eprint.iacr.org/2010/354.pdf
- https://eprint.iacr.org/2016/130.pdf
--}
+-- | Miller's algorithm based on optimal Ate pairing:  aT(Q, P) -> f
+-- https://eprint.iacr.org/2010/354.pdf
+-- https://eprint.iacr.org/2016/130.pdf
 miller'loop :: Point BN254 GT -> Point BN254 GT -> GT
 miller'loop p q
   | p == O || q == O = field'gt [1]
   | otherwise = final'exp . uncurry (/) . finalQ2 . finalQ1 $ loop
- where
-  loop = foldl' (add . dbl) ((field'gt [1], field'gt [1]), q) s
-  s = drop 1 . reverse $ bits'from'int loop'count
-  frobQ1 = frobp q (1 :: Int)
-  frobQ2 = negate . frobp q $ (2 :: Int)
-  finalQ1 (f, t) = (f *|* linefunc t frobQ1 p, t |+| frobQ1)
-  finalQ2 (f, t) = f *|* linefunc t frobQ2 p
-  dbl (f, t) = (f *|* f *|* linefunc t t p, t ~* (2 :: Int))
-  add (f, t) b
-    | b == 1 = (f *|* linefunc t q p, t |+| q)
-    | otherwise = (f, t)
+  where
+    loop = foldl' (add . dbl) ((field'gt [1], field'gt [1]), q) s
+    s = drop 1 . reverse $ bits'from'int loop'count
+    frobQ1 = frobp q (1 :: Int)
+    frobQ2 = negate . frobp q $ (2 :: Int)
+    finalQ1 (f, t) = (f *|* linefunc t frobQ1 p, t |+| frobQ1)
+    finalQ2 (f, t) = f *|* linefunc t frobQ2 p
+    dbl (f, t) = (f *|* f *|* linefunc t t p, t ~* (2 :: Int))
+    add (f, t) b
+      | b == 1 = (f *|* linefunc t q p, t |+| q)
+      | otherwise = (f, t)
 {-# INLINEABLE miller'loop #-}
 
 -- dbl'step :: ((GT, GT), Point GT) -> ((GT, GT), Point GT)
 -- dbl'step (f, t) = (f *|* f *|* linefunc t t p, t .* 2)
 
-{- | A function f representing the line through P and Q
- Returns values from the function evaluation at point T: f(T)
- Separately update the numerator and the denominator of f(T),
- to avoid frequent reciprocal operations.
--}
-linefunc
-  :: (Eq f, Fractional f, Field f)
-  => Point i f
-  -> Point i f
-  -> Point i f
-  -> (f, f)
+-- | A function f representing the line through P and Q
+-- Returns values from the function evaluation at point T: f(T)
+-- Separately update the numerator and the denominator of f(T),
+-- to avoid frequent reciprocal operations.
+linefunc ::
+  (Eq f, Fractional f, Field f) =>
+  Point i f ->
+  Point i f ->
+  Point i f ->
+  (f, f)
 linefunc p q t = linefuncJ (toJ p) (toJ q) (toJ t)
 
 -- | LineFunction based on Affine coordinates
-linefuncA
-  :: (Eq f, Fractional f, Field f)
-  => Point i f
-  -> Point i f
-  -> Point i f
-  -> (f, f)
+linefuncA ::
+  (Eq f, Fractional f, Field f) =>
+  Point i f ->
+  Point i f ->
+  Point i f ->
+  (f, f)
 linefuncA = go
- where
-  go x y z | x == O || y == O || z == O = die "Not defined at O"
-  go (A _ x1 y1) (A _ x2 y2) (A _ xt yt)
-    | x1 /= x2 = (lu * (xt - x1) - lb * (yt - y1), lb)
-    | y1 == y2 = (lu' * (xt - x1) - lb' * (yt - y1), lb')
-    | otherwise = (xt - x1, 1)
-   where
-    lu = y2 - y1
-    lb = x2 - x1
-    lu' = e3 * x1 * x1
-    lb' = e2 * y1
-    e = one x1
-    e2 = e + e
-    e3 = e2 + e
-  go _ _ _ = die "Invalid points used: "
+  where
+    go x y z | x == O || y == O || z == O = die "Not defined at O"
+    go (A _ x1 y1) (A _ x2 y2) (A _ xt yt)
+      | x1 /= x2 = (lu * (xt - x1) - lb * (yt - y1), lb)
+      | y1 == y2 = (lu' * (xt - x1) - lb' * (yt - y1), lb')
+      | otherwise = (xt - x1, 1)
+      where
+        lu = y2 - y1
+        lb = x2 - x1
+        lu' = e3 * x1 * x1
+        lb' = e2 * y1
+        e = one x1
+        e2 = e + e
+        e3 = e2 + e
+    go _ _ _ = die "Invalid points used: "
 {-# INLINEABLE linefuncA #-}
 
 -- | LineFunction based on Jacobian coordinates
-linefuncJ
-  :: (Eq f, Fractional f, Field f)
-  => Point i f
-  -> Point i f
-  -> Point i f
-  -> (f, f)
+linefuncJ ::
+  (Eq f, Fractional f, Field f) =>
+  Point i f ->
+  Point i f ->
+  Point i f ->
+  (f, f)
 linefuncJ = go
- where
-  go x y z | x == O || y == O || z == O = die "Not defined at O"
-  go (J _ x1 y1 z1) (J _ x2 y2 z2) (J _ xt yt zt)
-    | (x1 * z2 ^ (2 :: Int)) /= (x2 * z1 ^ (2 :: Int)) =
-        (lu * a * b - lb * d, lb * g)
-    | otherwise =
-        (lu' * a * b - lb' * d, lb' * g)
-   where
-    lu = z1 ^ (3 :: Int) * y2 - z2 ^ (3 :: Int) * y1
-    lb = z1 * z2 * (z1 ^ (2 :: Int) * x2 - z2 ^ (2 :: Int) * x1)
-    lu' = e3 * x1 * x1
-    lb' = e2 * y1 * z1
-    a = z1 * zt
-    b = z1 ^ (2 :: Int) * xt - zt ^ (2 :: Int) * x1
-    d = z1 ^ (3 :: Int) * yt - zt ^ (3 :: Int) * y1
-    g = (z1 * zt) ^ (3 :: Int)
-    e = one x1
-    e2 = e + e
-    e3 = e2 + e
-  go _ _ _ = die "Invalid points used: "
+  where
+    go x y z | x == O || y == O || z == O = die "Not defined at O"
+    go (J _ x1 y1 z1) (J _ x2 y2 z2) (J _ xt yt zt)
+      | (x1 * z2 ^ (2 :: Int)) /= (x2 * z1 ^ (2 :: Int)) =
+          (lu * a * b - lb * d, lb * g)
+      | otherwise =
+          (lu' * a * b - lb' * d, lb' * g)
+      where
+        lu = z1 ^ (3 :: Int) * y2 - z2 ^ (3 :: Int) * y1
+        lb = z1 * z2 * (z1 ^ (2 :: Int) * x2 - z2 ^ (2 :: Int) * x1)
+        lu' = e3 * x1 * x1
+        lb' = e2 * y1 * z1
+        a = z1 * zt
+        b = z1 ^ (2 :: Int) * xt - zt ^ (2 :: Int) * x1
+        d = z1 ^ (3 :: Int) * yt - zt ^ (3 :: Int) * y1
+        g = (z1 * zt) ^ (3 :: Int)
+        e = one x1
+        e2 = e + e
+        e3 = e2 + e
+    go _ _ _ = die "Invalid points used: "
 {-# INLINEABLE linefuncJ #-}
 
 -- | Final exponentiation
 final'exp :: GT -> GT
 final'exp f = f ^ expo
- where
-  expo = (c'p bn254'g1 ^ (12 :: Int) - 1) `div` c'n bn254'g1
+  where
+    expo = (c'p bn254'g1 ^ (12 :: Int) - 1) `div` c'n bn254'g1
 {-# INLINE final'exp #-}
 
-{- | Reduced Tate pairing using optimal Ate pairing
- P in G1 x Q in G2 -> e(P, Q)
--}
+-- | Reduced Tate pairing using optimal Ate pairing
+-- P in G1 x Q in G2 -> e(P, Q)
 pairing :: Point BN254 G1 -> Point BN254 G2 -> GT
 -- pairing p q = go (toJ p) (toJ q)
 pairing p q = miller'loop (from'fq p) (twist q)

@@ -4,16 +4,16 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Nil.Data
-  ( nil
-  , unil
-  , nil'
-  , unil'
-  , NIL (..)
-  , UL (..)
-  , lift
-  , unlift
-  , p'from'ul
-  , ul'from'p
+  ( nil,
+    unil,
+    nil',
+    unil',
+    NIL (..),
+    UL (..),
+    lift,
+    unlift,
+    p'from'ul,
+    ul'from'p,
   )
 where
 
@@ -33,8 +33,8 @@ data UL r q
   deriving (Eq, Show, Generic, NFData)
 
 instance
-  (Integral r, Field r, Integral q, Field q)
-  => Num (NIL i r q)
+  (Integral r, Field r, Integral q, Field q) =>
+  Num (NIL i r q)
   where
   (+) = add
   {-# INLINE (+) #-}
@@ -53,8 +53,8 @@ instance
   abs = undefined
 
 instance
-  (Integral r, Field r, Integral q, Field q)
-  => Fractional (NIL i r q)
+  (Integral r, Field r, Integral q, Field q) =>
+  Fractional (NIL i r q)
   where
   recip = recip'
   {-# INLINE recip #-}
@@ -65,8 +65,8 @@ instance
   fromRational = undefined
 
 instance
-  (Eq r, Ord r, Integral r, Integral q, Field q)
-  => Ord (NIL i r q)
+  (Eq r, Ord r, Integral r, Integral q, Field q) =>
+  Ord (NIL i r q)
   where
   a <= b = unil a <= unil b
 
@@ -76,11 +76,11 @@ nil c = NIL c . U
 {-# INLINE nil #-}
 
 -- | Encode NIL object from EC point
-nil'
-  :: (Integral q, Field q, Field q)
-  => Curve i q
-  -> Point i q
-  -> NIL i r q
+nil' ::
+  (Integral q, Field q, Field q) =>
+  Curve i q ->
+  Point i q ->
+  NIL i r q
 nil' c = NIL c . ul'from'p
 {-# INLINE nil' #-}
 

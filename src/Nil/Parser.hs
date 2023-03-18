@@ -2,19 +2,19 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Nil.Parser
-  ( Expr (..)
-  , AST (..)
-  , parse
+  ( Expr (..),
+    AST (..),
+    parse,
   )
 where
 
 import Data.List (foldl')
 import Nil.Lexer
-  ( Keywords (..)
-  , Ops (..)
-  , Prims (..)
-  , Symbols (..)
-  , Token (..)
+  ( Keywords (..),
+    Ops (..),
+    Prims (..),
+    Symbols (..),
+    Token (..),
   )
 import Nil.Utils (Pretty (..), die, splitby)
 
@@ -28,10 +28,9 @@ data AST
   | Null
   deriving (Eq, Show)
 
-{- | Expression
- No boolean primitive, not really necessary as it can be expressed as any number
- Here 'Evaluable' means that it can be definitely reduced to a number
--}
+-- | Expression
+-- No boolean primitive, not really necessary as it can be expressed as any number
+-- Here 'Evaluable' means that it can be definitely reduced to a number
 data Expr
   = Value Prims -- Primitive numbers and variables
   | Euna Ops Expr -- Evaluable Unary Operator
@@ -50,9 +49,8 @@ type Parser a = [Token] -> Parsed a
 -- | Parser extension: further parse using the parsed data
 type ParserX a = Parsed a -> Parsed a
 
-{- | Construct AST by parsing given lexical units (tokens)
- Language -> Lexemes -> [AST: Abstract Syntax Tree] -> Circuit -> R1CS -> QAP
--}
+-- | Construct AST by parsing given lexical units (tokens)
+-- Language -> Lexemes -> [AST: Abstract Syntax Tree] -> Circuit -> R1CS -> QAP
 parse :: [Token] -> AST
 parse tokens
   | length stmts < 2 = die "Error, not enough statements"
@@ -60,17 +58,16 @@ parse tokens
   | next (last stmts) /= Kwd Return = die "Error, wrong return"
   | not . evaluableAST $ ast = die "Error, unevaluable Expr used"
   | otherwise = ast
- where
-  stmts = tokens `splitby` [Sym LF]
-  in' = fst . parse'stmt . head $ stmts
-  out' = fst . parse'stmt . last $ stmts
-  opt = fst . parse'stmt <$> (init . tail $ stmts)
-  opt' = foldr Seq Null opt
-  ast = Root in' opt' out'
+  where
+    stmts = tokens `splitby` [Sym LF]
+    in' = fst . parse'stmt . head $ stmts
+    out' = fst . parse'stmt . last $ stmts
+    opt = fst . parse'stmt <$> (init . tail $ stmts)
+    opt' = foldr Seq Null opt
+    ast = Root in' opt' out'
 
-{- | Parse a sequence of actions to be carried out
- then construct a component of AST
--}
+-- | Parse a sequence of actions to be carried out
+-- then construct a component of AST
 parse'stmt :: Parser AST
 parse'stmt tokens = case next tokens of
   Kwd Language -> parse'args (munch tokens)
@@ -83,11 +80,11 @@ parse'args :: Parser AST
 parse'args (Sym LParen : ts)
   | last ts /= Sym RParen = die $ "Error, syntax error of: " ++ show (last ts)
   | otherwise = (ast, [])
- where
-  ast = foldr input Null (init ts `splitby` [Sym Comma])
-  input [Kwd Pub, Prim v@(V _)] ast' = In Pub (Value v) ast'
-  input [Kwd Priv, Prim v@(V _)] ast' = In Priv (Value v) ast'
-  input t _ = die $ "Error, syntax error of: " ++ show t
+  where
+    ast = foldr input Null (init ts `splitby` [Sym Comma])
+    input [Kwd Pub, Prim v@(V _)] ast' = In Pub (Value v) ast'
+    input [Kwd Priv, Prim v@(V _)] ast' = In Priv (Value v) ast'
+    input t _ = die $ "Error, syntax error of: " ++ show t
 parse'args t = die $ "Error, syntax error of: " ++ show t
 
 -- | Parse return-statement
@@ -95,16 +92,16 @@ parse'return :: Parser AST
 parse'return tokens
   | next ts /= Nil = die $ "Error, syntax error of: " ++ show ts
   | otherwise = (Out Return ast, ts)
- where
-  (ast, ts) = expr tokens
+  where
+    (ast, ts) = expr tokens
 
 -- | Parse statement of let-binding
 parse'assign :: Parser AST
 parse'assign (Prim v@(V _) : Op Assign : ts)
   | next ts' /= Nil = die $ "Error, syntax error of " <> show ts'
   | otherwise = (Bind (Value v) expr', ts')
- where
-  (expr', ts') = expr ts
+  where
+    (expr', ts') = expr ts
 parse'assign ts = die $ "Error, syntax error of " <> show ts
 
 -- | Parse all of the evaluable/relational expressions
@@ -129,8 +126,8 @@ parse'uop :: Ops -> Parser Expr
 parse'uop op tokens
   | next tokens == Op op = die $ "Error, wrong use of: " ++ show op
   | otherwise = (Euna op expr', ts)
- where
-  (expr', ts) = factor tokens
+  where
+    (expr', ts) = factor tokens
 
 -- | Parse expr of a negate unary operator (-)
 parse'neg :: Parser Expr
@@ -154,8 +151,8 @@ parseParens tokens
   | next ts /= Sym RParen =
       die $ "Error, not balanced parentheses: " ++ pretty (Sym LParen)
   | otherwise = (expr', munch ts)
- where
-  (expr', ts) = expr tokens
+  where
+    (expr', ts) = expr tokens
 
 -- | Parse expr of EC point (square brackets, [])
 parseECpoint :: Parser Expr
@@ -163,8 +160,8 @@ parseECpoint tokens
   | next ts == Sym Comma = parsePointFromXY (expr', munch ts)
   | next ts == Sym RBracket = parsePointFromG (expr', munch ts)
   | otherwise = die $ "Error, syntax error of: " ++ show (next ts)
- where
-  (expr', ts) = expr tokens
+  where
+    (expr', ts) = expr tokens
 
 -- | Expr parser extention: EC Point format in [x, y]
 parsePointFromXY :: ParserX Expr
@@ -172,8 +169,8 @@ parsePointFromXY (expr', ts)
   | next ts' /= Sym RBracket =
       die $ "Error, not balanced square brackets: " ++ pretty (Sym LBracket)
   | otherwise = (Ebin PointXY expr' expr'', munch ts')
- where
-  (expr'', ts') = expr ts
+  where
+    (expr'', ts') = expr ts
 
 -- | Expr parser extention: EC Point format in [k]
 parsePointFromG :: ParserX Expr
@@ -184,40 +181,39 @@ parse'if :: Parser Expr
 parse'if tokens
   | next ts /= Kwd Then = die $ "Error, syntax error of: " ++ show (next ts)
   | otherwise = then' (Eif exprIf Void Void, munch ts)
- where
-  (exprIf, ts) = expr tokens
+  where
+    (exprIf, ts) = expr tokens
 
 -- | Expr parser extension: then
 then' :: ParserX Expr
 then' (expr', ts)
   | next ts' /= Kwd Else = die $ "Error, syntax error of: " ++ show (next ts')
   | otherwise = else' (Eif exprIf exprThen Void, munch ts')
- where
-  (exprThen, ts') = expr ts
-  (Eif exprIf _ _) = expr'
+  where
+    (exprThen, ts') = expr ts
+    (Eif exprIf _ _) = expr'
 
 -- | Expr parser extension: else
 else' :: ParserX Expr
 else' (expr', ts) = (Eif exprIf exprThen exprElse, ts')
- where
-  (exprElse, ts') = expr ts
-  (Eif exprIf exprThen _) = expr'
+  where
+    (exprElse, ts') = expr ts
+    (Eif exprIf exprThen _) = expr'
 
 -- | Generate parser extensions using binary operators
 parse'bops :: [Ops] -> ParserX Expr
 parse'bops ops (expr', ts) = case next ts of
   Nil -> (expr', [])
   Op o | o `elem` ops -> parse'bops ops (xBO o expr' expr'', ts')
-   where
-    xBO
-      | o `elem` [Greater, GreaterEq, Less, LessEq, Equal, NEqual] = Rbin
-      | otherwise = Ebin
-    (expr'', ts') = expr'parser'from'op o (munch ts)
+    where
+      xBO
+        | o `elem` [Greater, GreaterEq, Less, LessEq, Equal, NEqual] = Rbin
+        | otherwise = Ebin
+      (expr'', ts') = expr'parser'from'op o (munch ts)
   _ -> (expr', ts)
 
-{- | Choose an expr parser based on operator precedence
- The lower value of priority, the earlier it runs
--}
+-- | Choose an expr parser based on operator precedence
+-- The lower value of priority, the earlier it runs
 expr'parser :: Int -> Parser Expr
 expr'parser priority = case priority of
   9 -> ord'eq . add'sub . mod' . mul'div . exp' . factor
@@ -275,9 +271,8 @@ add'sub = parse'bops [Plus, Minus]
 ord'eq :: ParserX Expr
 ord'eq = parse'bops [Greater, GreaterEq, Less, LessEq, Equal, NEqual]
 
-{- | Check if given Expr is able to be evaluated or not
- Note that Rbin is NOT evaluable since there's no boolean primitive
--}
+-- | Check if given Expr is able to be evaluated or not
+-- Note that Rbin is NOT evaluable since there's no boolean primitive
 evaluable :: Expr -> Bool
 evaluable expr' = case expr' of
   Value _ -> True
@@ -287,11 +282,11 @@ evaluable expr' = case expr' of
   Ebin _ a b -> evaluable a && evaluable b
   Eif c a b -> relational c && evaluable a && evaluable b
   _ -> False
- where
-  evaluable' x = case x of
-    Ebin PointXY _ _ -> False
-    Euna PointkG _ -> False
-    _ -> evaluable x
+  where
+    evaluable' x = case x of
+      Ebin PointXY _ _ -> False
+      Euna PointkG _ -> False
+      _ -> evaluable x
 
 -- | Check if given Expr is described as a conditional relationship or not
 relational :: Expr -> Bool

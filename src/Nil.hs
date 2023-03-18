@@ -1,33 +1,32 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
-{- |
- Module      : Nil
- License     : MIT
- Maintainer  : Francis Lim <thyeem@gmail.com>
- Stability   : experimental
--}
+-- |
+-- Module      : Nil
+-- License     : MIT
+-- Maintainer  : Francis Lim <thyeem@gmail.com>
+-- Stability   : experimental
 module Nil
-  ( module Nil.Base
-  , module Nil.Circuit
-  , module Nil.Curve
-  , module Nil.Data
-  , module Nil.Ecdata
-  , module Nil.Ecdsa
-  , module Nil.Eval
-  , module Nil.Field
-  , module Nil.Graph
-  , module Nil.Lexer
-  , module Nil.Parser
-  , module Nil.Pairing
-  , module Nil.Pinocchio
-  , module Nil.Poly
-  , module Nil.Qap
-  , module Nil.Reorg
-  , module Nil.Shamir
-  , module Nil.Sign
-  , module Nil.Utils
-  , module Nil
+  ( module Nil.Base,
+    module Nil.Circuit,
+    module Nil.Curve,
+    module Nil.Data,
+    module Nil.Ecdata,
+    module Nil.Ecdsa,
+    module Nil.Eval,
+    module Nil.Field,
+    module Nil.Graph,
+    module Nil.Lexer,
+    module Nil.Parser,
+    module Nil.Pairing,
+    module Nil.Pinocchio,
+    module Nil.Poly,
+    module Nil.Qap,
+    module Nil.Reorg,
+    module Nil.Shamir,
+    module Nil.Sign,
+    module Nil.Utils,
+    module Nil,
   )
 where
 
@@ -54,8 +53,8 @@ import Nil.Utils
 
 lang =
   unlines
-    [ "language (priv e, priv r, priv s, pub z)"
-    , "return e^13 + (7e + (5r - 3s) ^ 12) + (e/r-s)^13 / 3z * 2r * s"
+    [ "language (priv e, priv r, priv s, pub z)",
+      "return e^13 + (7e + (5r - 3s) ^ 12) + (e/r-s)^13 / 3z * 2r * s"
     ]
 
 c = compile'language lang :: Circuit Fr
