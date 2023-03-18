@@ -5,9 +5,9 @@
 module Main where
 
 import Cli
-  ( Command (..)
-  , Opts (..)
-  , opts'parser
+  ( Command (..),
+    Opts (..),
+    opts'parser,
   )
 import Control.Monad (unless, when)
 import Control.Monad.Extra (unlessM)
@@ -16,46 +16,46 @@ import Data.Either (fromRight, isRight)
 import Data.List (intercalate)
 import Data.Store (PeekException, decode, encode)
 import Nil
-  ( BN254
-  , Circuit
-  , EvaluationKey
-  , Fr
-  , G1
-  , NIL
-  , Pretty (..)
-  , Proof
-  , VerificationKey
-  , Wire (w'val)
-  , Wmap
-  , bn254'g1
-  , compile'language
-  , decode'file
-  , def'curve
-  , die
-  , dot'header
-  , err
-  , export'graph
-  , extend'gate
-  , extend'wire
-  , hex'from'bytes
-  , info'io
-  , qap'from'circuit
-  , read'table
-  , reorg'circuit
-  , sha256
-  , statement
-  , stderr
-  , str'from'bytes
-  , toxicwaste
-  , vec'fromWmap
-  , wire'vals
-  , wmap'fromList
-  , write'dot
-  , zkprove
-  , zksetup
-  , zktest
-  , zkverify
-  , (~>)
+  ( BN254,
+    Circuit,
+    EvaluationKey,
+    Fr,
+    G1,
+    NIL,
+    Pretty (..),
+    Proof,
+    VerificationKey,
+    Wire (w'val),
+    Wmap,
+    bn254'g1,
+    compile'language,
+    decode'file,
+    def'curve,
+    die,
+    dot'header,
+    err,
+    export'graph,
+    extend'gate,
+    extend'wire,
+    hex'from'bytes,
+    info'io,
+    qap'from'circuit,
+    read'table,
+    reorg'circuit,
+    sha256,
+    statement,
+    stderr,
+    str'from'bytes,
+    toxicwaste,
+    vec'fromWmap,
+    wire'vals,
+    wmap'fromList,
+    write'dot,
+    zkprove,
+    zksetup,
+    zktest,
+    zkverify,
+    (~>),
   )
 import Options.Applicative (execParser)
 import System.Directory (doesFileExist)
@@ -101,21 +101,21 @@ setup Opts {..} = do
   -- and their SHA-256 hashes as fingerprints
   unless o'quite $ do
     info'io
-      [ "filepath"
-      , "Circuit"
-      , "(hash)"
-      , "E-key"
-      , "(hash)"
-      , "V-key"
-      , "(hash)" :: String
+      [ "filepath",
+        "Circuit",
+        "(hash)",
+        "E-key",
+        "(hash)",
+        "V-key",
+        "(hash)" :: String
       ]
-      [ path
-      , file'circ
-      , circ'id
-      , file'ekey
-      , hex'from'bytes . sha256 . encode $ ekey
-      , file'vkey
-      , hex'from'bytes . sha256 . encode $ vkey
+      [ path,
+        file'circ,
+        circ'id,
+        file'ekey,
+        hex'from'bytes . sha256 . encode $ ekey,
+        file'vkey,
+        hex'from'bytes . sha256 . encode $ vkey
       ]
   -- dump graph
   when graph $ do
@@ -162,7 +162,7 @@ type Encoded a = Either PeekException a
 view :: Opts -> IO ()
 view Opts {..} = do
   let View graph reorg file = o'command
-      dump :: Pretty b => Either a b -> IO ()
+      dump :: (Pretty b) => Either a b -> IO ()
       dump = pp . fromRight (die "Error,")
   unlessM
     (doesFileExist file)
@@ -208,42 +208,36 @@ demo'zkp verbose =
     verbose
     ( intercalate
         "\n\t"
-        [ "language (priv e, priv r, priv s, pub z)"
-        , "let k = (z + r * e) / s"
-        , "let P = [e]"
-        , "let R = [k]"
-        , "let o = if (:R - r) == 0 then :P else :R"
-        , "return o"
+        [ "language (priv e, priv r, priv s, pub z)",
+          "let k = (z + r * e) / s",
+          "let P = [e]",
+          "let R = [k]",
+          "let o = if (:R - r) == 0 then :P else :R",
+          "return o"
         ]
     )
     ( wmap'fromList
-        [
-          ( "e"
-          , 8464813805670834410435113564993955236359239915934467825032129101731355555480
+        [ ( "e",
+            8464813805670834410435113564993955236359239915934467825032129101731355555480
+          ),
+          ( "r",
+            13405614924655214385005113554925375156635891943694728320775177413191146574283
+          ),
+          ( "s",
+            13078933289364958062289426192340813952257377699664878821853496586753686181509
+          ),
+          ( "z",
+            4025919241471660438673811488519877818316526842848831811191175453074037299584
           )
-        ,
-          ( "r"
-          , 13405614924655214385005113554925375156635891943694728320775177413191146574283
-          )
-        ,
-          ( "s"
-          , 13078933289364958062289426192340813952257377699664878821853496586753686181509
-          )
-        ,
-          ( "z"
-          , 4025919241471660438673811488519877818316526842848831811191175453074037299584
-          )
-        ]
-        :: Wmap Fr
+        ] ::
+        Wmap Fr
     )
     ( wmap'fromList
-        [
-          ( "return"
-          , 20546328083791890245710917085664594543309426573230401055874323960053340664311
-          )
-        ,
-          ( "z"
-          , 4025919241471660438673811488519877818316526842848831811191175453074037299584
+        [ ( "return",
+            20546328083791890245710917085664594543309426573230401055874323960053340664311
+          ),
+          ( "z",
+            4025919241471660438673811488519877818316526842848831811191175453074037299584
           )
         ]
     )

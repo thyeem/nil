@@ -1,5 +1,5 @@
 bin := nil
-ghc := --with-compiler=ghc-8.10.7
+ghc := --with-compiler=ghc-9.2.7
 opts := "--ghc-options=-Wall \
                        -threaded \
                        -rtsopts \
