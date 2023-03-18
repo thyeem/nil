@@ -1,23 +1,24 @@
 bin := nil
 ghc := --with-compiler=ghc-9.2.7
-opts := "--ghc-options=-Wall \
-                       -threaded \
-                       -rtsopts \
-                       -with-rtsopts=-N \
-                       -feager-blackholing \
-                       -dynamic"
-fast := $(ghc) $(opts) "--ghc-options=-O0"
-release := $(ghc) $(opts) "--ghc-options=-O2 -fexpose-all-unfoldings"
+opts := --ghc-options="-threaded -rtsopts -with-rtsopts=-N -feager-blackholing -dynamic"
+fast := --ghc-options="-O0"
+sanity := --ghc-options="-Wall -Werror"
+release := --ghc-options="-O2 -fexpose-all-unfoldings"
 test-opts := $(fast) --test-show-details=direct
 path := ${HOME}/.local/bin
 
 .PHONY: build
 build:
-	cabal build $(fast)
+	cabal build $(ghc) $(opts) $(fast)
+
+.PHONY: check
+check:
+	make clean
+	cabal build $(ghc) $(opts) $(fast) $(sanity)
 
 .PHONY: release
 release:
-	cabal build $(release)
+	cabal build $(ghc) $(opts) $(release)
 
 .PHONY: install
 install:

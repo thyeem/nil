@@ -303,16 +303,17 @@ ranf = randomRIO (minBound + 2, maxBound - 1)
 -- | Random sampling of k from [p]
 sample :: [p] -> Int -> IO [p]
 sample xs n
-  | n < 0 || n > length xs = die $ "Invalid sampling number" ++ show n
+  | n < 0 = die $ "Error, non-positive sample size: " ++ show n
   | otherwise = f xs []
   where
     f [] acc = pure acc
     f xs' acc
-      | length acc == n = pure acc
+      | length acc >= n = pure acc
       | otherwise = do
           k <- randomRIO (0, length xs' - 1)
-          let (a, b : bs) = splitAt k xs'
-          f (bs <> a) (b : acc)
+          case splitAt k xs' of
+            (a, b : bs) -> f (bs <> a) (b : acc)
+            _ -> die "Error, sampling"
 
 -- | Shuffle a given list
 shuffle :: [p] -> IO [p]
@@ -399,12 +400,11 @@ assert True = id
 assert False = const (die "Assertion Failed")
 
 -- | Check if balanced for a given string including any parenthesis-like symbol
-isbalanced :: String -> String -> Bool
-isbalanced braket xs
+isbalanced :: Char -> Char -> String -> Bool
+isbalanced bra ket xs
   | check = True
   | otherwise = False
   where
-    (bra : ket : _) = braket
     f x
       | x == bra = 1 :: Int
       | x == ket = -1
