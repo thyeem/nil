@@ -73,24 +73,24 @@ parse'stmt tokens = case next tokens of
   Kwd Language -> parse'args (munch tokens)
   Kwd Let -> parse'assign (munch tokens)
   Kwd Return -> parse'return (munch tokens)
-  _ -> die $ "Error, parse error of: " ++ show (next tokens)
+  _ -> die $ "Error, parse error of: " ++ pretty (next tokens)
 
 -- | Parse statement of input declaration
 parse'args :: Parser AST
 parse'args (Sym LParen : ts)
-  | last ts /= Sym RParen = die $ "Error, syntax error of: " ++ show (last ts)
+  | last ts /= Sym RParen = die $ "Error, syntax error of: " ++ pretty (last ts)
   | otherwise = (ast, [])
   where
     ast = foldr input Null (init ts `splitby` [Sym Comma])
     input [Kwd Pub, Prim v@(V _)] ast' = In Pub (Value v) ast'
     input [Kwd Priv, Prim v@(V _)] ast' = In Priv (Value v) ast'
-    input t _ = die $ "Error, syntax error of: " ++ show t
-parse'args t = die $ "Error, syntax error of: " ++ show t
+    input t _ = die $ "Error, syntax error of: " ++ pretty t
+parse'args t = die $ "Error, syntax error of: " ++ pretty t
 
 -- | Parse return-statement
 parse'return :: Parser AST
 parse'return tokens
-  | next ts /= Nil = die $ "Error, syntax error of: " ++ show ts
+  | next ts /= Nil = die $ "Error, syntax error of: " ++ pretty ts
   | otherwise = (Out Return ast, ts)
   where
     (ast, ts) = expr tokens
@@ -98,11 +98,11 @@ parse'return tokens
 -- | Parse statement of let-binding
 parse'assign :: Parser AST
 parse'assign (Prim v@(V _) : Op Assign : ts)
-  | next ts' /= Nil = die $ "Error, syntax error of " <> show ts'
+  | next ts' /= Nil = die $ "Error, syntax error of " <> pretty ts'
   | otherwise = (Bind (Value v) expr', ts')
   where
     (expr', ts') = expr ts
-parse'assign ts = die $ "Error, syntax error of " <> show ts
+parse'assign ts = die $ "Error, syntax error of " <> pretty ts
 
 -- | Parse all of the evaluable/relational expressions
 expr :: Parser Expr
@@ -124,7 +124,7 @@ factor tokens = case next tokens of
 -- | Generate 'Parser Expr' using given unary operators
 parse'uop :: Ops -> Parser Expr
 parse'uop op tokens
-  | next tokens == Op op = die $ "Error, wrong use of: " ++ show op
+  | next tokens == Op op = die $ "Error, wrong use of: " ++ pretty op
   | otherwise = (Euna op expr', ts)
   where
     (expr', ts) = factor tokens
@@ -159,7 +159,7 @@ parseECpoint :: Parser Expr
 parseECpoint tokens
   | next ts == Sym Comma = parsePointFromXY (expr', munch ts)
   | next ts == Sym RBracket = parsePointFromG (expr', munch ts)
-  | otherwise = die $ "Error, syntax error of: " ++ show (next ts)
+  | otherwise = die $ "Error, syntax error of: " ++ pretty (next ts)
   where
     (expr', ts) = expr tokens
 
@@ -179,7 +179,7 @@ parsePointFromG (expr', ts) = (Euna PointkG expr', ts)
 -- | Parse If-Expression
 parse'if :: Parser Expr
 parse'if tokens
-  | next ts /= Kwd Then = die $ "Error, syntax error of: " ++ show (next ts)
+  | next ts /= Kwd Then = die $ "Error, syntax error of: " ++ pretty (next ts)
   | otherwise = then' (Eif exprIf Void Void, munch ts)
   where
     (exprIf, ts) = expr tokens
@@ -187,7 +187,7 @@ parse'if tokens
 -- | Expr parser extension: then
 then' :: ParserX Expr
 then' (expr', ts)
-  | next ts' /= Kwd Else = die $ "Error, syntax error of: " ++ show (next ts')
+  | next ts' /= Kwd Else = die $ "Error, syntax error of: " ++ pretty (next ts')
   | otherwise = else' (Eif exprIf exprThen Void, munch ts')
   where
     (exprThen, ts') = expr ts
@@ -239,7 +239,7 @@ expr'parser'from'op op = case op of
   LessEq -> expr'parser 5
   Equal -> expr'parser 5
   NEqual -> expr'parser 5
-  _ -> die $ "Error, unexpected op: " ++ show op
+  _ -> die $ "Error, unexpected op: " ++ pretty op
 
 -- | Expr parser extension: Exp (^)
 exp' :: ParserX Expr

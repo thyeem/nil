@@ -433,7 +433,7 @@ findp curve =
           . concat
           $ [ split (x, y, y')
               | (x, Just (y, y')) <-
-                  (\x -> (x,) (y'from'x curve x)) <%> [minBound .. maxBound]
+                  (\x -> (x, y'from'x curve x)) <%> [minBound .. maxBound]
             ]
       )
   where

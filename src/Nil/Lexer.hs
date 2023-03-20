@@ -212,6 +212,9 @@ instance Pretty Token where
     Nil -> mempty
     a -> die $ "Error, unexpected token: " ++ show a
 
+instance Pretty [Token] where
+  pretty = unwords . (pretty <$>)
+
 instance Pretty Ops where
   pretty = \case
     Plus -> "+"

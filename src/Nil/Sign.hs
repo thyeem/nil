@@ -21,29 +21,30 @@ import Data.Map (Map, delete, member)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point (..), c'g, p'curve, toA, (~*))
-import Nil.Data (NIL (NIL), lift, nil, unil)
-import Nil.Eval (eval, extend'gate, extend'wire, wmap'fromList, (~~), (~~~))
-import Nil.Field (Field)
+import Nil.Data (NIL (NIL), lift, nil, unil, unil')
+import Nil.Eval (eval, eval'circuit, extend'gate, extend'wire, wmap'fromList, (~~), (~~~))
+import Nil.Field (Extensionfield, Field)
+import Nil.Pairing (pairing)
 import Nil.Reorg
 import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256)
 import System.Random (Random)
 
 -- | Aggregable-signature object for nil'sign
-data Nilsig i r q p = Nilsig
+data Nilsig i j r q = Nilsig
   { n'hash :: String,
-    n'key :: Nilkey i q p,
+    n'key :: Nilkey i j q,
     n'circuit :: Circuit (NIL i r q)
   }
   deriving (Eq, Show, Generic, NFData)
 
-instance (Show q, Field q, Show p, Field p, Show r) => Pretty (Nilsig i r q p)
+instance (Show q, Field q, Show r) => Pretty (Nilsig i j r q)
 
 -- | Aggregable verification key of nilsig
-type Nilkey i q p = (Point i q, Point i p)
+type Nilkey i j q = (Point i q, Point j (Extensionfield q j))
 
 instance
-  (Show q, Pretty q, Field q, Show p, Pretty p, Field p) =>
-  Pretty (Nilkey i q p)
+  (Show q, Pretty q, Field q) =>
+  Pretty (Nilkey i j q)
   where
   pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
 
@@ -56,20 +57,18 @@ nil'init ::
     Integral q,
     Bounded q,
     Random q,
-    Field q,
-    Field p
+    Field q
   ) =>
   Curve i q ->
-  Curve i p ->
+  Curve j (Extensionfield q j) ->
   Circuit r ->
-  IO (Nilsig i r q p)
+  IO (Nilsig i j r q)
 nil'init curve'q curve'p circuit = do
   phi <- ranf
   chi <- ranf
   nilified <- nilify'circuit <=< reorg'circuit $ circuit
   let omap = omap'from'gates . (extend'gate curve'q <$>) . c'gates $ nilified
       gmap = gmap'from'omap omap
-      -- wmap = extend'wire curve'q <$> wmap'fromList mempty
       wmap = wmap'fromList mempty
       amps = find'amps omap
       nilkey = update'nilkey phi chi (c'g curve'q, c'g curve'p)
@@ -79,11 +78,11 @@ nil'init curve'q curve'p circuit = do
 {-# INLINE nil'init #-}
 
 update'nilkey ::
-  (Integral r, Field p, Field q) =>
+  (Integral r, Field q) =>
   r ->
   r ->
-  Nilkey i q p ->
-  Nilkey i q p
+  Nilkey i j q ->
+  Nilkey i j q
 update'nilkey a b = bimap (~* a) (~* b)
 {-# INLINE update'nilkey #-}
 
@@ -97,12 +96,11 @@ nil'sign ::
     Integral r,
     Random r,
     Bounded r,
-    Field r,
-    Field p
+    Field r
   ) =>
   Wmap (NIL i r q) ->
-  Nilsig i r q p ->
-  IO (Nilsig i r q p)
+  Nilsig i j r q ->
+  IO (Nilsig i j r q)
 nil'sign secrets sig@Nilsig {..} = do
   alpha <- ranf
   gamma <- ranf
@@ -149,7 +147,7 @@ backprop alpha gamma gmap omap g
     NIL c _ = w'val (g'rwire g)
     updater v = nilify False False (nil c v)
     pasts = prev'amps omap g
-    anticones = nub . concat $ next'amps gmap <$> pasts
+    anticones = nub $ concatMap (next'amps gmap) pasts
 {-# INLINE backprop #-}
 
 -- | Sign each entry gate assigned for a signer
@@ -224,6 +222,26 @@ reduce o = foldl' update (mempty, o) (sort'omap o)
           Add -> (+)
           a -> die $ "Error, not evaluable operator: " ++ show a
 
+-- | nil check
+nil'check ::
+  (Integral r, Integral q, Field r, Field q) =>
+  Curve i (Extensionfield q i) ->
+  r ->
+  Nilsig i j r q ->
+  Bool
+nil'check curve fval sig@Nilsig {..}
+  | not . null $ entries =
+      die $
+        "Error, used Nilsig not fully signed yet: "
+          ++ show (nub . w'key . g'lwire <$> entries)
+  | otherwise = pairing curve out chi == pairing curve phi chi ^ fval
+  where
+    omap = omap'from'gates . c'gates $ n'circuit
+    entries = find'entries omap
+    wmap = extend'wire (p'curve phi) <$> wmap'fromList [(return'key, fval)]
+    out = unil' . w'val $ eval'circuit wmap n'circuit ~> return'key
+    (phi, chi) = n'key
+
 -- | Defines hash of a wire
 hash'wire :: ByteString -> Omap a -> Wire a -> ByteString
 hash'wire salt omap wire
@@ -236,9 +254,9 @@ hash'wire salt omap wire
 -- | Defines hash of a gate
 hash'gate :: ByteString -> Omap a -> Gate a -> ByteString
 hash'gate salt omap Gate {..} = case g'op of
-  Add -> fold $ hash'wire salt omap <$> [g'lwire, g'rwire, g'owire]
-  Mul -> fold $ hash'wire salt omap <$> [g'rwire, g'owire, g'lwire]
-  _ -> fold $ hash'wire salt omap <$> [g'owire, g'lwire, g'rwire]
+  Add -> fold' $ hash'wire salt omap <$> [g'lwire, g'rwire, g'owire]
+  Mul -> fold' $ hash'wire salt omap <$> [g'rwire, g'owire, g'lwire]
+  _ -> fold' $ hash'wire salt omap <$> [g'owire, g'lwire, g'rwire]
   where
-    fold = foldl' ((sha256 .) . append) mempty
+    fold' = foldl' ((sha256 .) . append) mempty
 {-# INLINEABLE hash'gate #-}

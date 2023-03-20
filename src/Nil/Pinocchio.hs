@@ -35,7 +35,7 @@ import Data.Store (Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
-import Nil.Ecdata (BN254, Fr, G1, G2, bn254'g1, g1, g2)
+import Nil.Ecdata (BN254, BN254'G2, BN254'GT, Fr, G1, G2, bn254'g1, bn254'gt, g1, g2)
 import Nil.Eval (statement, vec'fromWmap, wire'vals, wmap'fromList)
 import Nil.Lexer (tokenize)
 import Nil.Pairing (pairing)
@@ -116,7 +116,7 @@ import Nil.Utils
 data EvaluationKey = EKey
   { eEvj :: [Point BN254 G1], -- [ E(Vj(s)) ]
     eEwk :: [Point BN254 G1], -- [ E(Wk(s)) ]
-    eE'wk :: [Point BN254 G2], -- [ E'(Wk(s)) ]
+    eE'wk :: [Point BN254'G2 G2], -- [ E'(Wk(s)) ]
     eEyk :: [Point BN254 G1], -- [ E(Yk(s)) ]
     eEavj :: [Point BN254 G1], -- [ E(a * Vj(s)) ]
     eEawk :: [Point BN254 G1], -- [ E(a * Wk(s)) ]
@@ -131,15 +131,15 @@ data EvaluationKey = EKey
 
 -- | Verification Key
 data VerificationKey = VKey
-  { vE1 :: Point BN254 G2, -- E(1)
-    vEa :: Point BN254 G2, -- E(a)
-    vEr :: Point BN254 G2, -- E(r)
-    vErbv :: Point BN254 G2, -- E(r * bv)
-    vErbw :: Point BN254 G2, -- E(r * bw)
-    vErby :: Point BN254 G2, -- E(r * by)
-    vEt :: Point BN254 G2, -- E(t(s))
+  { vE1 :: Point BN254'G2 G2, -- E(1)
+    vEa :: Point BN254'G2 G2, -- E(a)
+    vEr :: Point BN254'G2 G2, -- E(r)
+    vErbv :: Point BN254'G2 G2, -- E(r * bv)
+    vErbw :: Point BN254'G2 G2, -- E(r * bw)
+    vErby :: Point BN254'G2 G2, -- E(r * by)
+    vEt :: Point BN254'G2 G2, -- E(t(s))
     vEv0 :: Point BN254 G1, -- E(V0(s))
-    vEw0 :: Point BN254 G2, -- E(W0(s))
+    vEw0 :: Point BN254'G2 G2, -- E(W0(s))
     vEy0 :: Point BN254 G1, -- E(Y0(s))
     vEvio :: [Point BN254 G1] -- [ E(Vio(s)) ]
   }
@@ -149,7 +149,7 @@ data VerificationKey = VKey
 data Proof = Proof
   { pEvJ :: Point BN254 G1, -- E(Vj(s))
     pEw :: Point BN254 G1, -- E(W(s))
-    pE'w :: Point BN254 G2, -- E'(W(s))
+    pE'w :: Point BN254'G2 G2, -- E'(W(s))
     pEy :: Point BN254 G1, -- E(Y(s))
     pEh :: Point BN254 G1, -- E(h(s))
     pEavJ :: Point BN254 G1, -- E(a * Vj(s))
@@ -380,7 +380,7 @@ zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
     sumV = vEv0 |+| uEvio |+| pEvJ -- E(V(s))
     sumW = vEw0 |+| pE'w -- E(W(s))
     sumY = vEy0 |+| pEy -- E(Y(s))
-    e = pairing
+    e = pairing bn254'gt
 {-# INLINEABLE zkverify #-}
 
 -- | Examine the prepared zero-knowledge suite

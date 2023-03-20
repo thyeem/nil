@@ -18,6 +18,7 @@ import Control.Parallel
 import qualified Crypto.Hash.BLAKE2.BLAKE2b as B2b
 import qualified Crypto.Hash.SHA256 as S256
 import qualified Crypto.Hash.SHA512 as S512
+import Data.Bifunctor (bimap)
 import Data.Bits (Bits (..))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as H
@@ -174,9 +175,15 @@ pthenIO :: (Monad m) => m a -> m b -> m b
 pthenIO ma mb = ma `par` mb `pseq` (ma *> mb)
 {-# INLINE pthenIO #-}
 
--- | Map a function over a 2-elem tuple
+-- | Map a function over a 2-element tuple
 tmap :: (a -> b) -> (a, a) -> (b, b)
 tmap = uncurry . on (,)
+{-# INLINE tmap #-}
+
+-- | Elementwise binary operation with two 2-element tuples
+tbop :: (a -> a -> b) -> (a, a) -> (a, a) -> (b, b)
+tbop op x = uncurry bimap (tmap op x)
+{-# INLINE tbop #-}
 
 -- | Explicitly convert [u8] into string
 str'from'u8 :: [Word8] -> String

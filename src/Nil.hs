@@ -53,7 +53,7 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)",
-      "return e^13 + (7e + (5r - 3s) ^ 12) + (e/r-s)^13 / 3z * 2r * s"
+      "return e^3 * 7e + (5r - 3s) ^4 + (e/r-s)^13 / 3z * 2r * s"
     ]
 
 c = compile'language lang :: Circuit Fr
@@ -99,7 +99,7 @@ t = do
   let m = eval'circuit wmap (n'circuit sss)
   let _R = unil' . w'val $ m ~> "return"
   let (_P, _C) = n'key sss
-  pure $ pairing _R _C == pairing _P _C ^ ret
+  pure $ pairing bn254'gt _R _C == pairing bn254'gt _P _C ^ ret
 
 wmap1 = extend'wire bn254'g1 <$> wmap'fromList [("e", e), ("r", r)]
 

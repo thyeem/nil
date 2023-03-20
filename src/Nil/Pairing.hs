@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS -Wno-unused-top-binds #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -10,32 +11,9 @@ module Nil.Pairing
 where
 
 import Data.List (foldl')
-import Nil.Curve
-  ( Curve (..),
-    Point (..),
-    frobp,
-    jp,
-    toJ,
-    (~*),
-  )
-import Nil.Ecdata
-  ( BN254,
-    G1,
-    G2,
-    GT,
-    bn254'g1,
-    bn254'gt,
-    field'gt,
-  )
-import Nil.Field
-  ( Extensionfield (..),
-    Field (..),
-  )
-import Nil.Utils
-  ( bits'from'int,
-    die,
-    (|+|),
-  )
+import Nil.Curve (Curve (..), Point (..), frobp, jp, toJ, (~*))
+import Nil.Field (Extensionfield (..), Field (..), Irreduciblepoly (..), ef)
+import Nil.Utils (bits'from'int, die, tbop, (|+|))
 
 {-
  BN curve can be parametrized as following:
@@ -66,32 +44,32 @@ import Nil.Utils
 loop'count :: Integer
 loop'count = 29793968203157093288
 
--- | Element-wise operation of (*) on 2-elem tuples
-(*|*) :: (Num a) => (a, a) -> (a, a) -> (a, a)
-ta *|* tb = (o * q, p * r) where ((o, p), (q, r)) = (ta, tb)
-
 -- | Miller's algorithm based on optimal Ate pairing:  aT(Q, P) -> f
 -- https://eprint.iacr.org/2010/354.pdf
 -- https://eprint.iacr.org/2016/130.pdf
-miller'loop :: Point BN254 GT -> Point BN254 GT -> GT
-miller'loop p q
-  | p == O || q == O = field'gt [1]
-  | otherwise = final'exp . uncurry (/) . finalQ2 . finalQ1 $ loop
+miller'loop ::
+  (Field f) =>
+  Curve i (Extensionfield f i) ->
+  Point i (Extensionfield f i) ->
+  Point i (Extensionfield f i) ->
+  Extensionfield f i
+miller'loop curve p q
+  | p == O || q == O = one'
+  | otherwise = final'exp curve . uncurry (/) . finalQ2 . finalQ1 $ loop
   where
-    loop = foldl' (add . dbl) ((field'gt [1], field'gt [1]), q) s
+    one' = one (c'a curve)
+    loop = foldl' (add . dbl) ((one', one'), q) s
     s = drop 1 . reverse $ bits'from'int loop'count
     frobQ1 = frobp q (1 :: Int)
     frobQ2 = negate . frobp q $ (2 :: Int)
-    finalQ1 (f, t) = (f *|* linefunc t frobQ1 p, t |+| frobQ1)
-    finalQ2 (f, t) = f *|* linefunc t frobQ2 p
-    dbl (f, t) = (f *|* f *|* linefunc t t p, t ~* (2 :: Int))
+    finalQ1 (f, t) = (f `emul` linefunc t frobQ1 p, t |+| frobQ1)
+    finalQ2 (f, t) = f `emul` linefunc t frobQ2 p
+    dbl (f, t) = (f `emul` f `emul` linefunc t t p, t ~* (2 :: Int))
     add (f, t) b
-      | b == 1 = (f *|* linefunc t q p, t |+| q)
+      | b == 1 = (f `emul` linefunc t q p, t |+| q)
       | otherwise = (f, t)
+    emul = tbop (*)
 {-# INLINEABLE miller'loop #-}
-
--- dbl'step :: ((GT, GT), Point GT) -> ((GT, GT), Point GT)
--- dbl'step (f, t) = (f *|* f *|* linefunc t t p, t .* 2)
 
 -- | A function f representing the line through P and Q
 -- Returns values from the function evaluation at point T: f(T)
@@ -104,6 +82,7 @@ linefunc ::
   Point i f ->
   (f, f)
 linefunc p q t = linefuncJ (toJ p) (toJ q) (toJ t)
+{-# INLINEABLE linefunc #-}
 
 -- | LineFunction based on Affine coordinates
 linefuncA ::
@@ -161,38 +140,60 @@ linefuncJ = go
 {-# INLINEABLE linefuncJ #-}
 
 -- | Final exponentiation
-final'exp :: GT -> GT
-final'exp f = f ^ expo
+final'exp ::
+  (Field f) =>
+  Curve i (Extensionfield f i) ->
+  Extensionfield f i ->
+  Extensionfield f i
+final'exp curve f = f ^ expo
   where
-    expo = (c'p bn254'g1 ^ (12 :: Int) - 1) `div` c'n bn254'g1
+    expo = (c'p curve ^ (12 :: Int) - 1) `div` c'n curve
 {-# INLINE final'exp #-}
 
 -- | Reduced Tate pairing using optimal Ate pairing
 -- P in G1 x Q in G2 -> e(P, Q)
-pairing :: Point BN254 G1 -> Point BN254 G2 -> GT
--- pairing p q = go (toJ p) (toJ q)
-pairing p q = miller'loop (from'fq p) (twist q)
+pairing ::
+  (Field f) =>
+  Curve i (Extensionfield f i) ->
+  Point j f ->
+  Point k (Extensionfield f k) ->
+  Extensionfield f i
+pairing curve p q = miller'loop curve (from'fq curve p) (twist curve q)
 {-# INLINE pairing #-}
 
 -- | Construct a point on GT from a point on G1
-from'fq :: Point BN254 G1 -> Point BN254 GT
-from'fq = \case
-  J _ x y z -> jp bn254'gt (field'gt [x]) (field'gt [y]) (field'gt [z])
+from'fq ::
+  (Field f) =>
+  Curve i (Extensionfield f i) ->
+  Point j f ->
+  Point i (Extensionfield f i)
+from'fq curve = \case
+  J _ x y z -> jp curve (lift [x]) (lift [y]) (lift [z])
   O -> O
-  a -> from'fq (toJ a)
+  a -> from'fq curve (toJ a)
+  where
+    E (I px) _ = c'a curve
+    lift = ef (I px)
 {-# INLINE from'fq #-}
 
 -- | Map G2, E(Fq^2) point to its sextic twist GT, E(Fq^12) point
-twist :: Point BN254 G2 -> Point BN254 GT
-twist = \case
+twist ::
+  (Field f) =>
+  Curve i (Extensionfield f i) ->
+  Point j (Extensionfield f j) ->
+  Point i (Extensionfield f i)
+twist curve = \case
   O -> O
-  a@A {} -> twist (toJ a)
+  a@A {} -> twist curve (toJ a)
   J _ (E _ x) (E _ y) (E _ z) ->
     let [x0, x1] = x + [0, 0]
         [y0, y1] = y + [0, 0]
         [z0, z1] = z + [0, 0]
-        xt = field'gt [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * field'gt [0, 0, 1]
-        yt = field'gt [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * field'gt [0, 0, 0, 1]
-        zt = field'gt [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
-     in jp bn254'gt xt yt zt
+        xt = [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * [0, 0, 1]
+        yt = [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * [0, 0, 0, 1]
+        zt = [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
+     in jp curve (lift xt) (lift yt) (lift zt)
+  where
+    E (I px) _ = c'a curve
+    lift = ef (I px)
 {-# INLINE twist #-}

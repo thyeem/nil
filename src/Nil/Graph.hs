@@ -135,7 +135,7 @@ g'reorged circuit f = do
   dot <- write'dot dot'header <$> reorg'circuit circuit
   export'graph f dot
 
-g'sig :: (Eq q, Eq r) => Nilsig i r q p -> String -> IO ()
+g'sig :: (Eq q, Eq r) => Nilsig i j r q -> String -> IO ()
 g'sig sig f = do
   let dot = write'dot dot'header (n'circuit sig)
   export'graph f dot

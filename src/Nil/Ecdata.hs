@@ -15,6 +15,7 @@ import Nil.Curve
   )
 import Nil.Field
   ( Extensionfield (..),
+    Field,
     Irreduciblepoly (..),
     Primefield (..),
     ef,
@@ -25,6 +26,10 @@ import Nil.Field
 --   Twisted BN, G2=E'(Fq^2): y^2 = x^3 + b/xi  where xi = u + 9
 --   xi must be in Fq^2 and neither a square nor a cube.
 data BN254
+
+data BN254'G2
+
+data BN254'GT
 
 -- | G1, G2 and GT are both curve types and field types.
 --
@@ -45,34 +50,30 @@ type Fr =
     21888242871839275222246405745257275088548364400416034343698204186575808495617
 
 -- | G2 := Extensionfield G1[x] / <p(x)>  where p(x) = x^2 + 1
-type G2 = Extensionfield G1 X
-
-data X
+type G2 = Extensionfield G1 BN254'G2
 
 -- GT := Extensionfield G1[u] / <p(u)>  where p(u) = x^12 -18 * x^6 + 82
-type GT = Extensionfield G1 U
+type GT = Extensionfield G1 BN254'GT
 
-data U
+deriving instance Store (Irreduciblepoly G1 BN254'G2)
 
-deriving instance Store (Irreduciblepoly G1 X)
+deriving instance Store (Irreduciblepoly G1 BN254'GT)
 
 deriving instance Store G2
-
-deriving instance Store (Irreduciblepoly G1 U)
 
 deriving instance Store GT
 
 deriving instance Store (Point BN254 G1)
 
-deriving instance Store (Point BN254 G2)
+deriving instance Store (Point BN254'G2 G2)
 
-deriving instance Store (Point BN254 GT)
+deriving instance Store (Point BN254'GT GT)
 
 deriving instance Store (Curve BN254 G1)
 
-deriving instance Store (Curve BN254 G2)
+deriving instance Store (Curve BN254'G2 G2)
 
-deriving instance Store (Curve BN254 GT)
+deriving instance Store (Curve BN254'GT GT)
 
 -- | Generator or base point on G1
 g1 :: Point BN254 G1
@@ -83,15 +84,15 @@ field'g2 :: [G1] -> G2
 field'g2 = ef (I pX) where pX = [1 :: G1, 0, 1]
 
 -- | Generator or base point on G2
-g2 :: Point BN254 G2
+g2 :: Point BN254'G2 G2
 g2 = c'g bn254'g2
 
 -- | GT field constructor
 field'gt :: [G1] -> GT
-field'gt = ef (I pU) where pU = [82 :: G1, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0, 1]
+field'gt = ef (I [82 :: G1, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0, 1])
 
 -- | Generator or base point on GT
-gt :: Point BN254 GT
+gt :: Point BN254'GT GT
 gt = c'g bn254'gt
 
 -- G1 = E(Fq): BN254 over base field Fq
@@ -111,7 +112,7 @@ bn254'g1 =
     }
 
 -- | G2 = E(Fq^2): BN254 twisted over Fq^2
-bn254'g2 :: Curve BN254 G2
+bn254'g2 :: Curve BN254'G2 G2
 bn254'g2 =
   Curve
     { c'name = "BN254-Q2",
@@ -135,7 +136,7 @@ bn254'g2 =
 
 -- | GT = E(Fq^12): BN254 over Fq12
 -- the r-th root of unity subgroup of the multiplicative Fq12 group
-bn254'gt :: Curve BN254 GT
+bn254'gt :: Curve BN254'GT GT
 bn254'gt =
   Curve
     { c'name = "BN254-Q12",
