@@ -64,6 +64,9 @@ data Gate a = Gate
   }
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
+instance (Eq a) => Ord (Gate a) where
+  x <= y = w'key (g'owire x) <= w'key (g'owire y)
+
 -- | Gate operators: Base operators (x, +) and extended extended operators (ending with ').
 -- Extended operators: perform operations that cannot be converted into base operators.
 -- Gates including extended operators also contribute to Circuit and QAP,

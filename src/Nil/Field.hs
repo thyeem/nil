@@ -13,6 +13,7 @@ module Nil.Field
     Extensionfield (..),
     ef,
     unef,
+    unip,
     Irreduciblepoly (..),
   )
 where
@@ -199,15 +200,19 @@ newtype Irreduciblepoly f i = I [f] deriving (Eq, Ord, Generic, NFData)
 -- E (I [`1,`0,`1]) [`8,`12]
 ef ::
   (Eq f, Fractional f, Field f) =>
-  Irreduciblepoly f i ->
+  [f] ->
   [f] ->
   Extensionfield f i
-ef p@(I !px) !fx = E p fx' where (_, fx') = fx |/ px
+ef px fx = E (I px) fx' where (_, fx') = fx |/ px
 {-# INLINEABLE ef #-}
 
 unef :: (Eq f, Fractional f, Field f) => Extensionfield f i -> [f]
 unef (E _ fx) = fx
 {-# INLINEABLE unef #-}
+
+unip :: (Eq f, Fractional f, Field f) => Extensionfield f i -> [f]
+unip (E (I px) _) = px
+{-# INLINEABLE unip #-}
 
 instance (Field f) => Semigroup (Extensionfield f i) where
   (<>) = (*)
@@ -229,13 +234,13 @@ instance (Field f) => Field (Extensionfield f i) where
   {-# INLINE one #-}
 
 instance (Field f) => Num (Extensionfield f i) where
-  (E !p !fx) + (E _ !gx) = ef p (fx + gx)
+  E (I !p) !fx + E _ !gx = ef p (fx + gx)
   {-# INLINE (+) #-}
 
-  (E !p !fx) - (E _ !gx) = ef p (fx - gx)
+  E (I !p) !fx - E _ !gx = ef p (fx - gx)
   {-# INLINE (-) #-}
 
-  (E !p !fx) * (E _ !gx) = ef p (fx * gx)
+  E (I !p) !fx * E _ !gx = ef p (fx * gx)
   {-# INLINE (*) #-}
 
   negate (E !p !fx) = E p (negate fx)
@@ -251,7 +256,7 @@ instance (Field f) => Fractional (Extensionfield f i) where
   (/) !a !b = a * recip b
   {-# INLINE (/) #-}
 
-  recip (E p@(I !px) !fx) = ef p (x |* recip g)
+  recip (E (I !px) !fx) = ef px (x |* recip g)
     where
       (x, y) = egcdpoly fx px
       g = head $ fx * x + px * y

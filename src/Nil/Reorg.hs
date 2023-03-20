@@ -364,7 +364,7 @@ prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
 -- | Find all next amplifier gates directly involved with the given gate
 next'amps :: (Eq a) => Gmap a -> Gate a -> [Gate a]
 next'amps gmap Gate {g'owire = Wire {w'key = out}}
-  | member out gmap = nub . concat $ go <$> (gmap ~>> out)
+  | member out gmap = nub (concatMap go (gmap ~>> out))
   | otherwise = die $ "Error, not found any amp gate following: " ++ out
   where
     go gate

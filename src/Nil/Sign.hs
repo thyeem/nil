@@ -2,7 +2,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -----------------------------------------------------------------------------
@@ -12,21 +11,21 @@
 module Nil.Sign where
 
 import Control.DeepSeq (NFData)
-import Control.Monad (foldM, (<=<))
+import Control.Monad (foldM, unless, (<=<))
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString, append)
 import Data.Function (on)
-import Data.List (foldl', nub)
+import Data.List (find, foldl', nub, sort)
 import Data.Map (Map, delete, member)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point (..), c'g, p'curve, toA, (~*))
 import Nil.Data (NIL (NIL), lift, nil, unil, unil')
 import Nil.Eval (eval, eval'circuit, extend'gate, extend'wire, wmap'fromList, (~~), (~~~))
-import Nil.Field (Extensionfield, Field)
+import Nil.Field (Extensionfield, Field, unef)
 import Nil.Pairing (pairing)
 import Nil.Reorg
-import Nil.Utils (Pretty (..), bytes'from'str, die, ranf, sha256)
+import Nil.Utils (Pretty (..), bytes'from'hex, bytes'from'int, bytes'from'str, die, hex'from'bytes, ranf, sha256)
 import System.Random (Random)
 
 -- | Aggregable-signature object for nil'sign
@@ -46,7 +45,7 @@ instance
   (Show q, Pretty q, Field q) =>
   Pretty (Nilkey i j q)
   where
-  pretty key = unlines [pretty . fst $ key, pretty . snd $ key]
+  pretty key = unlines [mempty, pretty . fst $ key, pretty . snd $ key]
 
 -- | Initialize nil-signature
 nil'init ::
@@ -61,20 +60,24 @@ nil'init ::
   ) =>
   Curve i q ->
   Curve j (Extensionfield q j) ->
+  Curve t (Extensionfield q t) ->
   Circuit r ->
   IO (Nilsig i j r q)
-nil'init curve'q curve'p circuit = do
+nil'init curve'g1 curve'g2 curve'gt circuit = do
   phi <- ranf
   chi <- ranf
   nilified <- nilify'circuit <=< reorg'circuit $ circuit
-  let omap = omap'from'gates . (extend'gate curve'q <$>) . c'gates $ nilified
+  let omap = omap'from'gates . (extend'gate curve'g1 <$>) . c'gates $ nilified
       gmap = gmap'from'omap omap
       wmap = wmap'fromList mempty
       amps = find'amps omap
-      nilkey = update'nilkey phi chi (c'g curve'q, c'g curve'p)
+      nilkey = update'nilkey phi chi (c'g curve'g1, c'g curve'g2)
   gates <- foldM (backprop 1 phi gmap) omap amps -- forced initial backpropagation
-  let sig = Nilsig mempty nilkey (nilified {c'gates = sort'omap gates})
-  nil'sign wmap sig -- forced initial sign (constants)
+  let sig =
+        update'hash
+          curve'gt
+          (Nilsig mempty nilkey (nilified {c'gates = sort'omap gates}))
+  nil'sign curve'gt wmap sig -- forced initial sign (constants)
 {-# INLINE nil'init #-}
 
 update'nilkey ::
@@ -85,6 +88,14 @@ update'nilkey ::
   Nilkey i j q
 update'nilkey a b = bimap (~* a) (~* b)
 {-# INLINE update'nilkey #-}
+
+update'hash ::
+  (Field q, Integral q, Integral r) =>
+  Curve t (Extensionfield q t) ->
+  Nilsig i j r q ->
+  Nilsig i j r q
+update'hash curve sig@Nilsig {..} =
+  sig {n'hash = hex'from'bytes . hash'sig curve $ sig}
 
 -- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
 -- Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
@@ -98,10 +109,14 @@ nil'sign ::
     Bounded r,
     Field r
   ) =>
+  Curve t (Extensionfield q t) ->
   Wmap (NIL i r q) ->
   Nilsig i j r q ->
   IO (Nilsig i j r q)
-nil'sign secrets sig@Nilsig {..} = do
+nil'sign curve secrets sig@Nilsig {..} = do
+  unless
+    (verify'hash curve sig) -- validate nilsig
+    (die $ "Error, invalid Nilsig used: " ++ n'hash)
   alpha <- ranf
   gamma <- ranf
   let omap = omap'from'gates . c'gates $ n'circuit
@@ -116,10 +131,10 @@ nil'sign secrets sig@Nilsig {..} = do
   signed <- foldM (sign'gate secrets gmap) omap entries -- sign each entry
   randomized <- foldM (backprop alpha gamma gmap) signed amps -- randomize each ampgates
   let collapsed = snd . reduce $ randomized -- collapse until irreducible
-  pure $
-    sig
+  pure
+    . update'hash curve -- update hash of nilsig
+    $ sig
       { n'key = nilkey,
-        n'hash,
         n'circuit = n'circuit {c'gates = sort'omap collapsed}
       }
 {-# INLINE nil'sign #-}
@@ -221,11 +236,12 @@ reduce o = foldl' update (mempty, o) (sort'omap o)
           Mul -> (*)
           Add -> (+)
           a -> die $ "Error, not evaluable operator: " ++ show a
+{-# INLINEABLE reduce #-}
 
 -- | nil check
 nil'check ::
   (Integral r, Integral q, Field r, Field q) =>
-  Curve i (Extensionfield q i) ->
+  Curve t (Extensionfield q t) ->
   r ->
   Nilsig i j r q ->
   Bool
@@ -241,22 +257,54 @@ nil'check curve fval sig@Nilsig {..}
     wmap = extend'wire (p'curve phi) <$> wmap'fromList [(return'key, fval)]
     out = unil' . w'val $ eval'circuit wmap n'circuit ~> return'key
     (phi, chi) = n'key
+{-# INLINE nil'check #-}
 
--- | Defines hash of a wire
-hash'wire :: ByteString -> Omap a -> Wire a -> ByteString
-hash'wire salt omap wire
-  | member (w'key wire) omap =
-      let (gate, _) = omap ~> w'key wire
-       in hash'gate salt omap gate
-  | otherwise = sha256 (bytes'from'str (w'key wire) `append` salt)
-{-# INLINEABLE hash'wire #-}
-
--- | Defines hash of a gate
-hash'gate :: ByteString -> Omap a -> Gate a -> ByteString
-hash'gate salt omap Gate {..} = case g'op of
-  Add -> fold' $ hash'wire salt omap <$> [g'lwire, g'rwire, g'owire]
-  Mul -> fold' $ hash'wire salt omap <$> [g'rwire, g'owire, g'lwire]
-  _ -> fold' $ hash'wire salt omap <$> [g'owire, g'lwire, g'rwire]
+hash'sig ::
+  (Field q, Integral q, Integral r) =>
+  Curve t (Extensionfield q t) ->
+  Nilsig i j r q ->
+  ByteString
+hash'sig curve sig@Nilsig {..} =
+  sha256 $ hash'nilkey curve n'key `append` hash'amps omap
   where
-    fold' = foldl' ((sha256 .) . append) mempty
-{-# INLINEABLE hash'gate #-}
+    omap = omap'from'gates . c'gates $ n'circuit
+{-# INLINE hash'sig #-}
+
+-- | Defines hash-value of sig-circuit-gates
+hash'amps ::
+  (Eq q, Eq r, Integral r, Integral q, Field q) =>
+  Omap (NIL i r q) ->
+  ByteString
+hash'amps omap =
+  foldl'
+    ((sha256 .) . append)
+    salt
+    (bytes'from'str . w'key . g'owire <$> sort (find'amps omap))
+  where
+    amps = sort (find'amps omap)
+    salt = case find (prin'amp'p omap) amps of
+      Just amp -> bytes'from'int . toInteger . unil . w'val . g'owire $ amp
+      _ -> die "Error, cannot evaluate hash of Nilsig: no principal amp"
+{-# INLINE hash'amps #-}
+
+hash'nilkey ::
+  (Field q, Integral q) =>
+  Curve t (Extensionfield q t) ->
+  Nilkey i j q ->
+  ByteString
+hash'nilkey curve (phi, chi) =
+  foldl'
+    ((sha256 .) . append)
+    mempty
+    (bytes'from'int . toInteger <$> lambda)
+  where
+    lambda = unef $ pairing curve phi chi
+{-# INLINE hash'nilkey #-}
+
+verify'hash ::
+  (Field q, Integral q, Integral r) =>
+  Curve t (Extensionfield q t) ->
+  Nilsig i j r q ->
+  Bool
+verify'hash curve sig@Nilsig {..} = bytes'from'hex n'hash == hash'sig curve sig
+{-# INLINE verify'hash #-}

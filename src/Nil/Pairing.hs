@@ -4,7 +4,7 @@
 
 module Nil.Pairing
   ( miller'loop,
-    twist,
+    from'fq2,
     pairing,
     from'fq,
   )
@@ -12,7 +12,7 @@ where
 
 import Data.List (foldl')
 import Nil.Curve (Curve (..), Point (..), frobp, jp, toJ, (~*))
-import Nil.Field (Extensionfield (..), Field (..), Irreduciblepoly (..), ef)
+import Nil.Field (Extensionfield (..), Field (..), Irreduciblepoly (..), ef, unip)
 import Nil.Utils (bits'from'int, die, tbop, (|+|))
 
 {-
@@ -69,7 +69,7 @@ miller'loop curve p q
       | b == 1 = (f `emul` linefunc t q p, t |+| q)
       | otherwise = (f, t)
     emul = tbop (*)
-{-# INLINEABLE miller'loop #-}
+{-# INLINE miller'loop #-}
 
 -- | A function f representing the line through P and Q
 -- Returns values from the function evaluation at point T: f(T)
@@ -82,7 +82,7 @@ linefunc ::
   Point i f ->
   (f, f)
 linefunc p q t = linefuncJ (toJ p) (toJ q) (toJ t)
-{-# INLINEABLE linefunc #-}
+{-# INLINE linefunc #-}
 
 -- | LineFunction based on Affine coordinates
 linefuncA ::
@@ -107,7 +107,7 @@ linefuncA = go
         e2 = e + e
         e3 = e2 + e
     go _ _ _ = die "Invalid points used: "
-{-# INLINEABLE linefuncA #-}
+{-# INLINE linefuncA #-}
 
 -- | LineFunction based on Jacobian coordinates
 linefuncJ ::
@@ -137,7 +137,7 @@ linefuncJ = go
         e2 = e + e
         e3 = e2 + e
     go _ _ _ = die "Invalid points used: "
-{-# INLINEABLE linefuncJ #-}
+{-# INLINE linefuncJ #-}
 
 -- | Final exponentiation
 final'exp ::
@@ -158,7 +158,7 @@ pairing ::
   Point j f ->
   Point k (Extensionfield f k) ->
   Extensionfield f i
-pairing curve p q = miller'loop curve (from'fq curve p) (twist curve q)
+pairing curve p q = miller'loop curve (from'fq curve p) (from'fq2 curve q)
 {-# INLINE pairing #-}
 
 -- | Construct a point on GT from a point on G1
@@ -172,19 +172,18 @@ from'fq curve = \case
   O -> O
   a -> from'fq curve (toJ a)
   where
-    E (I px) _ = c'a curve
-    lift = ef (I px)
+    lift = ef (unip . c'a $ curve)
 {-# INLINE from'fq #-}
 
 -- | Map G2, E(Fq^2) point to its sextic twist GT, E(Fq^12) point
-twist ::
+from'fq2 ::
   (Field f) =>
   Curve i (Extensionfield f i) ->
   Point j (Extensionfield f j) ->
   Point i (Extensionfield f i)
-twist curve = \case
+from'fq2 curve = \case
   O -> O
-  a@A {} -> twist curve (toJ a)
+  a@A {} -> from'fq2 curve (toJ a)
   J _ (E _ x) (E _ y) (E _ z) ->
     let [x0, x1] = x + [0, 0]
         [y0, y1] = y + [0, 0]
@@ -194,6 +193,5 @@ twist curve = \case
         zt = [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
      in jp curve (lift xt) (lift yt) (lift zt)
   where
-    E (I px) _ = c'a curve
-    lift = ef (I px)
-{-# INLINE twist #-}
+    lift = ef (unip . c'a $ curve)
+{-# INLINE from'fq2 #-}

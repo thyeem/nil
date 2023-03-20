@@ -79,7 +79,7 @@ out = do
 
 omap = omap'from'gates . (c'gates . n'circuit)
 
-sig = nil'init bn254'g1 bn254'g2 c
+sig = nil'init bn254'g1 bn254'g2 bn254'gt c
 
 p = g'circuit c "orig.pdf"
 
@@ -94,12 +94,9 @@ m sig' = do
 
 t = do
   s <- sig
-  ss <- nil'sign wmap1 s
-  sss <- nil'sign wmap2 ss
-  let m = eval'circuit wmap (n'circuit sss)
-  let _R = unil' . w'val $ m ~> "return"
-  let (_P, _C) = n'key sss
-  pure $ pairing bn254'gt _R _C == pairing bn254'gt _P _C ^ ret
+  ss <- nil'sign bn254'gt wmap1 s
+  sss <- nil'sign bn254'gt wmap2 ss
+  pure $ nil'check bn254'gt ret sss
 
 wmap1 = extend'wire bn254'g1 <$> wmap'fromList [("e", e), ("r", r)]
 

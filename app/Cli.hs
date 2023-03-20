@@ -125,6 +125,9 @@ verify =
             help "Instance file in JSON"
           ]
 
+init :: Command'
+init = undefined
+
 sign :: Command'
 sign =
   command
