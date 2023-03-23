@@ -69,7 +69,7 @@ miller'loop curve p q
       | b == 1 = (f `emul` linefunc t q p, t |+| q)
       | otherwise = (f, t)
     emul = tbop (*)
-{-# INLINE miller'loop #-}
+{-# INLINEABLE miller'loop #-}
 
 -- | A function f representing the line through P and Q
 -- Returns values from the function evaluation at point T: f(T)
@@ -82,7 +82,7 @@ linefunc ::
   Point i f ->
   (f, f)
 linefunc p q t = linefuncJ (toJ p) (toJ q) (toJ t)
-{-# INLINE linefunc #-}
+{-# INLINEABLE linefunc #-}
 
 -- | LineFunction based on Affine coordinates
 linefuncA ::
@@ -107,7 +107,7 @@ linefuncA = go
         e2 = e + e
         e3 = e2 + e
     go _ _ _ = die "Invalid points used: "
-{-# INLINE linefuncA #-}
+{-# INLINEABLE linefuncA #-}
 
 -- | LineFunction based on Jacobian coordinates
 linefuncJ ::
@@ -137,7 +137,7 @@ linefuncJ = go
         e2 = e + e
         e3 = e2 + e
     go _ _ _ = die "Invalid points used: "
-{-# INLINE linefuncJ #-}
+{-# INLINEABLE linefuncJ #-}
 
 -- | Final exponentiation
 final'exp ::

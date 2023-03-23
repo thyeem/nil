@@ -160,10 +160,12 @@ set'val val wire@Wire {} = wire {w'val = val}
 -- | Set a given wire's recip flag
 set'recip :: Bool -> Wire a -> Wire a
 set'recip flag wire@Wire {} = wire {w'recip = flag}
+{-# INLINE set'recip #-}
 
 -- | Set a given wire's expression
 set'expr :: String -> Wire a -> Wire a
 set'expr expr wire@Wire {} = wire {w'expr = expr}
+{-# INLINE set'expr #-}
 
 -- | Get a unit-value const wire
 unit'const :: (Num a) => Wire a

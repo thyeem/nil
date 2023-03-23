@@ -457,15 +457,15 @@ read'input f = do
   bytes <- L.readFile f
   let decoded = J.eitherDecode bytes :: Either String (Map String String)
   case decoded of
-    Right a ->
-      pure . wmap'fromList $
-        second (fromIntegral . convert) <$> toList a
+    Right inputs ->
+      pure . wmap'fromList $ second (fromIntegral . int) <$> toList inputs
     Left e ->
       die . unlines $ ["Error, failed to read inputs from: " ++ f, e]
-  where
-    convert x = case readMaybe x of
-      Just a -> a
-      _ -> int'from'str x
+
+int :: String -> Integer
+int str = case readMaybe str of
+  Just a -> a
+  _ -> int'from'str str
 
 decode'bytes ::
   forall proxy a.
@@ -474,6 +474,13 @@ decode'bytes ::
   B.ByteString ->
   Either PeekException a
 decode'bytes _ bytes = decode bytes
+
+early :: m (Either PeekException a) -> (a -> m ()) -> m (Either PeekException b)
+early m f =  do
+  r <- m
+  case r of
+    Right x -> f
+    Left _ ->
 
 instance Pretty EvaluationKey
 
