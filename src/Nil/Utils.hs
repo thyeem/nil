@@ -286,23 +286,6 @@ lzip'with op def = go
     go (x : xs) (y : ys) = op x y : go xs ys
 {-# INLINE lzip'with #-}
 
--- | Construct two-columns formatted table.
--- No need two lists have the same length as the default value will be filled
-twocols :: String -> String -> [String] -> [String] -> String
-twocols def fmt a b =
-  intercalate "\n" $ lzip'with (printf fmt) def a b
-{-# INLINE twocols #-}
-
--- | info
-info :: [String] -> [String] -> String
-info = twocols mempty "%12s    %s"
-{-# INLINE info #-}
-
--- | Default formatted printer of this project
-info'io :: [String] -> [String] -> IO ()
-info'io = (putStrLn .) . info
-{-# INLINE info'io #-}
-
 -- | Generate a random element except for additive/multiplicative identity
 ranf :: (Num f, Random f, Bounded f) => IO f
 ranf = randomRIO (minBound + 2, maxBound - 1)
@@ -394,6 +377,7 @@ splitby block delim = go [[]] block
 -- | Replace old string a with a new string b over a given list
 replace :: (Eq a) => [a] -> [a] -> [a] -> [a]
 replace old new = intercalate new . flip splitby old
+{-# INLINE replace #-}
 
 -- | Split a list into n-length lists
 chunks :: Int -> [a] -> [[a]]
@@ -422,23 +406,46 @@ isbalanced bra ket xs
 -- | Blake2b Hash function
 blake2b :: Int -> B.ByteString -> B.ByteString -> B.ByteString
 blake2b = B2b.hash
+{-# INLINE blake2b #-}
 
 -- | Blake2b for Integer -> Integer
-blake2bInteger :: Int -> Integer -> Integer
-blake2bInteger size = int'from'bytes . blake2b size mempty . bytes'from'int
+blake2b'integer :: Int -> Integer -> Integer
+blake2b'integer size = int'from'bytes . blake2b size mempty . bytes'from'int
+{-# INLINE blake2b'integer #-}
 
 -- | SHA256 Hash function
 sha256 :: B.ByteString -> B.ByteString
 sha256 = S256.hash
+{-# INLINE sha256 #-}
 
 -- | SHA256 for Integer -> Integer
-sha256Integer :: Integer -> Integer
-sha256Integer = int'from'bytes . sha256 . bytes'from'int
+sha256'integer :: Integer -> Integer
+sha256'integer = int'from'bytes . sha256 . bytes'from'int
+{-# INLINE sha256'integer #-}
 
 -- | SHA512 Hash function
 sha512 :: B.ByteString -> B.ByteString
 sha512 = S512.hash
+{-# INLINE sha512 #-}
 
 -- | SHA512 for Integer -> Integer
-sha512Integer :: Integer -> Integer
-sha512Integer = int'from'bytes . sha512 . bytes'from'int
+sha512'integer :: Integer -> Integer
+sha512'integer = int'from'bytes . sha512 . bytes'from'int
+{-# INLINE sha512'integer #-}
+
+-- | Construct two-columns formatted table.
+-- No need two lists have the same length as the default value will be filled
+twocols :: String -> String -> [String] -> [String] -> String
+twocols def fmt a b =
+  intercalate "\n" $ lzip'with (printf fmt) def a b
+{-# INLINE twocols #-}
+
+-- | info
+info :: [String] -> [String] -> String
+info = twocols mempty "%12s    %s"
+{-# INLINE info #-}
+
+-- | Default formatted printer of this project
+info'io :: [String] -> [String] -> IO ()
+info'io = (putStrLn .) . info
+{-# INLINE info'io #-}

@@ -2,10 +2,13 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# HLINT ignore "Eta reduce" #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Nil.Pinocchio where
 
@@ -27,11 +30,14 @@ import Control.DeepSeq (NFData)
 import Control.Monad (when)
 import Control.Parallel (par, pseq)
 import qualified Data.Aeson as J
+import Data.Bifunctor (second)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Either (fromRight)
 import Data.Functor ((<&>))
-import Data.Store (Store, decode)
+import Data.Map (Map, toList)
+import Data.Proxy
+import Data.Store (PeekException (..), Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
 import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
@@ -44,7 +50,10 @@ import Nil.Poly ((|=))
 import Nil.Qap (QAP (..), qap'from'circuit, qap'quot)
 import Nil.Utils
   ( Pretty (..),
+    bytes'from'str,
     die,
+    int'from'bytes,
+    int'from'str,
     ranf,
     slice,
     stderr,
@@ -55,6 +64,7 @@ import Nil.Utils
     (|/|),
     (|=|),
   )
+import Text.Read (readMaybe)
 
 -- | zk-SNARKs based on Pinocchio protocol (https://eprint.iacr.org/2013/279.pdf)
 -- @
@@ -426,19 +436,44 @@ zktest verbose language witnesses instances = do
   pure verified
 {-# INLINEABLE zktest #-}
 
--- | Helpers
-decode'file :: (Store a) => FilePath -> IO a
-decode'file f =
-  B.readFile f
-    <&> decode
-    <&> fromRight
-      (die $ "Failed to decode data from: " ++ f)
+-----------------------
 
-read'table :: FilePath -> IO (Wmap Fr)
-read'table f =
-  L.readFile f >>= \bytes -> case J.decode bytes of
-    Just x -> pure (wmap'fromList x)
-    Nothing -> die $ "Failed to read table from: " ++ f
+-- | Helpers
+decode'file :: forall proxy a. (Store a) => proxy a -> FilePath -> IO a
+decode'file _ f =
+  do
+    bytes <- B.readFile f
+    let decoded = decode bytes :: Either PeekException a
+    case decoded of
+      Right a -> pure a
+      Left e ->
+        die . unlines $
+          [ "Error, failed to decode file: " ++ f,
+            "Found invalid bytes at offset " ++ show (peekExBytesFromEnd e)
+          ]
+
+read'input :: (Num a) => FilePath -> IO (Wmap a)
+read'input f = do
+  bytes <- L.readFile f
+  let decoded = J.eitherDecode bytes :: Either String (Map String String)
+  case decoded of
+    Right a ->
+      pure . wmap'fromList $
+        second (fromIntegral . convert) <$> toList a
+    Left e ->
+      die . unlines $ ["Error, failed to read inputs from: " ++ f, e]
+  where
+    convert x = case readMaybe x of
+      Just a -> a
+      _ -> int'from'str x
+
+decode'bytes ::
+  forall proxy a.
+  (Store a) =>
+  proxy a ->
+  B.ByteString ->
+  Either PeekException a
+decode'bytes _ bytes = decode bytes
 
 instance Pretty EvaluationKey
 

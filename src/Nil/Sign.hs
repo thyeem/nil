@@ -25,7 +25,16 @@ import Nil.Eval (eval, eval'circuit, extend'gate, extend'wire, wmap'fromList, (~
 import Nil.Field (Extensionfield, Field, unef)
 import Nil.Pairing (pairing)
 import Nil.Reorg
-import Nil.Utils (Pretty (..), bytes'from'hex, bytes'from'int, bytes'from'str, die, hex'from'bytes, ranf, sha256)
+import Nil.Utils
+  ( Pretty (..),
+    bytes'from'hex,
+    bytes'from'int,
+    bytes'from'str,
+    die,
+    hex'from'bytes,
+    ranf,
+    sha256,
+  )
 import System.Random (Random)
 
 -- | Aggregable-signature object for nil'sign

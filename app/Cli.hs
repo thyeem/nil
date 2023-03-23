@@ -16,6 +16,7 @@ data Command
   = Setup Bool String
   | Prove String String String
   | Verify String String String
+  | Init Bool String
   | Sign String String
   | Check String String
   | View Bool Bool String
@@ -45,6 +46,7 @@ opts'parser = info (helper <*> ver <*> global'opts) mempty
           [ setup,
             prove,
             verify,
+            init',
             sign,
             check,
             view,
@@ -91,10 +93,8 @@ prove =
             metavar "FILE",
             help "Evaluation key file"
           ]
-        <*> (strOption . mconcat)
-          [ long "wit",
-            short 'w',
-            metavar "FILE",
+        <*> (strArgument . mconcat)
+          [ metavar "FILE",
             help "Witness file in JSON"
           ]
 
@@ -118,21 +118,34 @@ verify =
             metavar "FILE",
             help "Verification key file"
           ]
-        <*> (strOption . mconcat)
-          [ long "inst",
-            short 'x',
-            metavar "FILE",
+        <*> (strArgument . mconcat)
+          [ metavar "FILE",
             help "Instance file in JSON"
           ]
 
-init :: Command'
-init = undefined
+init' :: Command'
+init' =
+  command
+    "init"
+    (info options (progDesc "(mpc) Initialize nil-signature"))
+  where
+    options =
+      Init
+        <$> (switch . mconcat)
+          [ long "graph",
+            short 'g',
+            help "Export a circuit as graph"
+          ]
+        <*> (strArgument . mconcat)
+          [ metavar "FILE",
+            help "Language file"
+          ]
 
 sign :: Command'
 sign =
   command
     "sign"
-    (info options (progDesc "(mpc) Partially evaluate circuit with secrets"))
+    (info options (progDesc "(mpc) Sign nil-signature with given secrets"))
   where
     options =
       Sign
@@ -153,7 +166,7 @@ check :: Command'
 check =
   command
     "check"
-    (info options (progDesc "(mpc) Fully evaluate circuit and check validity"))
+    (info options (progDesc "(mpc) Evaluate nil-signature to check validity"))
   where
     options =
       Check

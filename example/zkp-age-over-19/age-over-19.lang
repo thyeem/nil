@@ -1,0 +1,80 @@
+# Make sure that all data here is expressed as a number, Fr field element.
+
+language (priv e, priv r, priv s, \
+          priv dateOfBirth, priv legalName, priv address, \
+          priv credHash, pub regID)
+
+    #  Example of adulthood using zkDIDs (DID with zkCredentials)
+    #
+    #  Assume that there is a BLOCKCHAIN prepared so that anyone can access
+    #  and obtain 'the registered publicKey or DID' through 'regID'
+    #
+    #  +---------------+---------------------------------------------------------+
+    #  |  dateOfBirth  |  date of birth timestamp in UNIX-time                   |
+    #  |               |  seconds since 1970-01-01 00:00:00 UTC                  |
+    #  +---------------+---------------------------------------------------------+
+    #  |    legalName  |  number representing legal name                         |
+    #  +---------------+---------------------------------------------------------+
+    #  |      address  |  number representing residential address                |
+    #  +---------------+---------------------------------------------------------+
+    #  |         cred  |  credential issued by an issuer                         |
+    #  |               |  JSON-formatted                                         |
+    #  +---------------+---------------------------------------------------------+
+    #  |     credHash  |  hash-digest of credential                              |
+    #  |               |  Hash( ser(cred) )                                      |
+    #  +---------------+---------------------------------------------------------+
+    #  |        regID  |  registration ID that every verifier can access         |
+    #  |               |  Hash( credHash * dateOfBirth * legalName * address)    |
+    #  +---------------+---------------------------------------------------------+
+    #  |            e  |  privateKey                                             |
+    #  +---------------+---------------------------------------------------------+
+    #  |        (r,s)  |  signature of credential (the same as ECDSA scheme)     |
+    #  +---------------+---------------------------------------------------------+
+    #  |            k  |  one-time random secret number                          |
+    #  +---------------+---------------------------------------------------------+
+    #  |            R  |  k * G                                                  |
+    #  +---------------+---------------------------------------------------------+
+    #  |            r  |  R.x  (x coordinate of R)                               |
+    #  +---------------+---------------------------------------------------------+
+    #  |            s  |  (z + r * e) / k  (mod n)                               |
+    #  +---------------+---------------------------------------------------------+
+    #  |            n  |  order of G such that n * G = O                         |
+    #  +---------------+---------------------------------------------------------+
+    #  |            z  |  message digest by given hash algorithm                 |
+    #  |               |  equivalent to 'credHash' in this example               |
+    #  +---------------+---------------------------------------------------------+
+    #  |            P  |  e * G  (point of publicKey corresponding to e)         |
+    #  +---------------+---------------------------------------------------------+
+    #  |            R' |  evaluated point during verification                    |
+    #  |               |  = (z/s) * G + (r/s) * P                                |
+    #  |               |  = (z/s) * G + (r/s) * e * G                            |
+    #  |               |  = ( (z + r*e) / s ) * G                                |
+    #  |               |  = k * G                                                |
+    #  +---------------+---------------------------------------------------------+
+    #
+    #  Verification -> Check if r == R'.x
+    #
+
+    # Checkpoint 1 | Check if prover has a valid credential
+    let checkpoint1 = if !(credHash * dateOfBirth * legalName * address) == regID then 1 else 0
+
+    # As of 2020/10/01: $ date -j -f '%Y%m%d %H:%M:%S' "20201001 00:00:00" +%s
+    let settlementTime = 1601478000
+
+    # Checkpoint 2 | Check if the claim actually meets the criteria
+    let checkpoint2 = if (settlementTime - dateOfBirth) > (19 * 365 * 86400) then 1 else 0
+
+    let k = (credHash + r * e) / s
+    let P = [e]
+    let R = [k]
+
+    # Checkpoint 3 | Check if prover is the owner of (e, r, s)
+    let checkpoint3 = if r == :R then 1 else 0
+
+    # Guard
+    let passed = checkpoint1 * checkpoint2 * checkpoint3
+
+    # Returns publicKey (:P) if all checkpoints are satisfied.
+    # Otherwise, returns value that can never satisfy this proof.
+    return if passed == 1 then :P else regID
+

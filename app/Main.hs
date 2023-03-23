@@ -1,6 +1,5 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -14,6 +13,7 @@ import Control.Monad.Extra (unlessM)
 import qualified Data.ByteString as B
 import Data.Either (fromRight, isRight)
 import Data.List (intercalate)
+import Data.Proxy
 import Data.Store (PeekException, decode, encode)
 import Nil
   ( BN254,
@@ -29,6 +29,7 @@ import Nil
     Wmap,
     bn254'g1,
     compile'language,
+    decode'bytes,
     decode'file,
     def'curve,
     die,
@@ -40,7 +41,7 @@ import Nil
     hex'from'bytes,
     info'io,
     qap'from'circuit,
-    read'table,
+    read'input,
     reorg'circuit,
     sha256,
     statement,
@@ -72,6 +73,7 @@ nil opts@Opts {..} = do
     Setup {} -> setup opts
     Prove {} -> prove opts
     Verify {} -> verify opts
+    Init {} -> print "init"
     Sign {} -> print "sign"
     Check {} -> print "check"
     View {} -> view opts
@@ -97,7 +99,7 @@ setup Opts {..} = do
   B.writeFile (path ++ "/" ++ file'ekey) . encode $ ekey
   B.writeFile (path ++ "/" ++ file'vkey) . encode $ vkey
 
-  -- dump setup result (3 files: circuit, evaluation key, verification key),
+  -- setup result (3 files: circuit, evaluation key, verification key),
   -- and their SHA-256 hashes as fingerprints
   unless o'quite $ do
     info'io
@@ -117,7 +119,7 @@ setup Opts {..} = do
         file'vkey,
         hex'from'bytes . sha256 . encode $ vkey
       ]
-  -- dump graph
+  -- export graph
   when graph $ do
     let dagfile = circ'id ++ ".pdf"
     export'graph (path ++ "/" ++ dagfile) (write'dot dot'header circuit)
@@ -128,9 +130,9 @@ setup Opts {..} = do
 prove :: Opts -> IO ()
 prove Opts {..} = do
   let Prove circuit ekey wit = o'command
-  circuit_ <- decode'file circuit :: IO (Circuit Fr)
-  ekey_ <- decode'file ekey :: IO EvaluationKey
-  witness_ <- read'table wit :: IO (Wmap Fr)
+  circuit_ <- decode'file (Proxy :: Proxy (Circuit Fr)) circuit
+  ekey_ <- decode'file (Proxy :: Proxy EvaluationKey) ekey
+  witness_ <- read'input wit :: IO (Wmap Fr)
   let qap = qap'from'circuit circuit_
       out = statement bn254'g1 witness_ circuit_
       vec'wit = wire'vals bn254'g1 witness_ circuit_
@@ -147,9 +149,9 @@ prove Opts {..} = do
 verify :: Opts -> IO ()
 verify Opts {..} = do
   let Verify proof vkey inst = o'command
-  proof_ <- decode'file proof :: IO Proof
-  vkey_ <- decode'file vkey :: IO VerificationKey
-  instance_ <- read'table inst :: IO (Wmap Fr)
+  proof_ <- decode'file (Proxy :: Proxy Proof) proof
+  vkey_ <- decode'file (Proxy :: Proxy VerificationKey) vkey
+  instance_ <- read'input inst :: IO (Wmap Fr)
   let claim = w'val $ instance_ ~> "return"
       verified = zkverify proof_ vkey_ (vec'fromWmap instance_)
   unless o'quite $ do
@@ -157,25 +159,23 @@ verify Opts {..} = do
       ["Statement", "Verified" :: String]
       [show (toInteger claim), show verified]
 
-type Encoded a = Either PeekException a
-
 view :: Opts -> IO ()
 view Opts {..} = do
   let View graph reorg file = o'command
-      dump :: (Pretty b) => Either a b -> IO ()
-      dump = pp . fromRight (die "Error,")
   unlessM
     (doesFileExist file)
     (err $ "Error, file file does not exist: " ++ file)
 
   bytes <- B.readFile file
-  let circuit = decode bytes :: Encoded (Circuit Fr)
-      ekey = decode bytes :: Encoded EvaluationKey
-      vkey = decode bytes :: Encoded VerificationKey
-      proof = decode bytes :: Encoded Proof
+
+  let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
+      ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
+      vkey = decode'bytes (Proxy :: Proxy VerificationKey) bytes
+      proof = decode'bytes (Proxy :: Proxy Proof) bytes
+      unwrap = fromRight (die "Error,")
   if
       | isRight circuit -> do
-          let circuit_ = fromRight (die "Error,") circuit
+          let circuit_ = unwrap circuit
           reorged <-
             if reorg then reorg'circuit circuit_ else pure circuit_
           if graph
@@ -188,10 +188,10 @@ view Opts {..} = do
                 (write'dot dot'header reorged)
               unless o'quite $ info'io ["Graph"] [dagfile]
             else pp reorged
-      | isRight ekey -> dump ekey
-      | isRight vkey -> dump vkey
-      | isRight proof -> dump proof
-      | otherwise -> putStrLn . str'from'bytes $ bytes
+      | isRight ekey -> pp . unwrap $ ekey
+      | isRight vkey -> pp . unwrap $ vkey
+      | isRight proof -> pp . unwrap $ proof
+      | otherwise -> pp . str'from'bytes $ bytes
 
 test :: IO ()
 test = undefined
