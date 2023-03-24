@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# HLINT ignore "Eta reduce" #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -173,14 +174,6 @@ data Proof = Proof
 -- | Set of random numbers used during setup phase
 type ToxicWastes = (Fr, Fr, Fr, Fr, Fr, Fr)
 
-deriving instance Store (Circuit Fr)
-
-deriving instance Store (Wire Fr)
-
-deriving instance Store Gateop
-
-deriving instance Store (Gate Fr)
-
 deriving instance Pretty ToxicWastes
 
 deriving instance Store EvaluationKey
@@ -188,11 +181,6 @@ deriving instance Store EvaluationKey
 deriving instance Store VerificationKey
 
 deriving instance Store Proof
-
--- | Derive circuit from the domain-specific language, Language
-compile'language :: (Num f) => String -> Circuit f
-compile'language = circuit'from'ast . parse . tokenize
-{-# INLINE compile'language #-}
 
 -- | Generate random set (s, alpha, beta-v, beta-w, beta-y, gamma)
 -- MUST be immediately destroyed right after a ceremony
@@ -431,7 +419,7 @@ zktest verbose language witnesses instances = do
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."
-    stderr ("Statement:   " ++ (show . w'val $ instances ~> "return"))
+    stderr ("Statement:      " ++ (show . w'val $ instances ~> "return"))
     stderr ("Verified: " ++ show verified)
   pure verified
 {-# INLINEABLE zktest #-}
@@ -474,13 +462,6 @@ decode'bytes ::
   B.ByteString ->
   Either PeekException a
 decode'bytes _ bytes = decode bytes
-
-early :: m (Either PeekException a) -> (a -> m ()) -> m (Either PeekException b)
-early m f =  do
-  r <- m
-  case r of
-    Right x -> f
-    Left _ ->
 
 instance Pretty EvaluationKey
 

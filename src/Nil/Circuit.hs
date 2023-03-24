@@ -1,8 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Nil.Circuit
   ( Circuit (..),
@@ -15,6 +17,7 @@ module Nil.Circuit
     (~~>),
     (<~~),
     circuit'from'ast,
+    compile'language,
     const'key,
     const'wirep,
     out'wirep,
@@ -36,9 +39,12 @@ import Data.Aeson (ToJSON)
 import Data.List (foldl', sort)
 import Data.Map (Map, fromList, insert, member, (!?))
 import Data.Maybe (fromMaybe)
+import Data.Store (Store)
 import GHC.Generics (Generic)
-import Nil.Lexer (Keywords (..), Ops (..), Prims (..))
-import Nil.Parser (AST (..), Expr (..))
+import Nil.Data (NIL)
+import Nil.Ecdata (BN254, Fr, G1)
+import Nil.Lexer (Keywords (..), Ops (..), Prims (..), tokenize)
+import Nil.Parser (AST (..), Expr (..), parse)
 import Nil.Utils (Pretty (..), die)
 
 -- | @Arithmetic@ 'Circuit' over any data type @a@
@@ -99,6 +105,20 @@ data Wire a = Wire
     w'val :: a
   }
   deriving (Eq, Show, Generic, NFData, ToJSON)
+
+deriving instance Store (Circuit Fr)
+
+deriving instance Store (Wire Fr)
+
+deriving instance Store Gateop
+
+deriving instance Store (Gate Fr)
+
+deriving instance Store (Wire (NIL BN254 Fr G1))
+
+deriving instance Store (Gate (NIL BN254 Fr G1))
+
+deriving instance Store (Circuit (NIL BN254 Fr G1))
 
 -- | Map from string keys to wires
 type Wmap a = Map String (Wire a)
@@ -195,6 +215,11 @@ out'wirep Wire {..} = case w'key of
     | otherwise -> False
   _ -> False
 {-# INLINE out'wirep #-}
+
+-- | Derive circuit from the domain-specific language, Language
+compile'language :: (Num a) => String -> Circuit a
+compile'language = circuit'from'ast . parse . tokenize
+{-# INLINE compile'language #-}
 
 -- | Construct a 'circuit' from 'AST'
 --

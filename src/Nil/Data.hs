@@ -1,7 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Nil.Data
   ( nil,
@@ -19,8 +21,10 @@ where
 
 import Control.DeepSeq (NFData)
 import Data.Maybe (fromMaybe)
+import Data.Store (Store)
 import GHC.Generics (Generic)
 import Nil.Curve (Curve, Point (..), ap, c'g, toA, y'from'x, (~*))
+import Nil.Ecdata (BN254, Fr, G1)
 import Nil.Field (Field)
 import Nil.Utils (Pretty (..), die)
 
@@ -69,6 +73,10 @@ instance
   Ord (NIL i r q)
   where
   a <= b = unil a <= unil b
+
+deriving instance Store (UL Fr G1)
+
+deriving instance Store (NIL BN254 Fr G1)
 
 -- | Encode NIL object from scalar
 nil :: Curve i q -> r -> NIL i r q

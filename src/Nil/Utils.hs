@@ -447,5 +447,5 @@ info = twocols mempty "%12s    %s"
 
 -- | Default formatted printer of this project
 info'io :: [String] -> [String] -> IO ()
-info'io = (putStrLn .) . info
+info'io = (stderr .) . info
 {-# INLINE info'io #-}
