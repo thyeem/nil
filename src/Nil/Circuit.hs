@@ -106,6 +106,9 @@ data Wire a = Wire
   }
   deriving (Eq, Show, Generic, NFData, ToJSON)
 
+instance (Eq a) => Ord (Wire a) where
+  x <= y = w'key x <= w'key y
+
 deriving instance Store (Circuit Fr)
 
 deriving instance Store (Wire Fr)

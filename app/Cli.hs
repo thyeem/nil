@@ -194,12 +194,12 @@ view =
         <$> (switch . mconcat)
           [ long "graph",
             short 'g',
-            help "(circuit-only) Export a circuit as graph"
+            help "(circuit/sig-only) Export a circuit as graph"
           ]
         <*> (switch . mconcat)
           [ long "reorg",
             short 'r',
-            help "(circuit-only) Reorg a circuit"
+            help "(circuit/sig-only) Reorg a circuit"
           ]
         <*> (strArgument . mconcat)
           [ metavar "FILE",
@@ -249,6 +249,6 @@ demo =
         <*> (strArgument . mconcat)
           [ metavar "ITEM",
             help "Choose one from the available demos",
-            value "zkp",
+            value "mpc",
             showDefault
           ]

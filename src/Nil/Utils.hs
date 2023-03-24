@@ -30,6 +30,7 @@ import Data.Char (isSpace)
 import Data.Function (on)
 import Data.List
   ( dropWhileEnd,
+    foldl',
     intercalate,
     isPrefixOf,
   )
@@ -174,6 +175,14 @@ pfold f xs = as `par` bs `pseq` f as bs
 pthenIO :: (Monad m) => m a -> m b -> m b
 pthenIO ma mb = ma `par` mb `pseq` (ma *> mb)
 {-# INLINE pthenIO #-}
+
+-- | Strict foldM
+foldM' :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
+foldM' _ z [] = pure z
+foldM' f z (x : xs) = do
+  z' <- f z x
+  z' `seq` foldM' f z' xs
+{-# INLINE foldM' #-}
 
 -- | Map a function over a 2-element tuple
 tmap :: (a -> b) -> (a, a) -> (b, b)
@@ -354,7 +363,7 @@ strip = lstrip . rstrip
 
 -- | The same as takeWhile but take one more just before quitting loop
 takeWhile' :: (a -> Bool) -> [a] -> [a]
-takeWhile' p = foldr (\x acc -> if p x then x : acc else [x]) []
+takeWhile' p = foldl' (\acc x -> if p x then x : acc else [x]) []
 
 -- | Slice a given list between i and j: [i, j] closed set
 -- Index starts from 0

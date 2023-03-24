@@ -11,7 +11,8 @@ module Nil.Reorg where
 import Control.Applicative (liftA2)
 import Data.Bifunctor (bimap)
 import Data.List (foldl', nub, sortOn)
-import Data.Map (Map, assocs, elems, insert, member)
+import Data.Map (Map, assocs, elems, member)
+import qualified Data.Set as S
 import Nil.Circuit
 import Nil.Utils (die, random'hex)
 
@@ -130,7 +131,7 @@ reorg'circuit :: (Eq a, Num a) => Circuit a -> IO (Circuit a)
 reorg'circuit circuit@Circuit {..} = do
   let key = w'key . g'owire . last $ c'gates
       omap = omap'from'gates c'gates
-  reorged <- nub <$> reorg omap key
+  reorged <- reorg omap key
   pure $ circuit {c'gates = reorged}
 {-# INLINEABLE reorg'circuit #-}
 
@@ -143,7 +144,7 @@ omap'from'gates = foldl' update mempty
           find Wire {w'key}
             | member w'key omap = 1 + snd (omap ~> w'key)
             | otherwise = 1
-       in insert (w'key g'owire) (g, height) omap
+       in omap <~ (w'key g'owire, (g, height))
 {-# INLINEABLE omap'from'gates #-}
 
 -- | Reconstruct gates and wires of a given circuit for use of nilsign
@@ -354,24 +355,33 @@ find'amps omap = foldl' go [] (assocs omap)
 
 -- | Find previous amplifier gates directly involved with the given gate
 prev'amps :: (Eq a) => Omap a -> Gate a -> [Gate a]
-prev'amps omap g = nub $ find (g'lwire g) ++ find (g'rwire g)
+prev'amps omap g = snd $ find (g'rwire g) (find (g'lwire g) (S.empty, []))
   where
-    find wire@Wire {..}
+    find wire@Wire {..} (visited, amps)
+      | S.member wire visited = (visited, amps)
       | member w'key omap =
           let (gate@Gate {..}, _) = omap ~> w'key
-           in if amp'wirep g'rwire then [gate] else prev'amps omap gate
-      | otherwise = []
+           in if amp'wirep g'rwire
+                then (S.insert wire visited, gate : amps)
+                else find g'rwire (find g'lwire (visited, amps))
+      | otherwise = (S.insert wire visited, amps)
 {-# INLINEABLE prev'amps #-}
 
 -- | Find all next amplifier gates directly involved with the given gate
 next'amps :: (Eq a) => Gmap a -> Gate a -> [Gate a]
-next'amps gmap Gate {g'owire = Wire {w'key = out}}
-  | member out gmap = nub (concatMap go (gmap ~>> out))
-  | otherwise = die $ "Error, not found any amp gate following: " ++ out
+next'amps gmap g = snd $ find g (S.empty, [])
   where
-    go gate
-      | amp'wirep (g'rwire gate) = [gate]
-      | otherwise = next'amps gmap gate
+    find gate@Gate {..} (visited, amps)
+      | S.member g'owire visited = (visited, amps)
+      | member (w'key g'owire) gmap =
+          let gates = gmap ~>> w'key g'owire
+           in foldl' (flip go) (visited, amps) gates
+      | otherwise =
+          die $
+            "Error, found no amp gate following: " ++ w'key g'owire
+    go gate@Gate {..} (visited, amps)
+      | amp'wirep g'rwire = (S.insert g'owire visited, gate : amps)
+      | otherwise = find gate (visited, amps)
 {-# INLINEABLE next'amps #-}
 
 -- | Find next amplifier gates directly involved with the given gate

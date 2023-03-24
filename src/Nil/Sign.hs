@@ -12,8 +12,7 @@
 module Nil.Sign where
 
 import Control.DeepSeq (NFData)
-import Control.Monad (foldM, unless, when, (<=<))
-import Control.Parallel (par, pseq)
+import Control.Monad (unless, when, (<=<))
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString, append)
 import Data.Function (on)
@@ -44,6 +43,7 @@ import Nil.Utils
     bytes'from'int,
     bytes'from'str,
     die,
+    foldM',
     hex'from'bytes,
     ranf,
     sha256,
@@ -99,9 +99,7 @@ nil'init curve'g1 curve'g2 curve'gt circuit = do
       amps = find'amps omap
       nilkey = update'nilkey phi chi (c'g curve'g1, c'g curve'g2)
   gates <-
-    gmap `par`
-      amps `pseq`
-        foldM (backprop 1 phi gmap) omap amps -- forced initial backpropagation
+    foldM' (backprop 1 phi gmap) omap amps -- forced initial backpropagation
   let sig =
         update'hash
           curve'gt
@@ -155,11 +153,8 @@ nil'sign curve secrets sig@Nilsig {..} = do
           . update'nilkey gamma (recip gamma)
           $ n'key
   signed <-
-    gmap `par`
-      amps `par`
-        entries `pseq`
-          foldM (sign'gate secrets gmap) omap entries -- sign each entry
-  randomized <- foldM (backprop alpha gamma gmap) signed amps -- randomize each ampgates
+    foldM' (sign'gate secrets gmap) omap entries -- sign each entry
+  randomized <- foldM' (backprop alpha gamma gmap) signed amps -- randomize each ampgates
   let collapsed = snd . reduce $ randomized -- collapse until irreducible
   pure
     . update'hash curve -- update hash of nilsig
@@ -183,13 +178,11 @@ backprop alpha gamma gmap omap g
   | otherwise = do
       beta <- ranf
       let acc = if prin'amp'p omap g then updater gamma g omap else omap
-      pasts `par`
-        anticones `pseq`
-          pure $
-            foldr
-              (updater (recip beta))
-              (foldr (updater beta) acc pasts)
-              anticones
+      pure $
+        foldl'
+          (flip (updater (recip beta)))
+          (foldl' (flip (updater beta)) acc pasts)
+          anticones
   where
     NIL c _ = w'val (g'rwire g)
     updater v = nilify False False (nil c v)
@@ -296,8 +289,7 @@ hash'sig ::
   Curve t (Extensionfield q t) ->
   Nilsig i j r q ->
   ByteString
-hash'sig curve sig@Nilsig {..} =
-  nilkey `par` amps `pseq` sha256 $ nilkey `append` amps
+hash'sig curve sig@Nilsig {..} = sha256 (nilkey `append` amps)
   where
     nilkey = hash'nilkey curve n'key
     amps = hash'amps omap

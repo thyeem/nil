@@ -3,11 +3,7 @@
 
 module Main where
 
-import Cli
-  ( Command (..),
-    Opts (..),
-    opts'parser,
-  )
+import Cli (Command (..), Opts (..), opts'parser)
 import Control.Monad (unless, when)
 import Control.Monad.Extra (unlessM)
 import qualified Data.ByteString as B
@@ -16,64 +12,22 @@ import Data.List (intercalate)
 import Data.Proxy
 import Data.Store (PeekException, decode, encode)
 import Nil
-  ( BN254,
-    Circuit,
-    EvaluationKey,
-    Fr,
-    G1,
-    NIL,
-    Pretty (..),
-    Proof,
-    VerificationKey,
-    Wire (w'val),
-    Wmap,
-    bn254'g1,
-    compile'language,
-    decode'bytes,
-    decode'file,
-    def'curve,
-    die,
-    dot'header,
-    err,
-    export'graph,
-    extend'gate,
-    extend'wire,
-    hex'from'bytes,
-    info'io,
-    qap'from'circuit,
-    read'input,
-    reorg'circuit,
-    sha256,
-    statement,
-    stderr,
-    str'from'bytes,
-    toxicwaste,
-    vec'fromWmap,
-    wire'vals,
-    wmap'fromList,
-    write'dot,
-    zkprove,
-    zksetup,
-    zktest,
-    zkverify,
-    (~>),
-  )
 import Options.Applicative (execParser)
 import System.Directory (doesFileExist)
 import System.FilePath.Posix (takeDirectory)
 
 -- | Entry point of this program
 main :: IO ()
-main = execParser opts'parser >>= nil
+main = execParser opts'parser >>= project
 
 -- | main program
-nil :: Opts -> IO ()
-nil opts@Opts {..} = do
+project :: Opts -> IO ()
+project opts@Opts {..} = do
   case o'command of
     Setup {} -> setup opts
     Prove {} -> prove opts
     Verify {} -> verify opts
-    Init {} -> print "init"
+    Init {} -> init' opts
     Sign {} -> print "sign"
     Check {} -> print "check"
     View {} -> view opts
@@ -103,14 +57,7 @@ setup Opts {..} = do
   -- and their SHA-256 hashes as fingerprints
   unless o'quite $ do
     info'io
-      [ "filepath",
-        "Circuit",
-        "(hash)",
-        "E-key",
-        "(hash)",
-        "V-key",
-        "(hash)" :: String
-      ]
+      ["filepath", "Circuit", "(hash)", "E-key", "(hash)", "V-key", "(hash)"]
       [ path,
         file'circ,
         circ'id,
@@ -121,11 +68,7 @@ setup Opts {..} = do
       ]
   -- export graph
   when graph $ do
-    let dagfile = circ'id ++ ".pdf"
-    export'graph (path ++ "/" ++ dagfile) (write'dot dot'header circuit)
-    unless o'quite $ do
-      putStrLn mempty
-      info'io ["Graph"] [dagfile]
+    dag circuit (path ++ "/" ++ circ'id ++ ".pdf") o'quite
 
 prove :: Opts -> IO ()
 prove Opts {..} = do
@@ -159,39 +102,65 @@ verify Opts {..} = do
       ["Statement", "Verified" :: String]
       [show (toInteger claim), show verified]
 
-view :: Opts -> IO ()
-view Opts {..} = do
-  let View graph reorg file = o'command
+init' :: Opts -> IO ()
+init' Opts {..} = do
+  let Init graph language = o'command
   unlessM
-    (doesFileExist file)
-    (err $ "Error, file file does not exist: " ++ file)
+    (doesFileExist language)
+    (err $ "Error, language file does not exist: " ++ language)
+  circuit <- compile'language <$> readFile language
+  sig@Nilsig {..} <-
+    nil'init bn254'g1 bn254'g2 bn254'gt circuit ::
+      IO (Nilsig BN254 BN254'G2 Fr G1)
+  let path = takeDirectory language
+      file'sig = n'hash ++ ".sig"
+  B.writeFile (path ++ "/" ++ file'sig) . encode $ sig
 
-  bytes <- B.readFile file
+  unless o'quite $ do
+    info'io
+      ["filepath", "Nil-sig", "(hash)"]
+      [path, n'hash ++ ".sig", n'hash]
 
-  let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
-      ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
-      vkey = decode'bytes (Proxy :: Proxy VerificationKey) bytes
-      proof = decode'bytes (Proxy :: Proxy Proof) bytes
-      unwrap = fromRight (die "Error,")
-  if
-      | isRight circuit -> do
-          let circuit_ = unwrap circuit
-          reorged <-
-            if reorg then reorg'circuit circuit_ else pure circuit_
-          if graph
-            then do
-              let circ'id = hex'from'bytes . sha256 . encode $ reorged
-              let dagfile = circ'id ++ ".pdf"
-                  path = takeDirectory file
-              export'graph
-                (path ++ "/" ++ dagfile)
-                (write'dot dot'header reorged)
-              unless o'quite $ info'io ["Graph"] [dagfile]
-            else pp reorged
-      | isRight ekey -> pp . unwrap $ ekey
-      | isRight vkey -> pp . unwrap $ vkey
-      | isRight proof -> pp . unwrap $ proof
-      | otherwise -> pp . str'from'bytes $ bytes
+  -- export graph
+  when graph $ do
+    dag circuit (path ++ "/" ++ n'hash ++ ".pdf") o'quite
+
+view :: Opts -> IO ()
+view Opts {..} =
+  do
+    let View graph reorg file = o'command
+    unlessM
+      (doesFileExist file)
+      (err $ "Error, file file does not exist: " ++ file)
+    bytes <- B.readFile file
+    let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
+        ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
+        vkey = decode'bytes (Proxy :: Proxy VerificationKey) bytes
+        proof = decode'bytes (Proxy :: Proxy Proof) bytes
+        nilsig = decode'bytes (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) bytes
+        unwrap = fromRight (die mempty)
+    if
+        | isRight circuit -> do
+            circ <-
+              if reorg
+                then reorg'circuit (unwrap circuit)
+                else pure (unwrap circuit)
+            let circ'id = hex'from'bytes . sha256 . encode $ circ
+            if graph
+              then do
+                let file = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
+                dag circ file o'quite
+              else do pp . unwrap $ circuit
+        | isRight ekey -> pp . unwrap $ ekey
+        | isRight vkey -> pp . unwrap $ vkey
+        | isRight proof -> pp . unwrap $ proof
+        | isRight nilsig -> pp . unwrap $ nilsig
+        | otherwise -> pp . str'from'bytes $ bytes
+
+dag :: (Eq a) => Circuit a -> FilePath -> Bool -> IO ()
+dag circuit file silent = do
+  export'graph file (write'dot dot'header circuit)
+  unless silent (ok file)
 
 test :: IO ()
 test = undefined
@@ -199,7 +168,14 @@ test = undefined
 demo :: Opts -> IO ()
 demo Opts {..} = do
   let Demo list item = o'command
-  when list $ stderr "francis"
+  when list $ do
+    info'io
+      ["mpc", "zkp"]
+      [ "multi-party computation demo using nil-sign",
+        "zero-knowledge proof demo using pinocchio protocol"
+      ]
+    err mempty
+  when (item == "mpc") $ demo'mpc (not o'quite)
   when (item == "zkp") $ demo'zkp (not o'quite)
 
 demo'zkp :: Bool -> IO ()

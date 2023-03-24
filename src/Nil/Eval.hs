@@ -84,8 +84,8 @@ vec'fromWmap wmap =
 -- | Get a Wmap from List in forms of [(String, r)]
 wmap'fromList :: (Num a) => [(String, a)] -> Wmap a
 wmap'fromList =
-  foldr
-    ( \(key, val) wmap ->
+  foldl'
+    ( \wmap (key, val) ->
         wmap <~ (key, set'val val . unit'var $ key)
     )
     (mempty <~~ unit'const)
