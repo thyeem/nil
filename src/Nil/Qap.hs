@@ -95,13 +95,12 @@ l'from'gate
       recip' = w'recip $ g'rwire g
       coeff key
         | recip' && key == const'key = 1
-        | not recip' && op == End && key == const'key = 1
         | not recip' && op == Add && key == lkey && lkey == rkey = lval + rval
         | not recip' && op == Add && key == lkey = lval
         | not recip' && op == Add && key == rkey = rval
         | not recip' && op == Mul && key == lkey = lval
-        -- \| not recip' && op `notElem` [Mul, Add, End] && key == const'key = 1
-        | not recip' && op `notElem` [Mul, Add] && key == const'key = 1
+        | not recip' && op == End && key == return'key = 1
+        | not recip' && op `notElem` [Mul, Add, End] && key == const'key = 1
         | otherwise = 0
 {-# INLINE l'from'gate #-}
 
@@ -119,18 +118,20 @@ r'from'gate
       recip' = w'recip $ g'rwire g
       coeff key
         | recip' && key == okey = oval
-        | not recip' && op == End && key == rkey = rval
         | not recip' && op == Add && key == const'key = 1
         | not recip' && op == Mul && key == rkey = rval
-        -- \| not recip' && op `notElem` [Mul, Add, End] && key == okey = oval
-        | not recip' && op `notElem` [Mul, Add] && key == okey = oval
+        | not recip' && op == End && key == const'key = 1
+        | not recip' && op `notElem` [Mul, Add, End] && key == okey = oval
         | otherwise = 0
 {-# INLINE r'from'gate #-}
 
 -- | Convert a given gate into a row-vector based on out-wire
 o'from'gate :: (Num f) => [String] -> Gate f -> [f]
-o'from'gate keys Gate {g'owire = Wire okey _ _ oval} =
-  [if key == okey then oval else 0 | key <- keys]
+o'from'gate keys Gate {g'owire = Wire okey _ _ oval} = [coeff key | key <- keys]
+  where
+    coeff key
+      | key == okey = oval
+      | otherwise = 0
 {-# INLINE o'from'gate #-}
 
 -- | Check if R1CS constraints hold for a given witness vector v:

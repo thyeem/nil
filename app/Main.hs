@@ -169,13 +169,15 @@ test = undefined
 demo :: Opts -> IO ()
 demo Opts {..} = do
   let Demo list item = o'command
+      items = ["mpc", "zkp"]
   when list $ do
     info'io
-      ["mpc", "zkp"]
+      items
       [ "multi-party computation demo using nil-sign",
         "zero-knowledge proof demo using pinocchio protocol"
       ]
     err mempty
+  when (item `notElem` items) (err $ "Error, no such demo item: " ++ item)
   when (item == "mpc") $ demo'mpc (not o'quite)
   when (item == "zkp") $ demo'zkp (not o'quite)
 
