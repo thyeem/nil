@@ -100,7 +100,8 @@ l'from'gate
         | not recip' && op == Add && key == lkey = lval
         | not recip' && op == Add && key == rkey = rval
         | not recip' && op == Mul && key == lkey = lval
-        | not recip' && op `notElem` [Mul, Add, End] && key == const'key = 1
+        -- \| not recip' && op `notElem` [Mul, Add, End] && key == const'key = 1
+        | not recip' && op `notElem` [Mul, Add] && key == const'key = 1
         | otherwise = 0
 {-# INLINE l'from'gate #-}
 
@@ -121,7 +122,8 @@ r'from'gate
         | not recip' && op == End && key == rkey = rval
         | not recip' && op == Add && key == const'key = 1
         | not recip' && op == Mul && key == rkey = rval
-        | not recip' && op `notElem` [Mul, Add, End] && key == okey = oval
+        -- \| not recip' && op `notElem` [Mul, Add, End] && key == okey = oval
+        | not recip' && op `notElem` [Mul, Add] && key == okey = oval
         | otherwise = 0
 {-# INLINE r'from'gate #-}
 

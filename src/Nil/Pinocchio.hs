@@ -416,6 +416,7 @@ zktest verbose language witnesses instances = do
 
   -- zk-verify
   let verified = zkverify proof vkey (vec'fromWmap instances)
+  stderr (pretty . vec'fromWmap $ instances)
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."

@@ -68,7 +68,9 @@ setup Opts {..} = do
       ]
   -- export graph
   when graph $ do
-    dag circuit (path ++ "/" ++ circ'id ++ ".pdf") o'quite
+    let file'dag = circ'id ++ ".pdf"
+    export'graph file'dag (write'dot dot'header circuit)
+    unless o'quite (info'io ["Graph"] [file'dag])
 
 prove :: Opts -> IO ()
 prove Opts {..} = do
@@ -80,7 +82,7 @@ prove Opts {..} = do
       out = statement bn254'g1 witness_ circuit_
       vec'wit = wire'vals bn254'g1 witness_ circuit_
       proof = zkprove qap ekey_ vec'wit
-      path = takeDirectory ekey
+      path = takeDirectory wit
       pfID = hex'from'bytes . sha256 . encode $ proof
       file'proof = pfID ++ ".pf"
   B.writeFile (path ++ "/" ++ file'proof) . encode $ proof
@@ -124,7 +126,9 @@ init' Opts {..} = do
 
   -- export graph
   when graph $ do
-    dag circuit (path ++ "/" ++ hash ++ ".pdf") o'quite
+    let file'dag = hash ++ ".pdf"
+    export'graph file'dag (write'dot dot'header circuit)
+    unless o'quite (info'io ["graph"] [file'dag])
 
 view :: Opts -> IO ()
 view Opts {..} =
@@ -150,18 +154,14 @@ view Opts {..} =
             if graph
               then do
                 let file = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
-                dag circ file o'quite
+                export'graph file (write'dot dot'header circ)
+                unless o'quite (ok file)
               else do pp . unwrap $ circuit
         | isRight ekey -> pp . unwrap $ ekey
         | isRight vkey -> pp . unwrap $ vkey
         | isRight proof -> pp . unwrap $ proof
         | isRight nilsig -> pp . unwrap $ nilsig
         | otherwise -> pp . str'from'bytes $ bytes
-
-dag :: (Eq a) => Circuit a -> FilePath -> Bool -> IO ()
-dag circuit file silent = do
-  export'graph file (write'dot dot'header circuit)
-  unless silent (ok file)
 
 test :: IO ()
 test = undefined
