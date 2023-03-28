@@ -53,7 +53,7 @@ import Nil.Utils
 lang =
   unlines
     [ "language (priv e, priv r, priv s, pub z)",
-      "return e^3 * 7e + (5r - 3s) ^4 + (e/r-s)^13 / 3z * 2r * s"
+      "return ((e+r*s)^4 + s*z)^3 / z*r*s"
     ]
 
 c = compile'language lang :: Circuit Fr

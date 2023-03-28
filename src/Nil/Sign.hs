@@ -13,6 +13,7 @@ module Nil.Sign where
 
 import Control.DeepSeq (NFData)
 import Control.Monad (unless, when, (<=<))
+import Control.Parallel (par, pseq)
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString, append)
 import Data.Function (on)
@@ -34,7 +35,7 @@ import Nil.Eval
     (~~),
     (~~~),
   )
-import Nil.Field (Extensionfield, Field, unef)
+import Nil.Field (Extensionfield (..), Field, unef)
 import Nil.Pairing (pairing)
 import Nil.Reorg
 import Nil.Utils
@@ -42,6 +43,7 @@ import Nil.Utils
     bytes'from'hex,
     bytes'from'int,
     bytes'from'str,
+    deep,
     die,
     foldM',
     hex'from'bytes,
@@ -49,13 +51,13 @@ import Nil.Utils
     sha256,
     stderr,
     (<%>),
+    (|=|),
   )
 import System.Random (Random)
 
 -- | Aggregable-signature object for nil'sign
 data Nilsig i j r q = Nilsig
-  { n'hash :: String,
-    n'key :: Nilkey i j q,
+  { n'key :: Nilkey i j q,
     n'circuit :: Circuit (NIL i r q)
   }
   deriving (Eq, Show, Generic, NFData)
@@ -100,10 +102,7 @@ nil'init curve'g1 curve'g2 curve'gt circuit = do
       nilkey = update'nilkey phi chi (c'g curve'g1, c'g curve'g2)
   gates <-
     foldM' (backprop 1 phi gmap) omap amps -- forced initial backpropagation
-  let sig =
-        update'hash
-          curve'gt
-          (Nilsig mempty nilkey (nilified {c'gates = sort'omap gates}))
+  let sig = Nilsig nilkey (nilified {c'gates = sort'omap gates})
   nil'sign curve'gt wmap sig -- forced initial sign (constants)
 {-# INLINE nil'init #-}
 
@@ -115,14 +114,6 @@ update'nilkey ::
   Nilkey i j q
 update'nilkey a b = bimap (~* a) (~* b)
 {-# INLINE update'nilkey #-}
-
-update'hash ::
-  (Field q, Integral q, Integral r, Field r) =>
-  Curve t (Extensionfield q t) ->
-  Nilsig i j r q ->
-  Nilsig i j r q
-update'hash curve sig@Nilsig {..} =
-  sig {n'hash = hex'from'bytes . hash'sig curve $ sig}
 
 -- | Nilsign: homomorphically ecrypt secrets based on a reorged circuit.
 -- Here, @sign@ means doing repeatdly evaluate a reorged-circuit with the given secrets.
@@ -148,21 +139,15 @@ nil'sign curve secrets sig@Nilsig {..} = do
       amps = find'amps omap
       entries = find'entries omap
       nilkey =
-        -- randomize nilkey (key-aggregation)
         update'nilkey (recip alpha) alpha
           . update'nilkey gamma (recip gamma)
-          $ n'key
+          $ n'key -- randomize nilkey (key-aggregation)
   signed <-
     foldM' (sign'gate secrets gmap) omap entries -- sign each entry
   randomized <- foldM' (backprop alpha gamma gmap) signed amps -- randomize each ampgates
   let collapsed = snd . reduce $ randomized -- collapse until irreducible
-  pure
-    . update'hash curve -- update hash of nilsig
-    $ sig
-      { n'key = nilkey,
-        n'circuit = n'circuit {c'gates = sort'omap collapsed}
-      }
-{-# INLINE nil'sign #-}
+  pure $ sig {n'key = nilkey, n'circuit = n'circuit {c'gates = sort'omap collapsed}}
+{-# INLINEABLE nil'sign #-}
 
 -- | Randomize the end amp and backpropagate to the other amps
 backprop ::
@@ -188,7 +173,7 @@ backprop alpha gamma gmap omap g
     updater v = nilify False False (nil c v)
     pasts = prev'amps omap g
     anticones = nub $ concatMap (next'amps gmap) pasts
-{-# INLINE backprop #-}
+{-# INLINEABLE backprop #-}
 
 -- | Sign each entry gate assigned for a signer
 sign'gate ::
@@ -237,7 +222,7 @@ nilify leftp closep val g omap =
           then gate {g'lwire = finish $ val ~~~ gl}
           else gate {g'rwire = finish $ val ~~~ gr}
    in omap <<< gate'
-{-# INLINE nilify #-}
+{-# INLINEABLE nilify #-}
 
 -- | Further collapse gates from entries if reducible
 reduce :: (Eq a, Fractional a) => Omap a -> (Wmap a, Omap a)
@@ -275,7 +260,7 @@ nil'check curve fval sig@Nilsig {..}
       die $
         "Error, used Nilsig not fully signed yet: "
           ++ show (nub . w'key . g'lwire <$> entries)
-  | otherwise = pairing curve out chi == pairing curve phi chi ^ fval
+  | otherwise = pairing curve out chi |=| (pairing curve phi chi ^ fval)
   where
     omap = omap'from'gates . c'gates $ n'circuit
     entries = find'entries omap
@@ -289,10 +274,13 @@ hash'sig ::
   Curve t (Extensionfield q t) ->
   Nilsig i j r q ->
   ByteString
-hash'sig curve sig@Nilsig {..} = sha256 (nilkey `append` amps)
+hash'sig curve sig@Nilsig {..} =
+  nilkey `par`
+    amps `pseq`
+      sha256 (nilkey `append` amps)
   where
-    nilkey = hash'nilkey curve n'key
-    amps = hash'amps omap
+    nilkey = deep $ hash'nilkey curve n'key
+    amps = deep $ hash'amps omap
     omap = omap'from'gates . c'gates $ n'circuit
 {-# INLINEABLE hash'sig #-}
 
@@ -325,7 +313,7 @@ hash'nilkey curve (phi, chi) =
     (bytes'from'int . toInteger <$> lambda)
   where
     lambda = unef $ pairing curve phi chi
-{-# INLINE hash'nilkey #-}
+{-# INLINEABLE hash'nilkey #-}
 
 verify'hash ::
   (Field q, Integral q, Integral r, Field r) =>
@@ -334,7 +322,7 @@ verify'hash ::
   String ->
   Bool
 verify'hash curve sig@Nilsig {..} hex = hash'sig curve sig == bytes'from'hex hex
-{-# INLINEABLE verify'hash #-}
+{-# INLINE verify'hash #-}
 
 nil'test :: Bool -> String -> Wmap Fr -> IO Bool
 nil'test verbose language wmap = do
@@ -349,6 +337,7 @@ nil'test verbose language wmap = do
   when verbose $ do
     stderr mempty
     stderr "Initializing nil-signature..."
+    stderr $ "(hash) " ++ hex'from'bytes (hash'sig bn254'gt sig)
     stderr (pretty sig)
 
   -- signeds signature
@@ -356,15 +345,17 @@ nil'test verbose language wmap = do
   when verbose $ do
     stderr mempty
     stderr "Signing nil-signature..."
+    stderr $ "(hash) " ++ hex'from'bytes (hash'sig bn254'gt signed)
     stderr (pretty signed)
 
   -- expected return: f(Wij)
   let fval = statement bn254'g1 wmap circuit
-  let verified = nil'check bn254'gt fval signed
+  let ret = w'val $ wmap ~> return'key
+  let verified = nil'check bn254'gt ret signed
   when verbose $ do
     stderr mempty
     stderr "Checking validity of nil-signature..."
-    stderr $ "Expected f-value: " ++ show fval
+    stderr $ "    Given f-value: " ++ show ret
+    stderr $ "Evaluated f-value: " ++ show fval
     stderr $ "Verified: " ++ show verified
   pure verified
-{-# INLINEABLE nil'test #-}

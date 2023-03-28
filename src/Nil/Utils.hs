@@ -33,6 +33,7 @@ import Data.List
     foldl',
     intercalate,
     isPrefixOf,
+    unfoldr,
   )
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -130,6 +131,7 @@ a ||| b = a `par` b `pseq` a || b
 -- deep x == id $!! x
 deep :: (NFData a) => a -> a
 deep a = a `deepseq` a
+{-# INLINE deep #-}
 
 -- | Infix pmap
 (<%>) :: (NFData a, NFData b) => (a -> b) -> [a] -> [b]
@@ -194,10 +196,23 @@ tbop :: (a -> a -> b) -> (a, a) -> (a, a) -> (b, b)
 tbop op x = uncurry bimap (tmap op x)
 {-# INLINE tbop #-}
 
+-- | Explicitly convert [u8] into bytes
+bytes'from'u8 :: [Word8] -> B.ByteString
+bytes'from'u8 = B.pack
+
+u8'from'bytes :: B.ByteString -> [Word8]
+u8'from'bytes = B.unpack
+
 -- | Explicitly convert [u8] into string
 str'from'u8 :: [Word8] -> String
 str'from'u8 = str'from'bytes . bytes'from'u8
-{-# INLINE str'from'u8 #-}
+
+u8'from'str :: String -> [Word8]
+u8'from'str = u8'from'bytes . bytes'from'str
+
+-- | Explicitly convert string into bytes
+bytes'from'str :: String -> B.ByteString
+bytes'from'str = C.pack
 
 -- | Explicitly convert bytes into string
 str'from'bytes :: B.ByteString -> String
@@ -207,52 +222,45 @@ str'from'bytes = C.unpack
 str'from'lbytes :: L.ByteString -> String
 str'from'lbytes = str'from'bytes . L.toStrict
 
--- | Explicitly convert integer into string
-str'from'int :: Integer -> String
-str'from'int = str'from'bytes . bytes'from'int
+lbytes'from'str :: String -> L.ByteString
+lbytes'from'str = L.fromStrict . bytes'from'str
 
--- | Explicitly convert [u8] into bytes
-bytes'from'u8 :: [Word8] -> B.ByteString
-bytes'from'u8 = B.pack
+int'from'u8 :: [Word8] -> Integer
+int'from'u8 = foldr unstep 0
+  where
+    unstep b a = a `shiftL` 8 .|. fromIntegral b
 
--- | Explicitly convert string into bytes
-bytes'from'str :: String -> B.ByteString
-bytes'from'str = C.pack
+u8'from'int :: Integer -> [Word8]
+u8'from'int x = unfoldr step (abs x)
+  where
+    step 0 = Nothing
+    step i = Just (fromIntegral i, i `shiftR` 8)
 
 bytes'from'int :: Integer -> B.ByteString
-bytes'from'int x = bytes'from'u8 $ fromIntegral <$> word8s
-  where
-    word8s = word8 <$> reverse ((8 *) <$> [0 .. n])
-    word8 s = shiftR x s `mod` 0x100
-    n = (floor @Float) . logBase 0x100 . fromIntegral $ x
+bytes'from'int = bytes'from'u8 . u8'from'int
+
+int'from'bytes :: B.ByteString -> Integer
+int'from'bytes = int'from'u8 . u8'from'bytes
+
+-- | Explicitly convert integer into string
+str'from'int :: Integer -> String
+str'from'int = str'from'u8 . u8'from'int
+
+int'from'str :: String -> Integer
+int'from'str = int'from'u8 . u8'from'str
 
 bytes'from'hex :: String -> B.ByteString
 bytes'from'hex = H.decodeLenient . bytes'from'str . unwrap
   where
     unwrap x = if take 2 x == "0x" then drop 2 x else x
 
-lbytes'from'str :: String -> L.ByteString
-lbytes'from'str = L.fromStrict . bytes'from'str
-
-u8'from'str :: String -> [Word8]
-u8'from'str = u8'from'bytes . bytes'from'str
-
-u8'from'bytes :: B.ByteString -> [Word8]
-u8'from'bytes = B.unpack
-
-int'from'str :: String -> Integer
-int'from'str = int'from'bytes . bytes'from'str
-
-int'from'bytes :: B.ByteString -> Integer
-int'from'bytes = B.foldl' f 0 where f a b = shiftL a 8 .|. fromIntegral b
+hex'from'bytes :: B.ByteString -> String
+hex'from'bytes = str'from'bytes . H.encode
 
 int'from'hex :: String -> Integer
 int'from'hex hexstring = read $ unwrap hexstring :: Integer
   where
     unwrap x = if take 2 x == "0x" then x else "0x" <> x
-
-hex'from'bytes :: B.ByteString -> String
-hex'from'bytes = str'from'bytes . H.encode
 
 hex'from'int :: Integer -> String
 hex'from'int x = showHex x ""

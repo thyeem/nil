@@ -63,7 +63,7 @@ parse tokens
     in' = fst . parse'stmt . head $ stmts
     out' = fst . parse'stmt . last $ stmts
     opt = fst . parse'stmt <$> (init . tail $ stmts)
-    opt' = foldl' (flip Seq) Null opt
+    opt' = foldr Seq Null opt
     ast = Root in' opt' out'
 
 -- | Parse a sequence of actions to be carried out
@@ -81,7 +81,7 @@ parse'args (Sym LParen : ts)
   | last ts /= Sym RParen = die $ "Error, syntax error of: " ++ pretty (last ts)
   | otherwise = (ast, [])
   where
-    ast = foldl' (flip input) Null (init ts `splitby` [Sym Comma])
+    ast = foldr input Null (init ts `splitby` [Sym Comma])
     input [Kwd Pub, Prim v@(V _)] ast' = In Pub (Value v) ast'
     input [Kwd Priv, Prim v@(V _)] ast' = In Priv (Value v) ast'
     input t _ = die $ "Error, syntax error of: " ++ pretty t
