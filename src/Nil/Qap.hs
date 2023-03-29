@@ -99,7 +99,8 @@ l'from'gate
         | not recip' && op == Add && key == lkey = lval
         | not recip' && op == Add && key == rkey = rval
         | not recip' && op == Mul && key == lkey = lval
-        | not recip' && op == End && key == return'key = 1
+        | not recip' && op == End && key == lkey = lval
+        | not recip' && op == End && key == rkey = rval
         | not recip' && op `notElem` [Mul, Add, End] && key == const'key = 1
         | otherwise = 0
 {-# INLINE l'from'gate #-}
@@ -127,10 +128,11 @@ r'from'gate
 
 -- | Convert a given gate into a row-vector based on out-wire
 o'from'gate :: (Num f) => [String] -> Gate f -> [f]
-o'from'gate keys Gate {g'owire = Wire okey _ _ oval} = [coeff key | key <- keys]
+o'from'gate keys Gate {g'op = op, g'owire = Wire okey _ _ oval} = [coeff key | key <- keys]
   where
     coeff key
-      | key == okey = oval
+      | op == End && key == okey = 2
+      | op /= End && key == okey = oval
       | otherwise = 0
 {-# INLINE o'from'gate #-}
 

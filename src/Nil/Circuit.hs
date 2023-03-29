@@ -31,6 +31,7 @@ module Nil.Circuit
     return'key,
     val'const,
     end'key,
+    add'identity,
   )
 where
 
@@ -45,7 +46,7 @@ import Nil.Data (NIL)
 import Nil.Ecdata (BN254, Fr, G1)
 import Nil.Lexer (Keywords (..), Ops (..), Prims (..), tokenize)
 import Nil.Parser (AST (..), Expr (..), parse)
-import Nil.Utils (Pretty (..), die)
+import Nil.Utils (Pretty (..), bytes'from'str, die, int'from'bytes, sha256)
 
 -- | @Arithmetic@ 'Circuit' over any data type @a@
 -- A circuit is simply a compound of gates and wires,
@@ -219,9 +220,17 @@ out'wirep Wire {..} = case w'key of
   _ -> False
 {-# INLINE out'wirep #-}
 
+-- | Implicitly add identity expressions to increase number of gates
+add'identity :: Int -> String -> String
+add'identity n = unwords . take (n + 1) . iterate (expr . number)
+  where
+    number = show . int'from'bytes . sha256 . bytes'from'str
+    expr x = unwords ["+", x, "-", x]
+{-# INLINE add'identity #-}
+
 -- | Derive circuit from the domain-specific language, Language
 compile'language :: (Num a) => String -> Circuit a
-compile'language = circuit'from'ast . parse . tokenize
+compile'language = circuit'from'ast . parse . tokenize . add'identity 2
 {-# INLINE compile'language #-}
 
 -- | Construct a 'circuit' from 'AST'

@@ -97,7 +97,7 @@ verify Opts {..} = do
   proof_ <- decode'file (Proxy :: Proxy Proof) proof
   vkey_ <- decode'file (Proxy :: Proxy VerificationKey) vkey
   instance_ <- read'input inst :: IO (Wmap Fr)
-  let claim = w'val $ instance_ ~> "return"
+  let claim = w'val $ instance_ ~> return'key
       verified = zkverify proof_ vkey_ (vec'fromWmap instance_)
   unless o'quite $ do
     info'io
@@ -169,12 +169,13 @@ test = undefined
 demo :: Opts -> IO ()
 demo Opts {..} = do
   let Demo list item = o'command
-      items = ["mpc", "zkp"]
+      items = ["mpc", "zkp", "sofia"]
   when list $ do
     info'io
       items
       [ "multi-party computation demo using nil-sign",
-        "zero-knowledge proof demo using pinocchio protocol"
+        "zero-knowledge proof demo using pinocchio protocol",
+        "tmp"
       ]
     err mempty
   when (item `notElem` items) (err $ "Error, no such demo item: " ++ item)

@@ -9,7 +9,7 @@
 
 module Nil.Eval where
 
-import Data.List (foldl')
+import Data.List (foldl', sort)
 import Data.Map (keys)
 import Data.Maybe (fromJust)
 import Nil.Circuit
@@ -78,7 +78,7 @@ extend'gate c g@Gate {..} =
 vec'fromWmap :: (Num a) => Wmap a -> [a]
 vec'fromWmap wmap =
   w'val . (wmap ~>)
-    <$> filter (/= const'key) (keys wmap)
+    <$> filter (/= const'key) (sort . keys $ wmap)
 {-# INLINE vec'fromWmap #-}
 
 -- | Get a Wmap from List in forms of [(String, r)]

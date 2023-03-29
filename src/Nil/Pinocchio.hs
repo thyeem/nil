@@ -41,7 +41,7 @@ import Data.Proxy
 import Data.Store (PeekException (..), Store, decode)
 import GHC.Generics (Generic)
 import Nil.Circuit
-import Nil.Curve (Curve, Point, toA, (<~*>), (~*))
+import Nil.Curve (Curve, Point, c'g, toA, (<~*>), (~*))
 import Nil.Ecdata (BN254, BN254'G2, BN254'GT, Fr, G1, G2, bn254'g1, bn254'gt, g1, g2)
 import Nil.Eval (statement, vec'fromWmap, wire'vals, wmap'fromList)
 import Nil.Lexer (tokenize)
@@ -282,20 +282,18 @@ zksetup QAP {..} (s, a, bv, bw, by, r) = ekey `par` vkey `pseq` (ekey, vkey)
     vEvio = lift'G1 <%> vio -- [ E(Vio(s)) ]
     lift'G1 = toA . (g1 ~*) -- lift a scalar to a point on G1
     lift'G2 = toA . (g2 ~*) -- lift a scalar to a point on G2
-    vio = (|= s) . (qap'V !!) <%> ix'inst -- [ Vio(s) ]
-    vj = (|= s) . (qap'V !!) <%> ix'wit -- [ Vj(s) ]
-    wk = (|= s) . (qap'W !!) <%> ix'full -- [ Wk(s) ]
-    yk = (|= s) . (qap'Y !!) <%> ix'full -- [ Yk(s) ]
+    vio = (|= s) . (qap'V !!) <%> [1 .. n] -- [ Vio(s) ]
+    vj = (|= s) . (qap'V !!) <%> [n + 1 .. m - 1] -- [ Vj(s) ]
+    wk = (|= s) . (qap'W !!) <%> [1 .. m - 1] -- [ Wk(s) ]
+    yk = (|= s) . (qap'Y !!) <%> [1 .. m - 1] -- [ Yk(s) ]
     v0 = (|= s) . head $ qap'V -- V0(s)
     w0 = (|= s) . head $ qap'W -- W0(s)
     y0 = (|= s) . head $ qap'Y -- Y0(s)
-    si = (s ^) <%> ix'gate -- [ s^i ]
+    si = (s ^) <%> [0 .. d] -- [ s^i ]
     t = qap't |= s -- t(s)
-    n = qap'num'inst
-    ix'gate = [0 .. length . head $ qap'V] -- [0 .. d]
-    ix'full = [1 .. pred . length $ qap'V] -- [1 .. m-1]
-    ix'inst = [1 .. n] -- [1..(# of instances and out)]
-    ix'wit = [n + 1 .. length qap'V - 1] -- [n+1 .. m-1]
+    n = qap'num'inst -- # of instance
+    m = length qap'V -- 1 + n + (# of witness) + d
+    d = length (head qap'V) -- # of gates
 {-# INLINEABLE zksetup #-}
 
 -- | Generate zkproof
@@ -342,9 +340,9 @@ zkprove qap@QAP {..} EKey {..} witness = proof
           |+| (eEbyyk <~*> witK) -- E(bv * Vj(s) + bw * W(s) + by * Y(s))
     h = qap'quot qap witness -- h(x)
     n = qap'num'inst -- number of instances
-    m = pred . length $ qap'V -- size of (#gates + #witness + #instance)
-    witJ = witness `slice` (n + 1, m) -- witness[n+1:m]
-    witK = witness `slice` (1, m) -- witness[1:m]
+    m = length qap'V -- 1 + n + (# of witness) + d
+    witJ = witness `slice` (n + 1, m - 1) -- witness[n+1:]
+    witK = witness `slice` (1, m - 1) -- witness[1:]
 {-# INLINEABLE zkprove #-}
 
 -- | Verify the given zkproof
@@ -416,7 +414,6 @@ zktest verbose language witnesses instances = do
 
   -- zk-verify
   let verified = zkverify proof vkey (vec'fromWmap instances)
-  stderr (pretty . vec'fromWmap $ instances)
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."
