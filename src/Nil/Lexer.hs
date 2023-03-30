@@ -8,6 +8,7 @@ module Nil.Lexer
     Symbols (..),
     Token (..),
     tokenize,
+    normalize,
   )
 where
 

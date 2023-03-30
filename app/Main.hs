@@ -28,7 +28,7 @@ project opts@Opts {..} = do
     Prove {} -> prove opts
     Verify {} -> verify opts
     Init {} -> init' opts
-    Sign {} -> print "sign"
+    Sign {} -> sign opts
     Check {} -> print "check"
     View {} -> view opts
     Test {} -> print "test"
@@ -86,9 +86,9 @@ prove Opts {..} = do
       pfID = hex'from'bytes . sha256 . encode $ proof
       file'proof = pfID ++ ".pf"
   B.writeFile (path ++ "/" ++ file'proof) . encode $ proof
-  unless o'quite $ do
+  unless o'quite $
     info'io
-      ["Eval (out)", "filepath", "Proof" :: String]
+      ["Eval (out)", "filepath", "Proof"]
       [show (toInteger out), path, file'proof]
 
 verify :: Opts -> IO ()
@@ -99,9 +99,9 @@ verify Opts {..} = do
   instance_ <- read'input inst :: IO (Wmap Fr)
   let claim = w'val $ instance_ ~> return'key
       verified = zkverify proof_ vkey_ (vec'fromWmap instance_)
-  unless o'quite $ do
+  unless o'quite $
     info'io
-      ["Statement", "Verified" :: String]
+      ["Statement", "Verified"]
       [show (toInteger claim), show verified]
 
 init' :: Opts -> IO ()
@@ -109,34 +109,51 @@ init' Opts {..} = do
   let Init graph language = o'command
   unlessM
     (doesFileExist language)
-    (err $ "Error, language file does not exist: " ++ language)
+    (err $ "Error, file does not exist: " ++ language)
   circuit <- compile'language <$> readFile language
   sig@Nilsig {..} <-
     nil'init bn254'g1 bn254'g2 bn254'gt circuit ::
       IO (Nilsig BN254 BN254'G2 Fr G1)
   let path = takeDirectory language
-      hash = hex'from'bytes $ hash'sig bn254'gt sig
-      file'sig = hash ++ ".sig"
+      sig'id = hex'from'bytes . sha256 . encode $ sig
+      file'sig = sig'id ++ ".sig"
   B.writeFile (path ++ "/" ++ file'sig) . encode $ sig
-
-  unless o'quite $ do
+  unless o'quite $
     info'io
-      ["filepath", "Nil-sig", "(hash)"]
-      [path, hash ++ ".sig", hash]
+      ["filepath", "Signature", "(hash)"]
+      [path, file'sig, sig'id]
 
   -- export graph
   when graph $ do
-    let file'dag = hash ++ ".pdf"
+    let file'dag = sig'id ++ ".pdf"
     export'graph file'dag (write'dot dot'header circuit)
     unless o'quite (info'io ["graph"] [file'dag])
+
+sign :: Opts -> IO ()
+sign Opts {..} = do
+  let Sign sig secrets = o'command
+  unlessM
+    (doesFileExist sig)
+    (err $ "Error, file does not exist: " ++ sig)
+  sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
+  secrets_ <- read'input secrets :: IO (Wmap Fr)
+  signed <- nil'sign bn254'gt (extend'wire bn254'g1 <$> secrets_) sig_
+  let path = takeDirectory sig
+      sig'id = hex'from'bytes . sha256 . encode $ signed
+      file'sig = sig'id ++ ".sig"
+  B.writeFile (path ++ "/" ++ file'sig) . encode $ sig
+  unless o'quite $
+    info'io
+      ["filepath", "Signature", "(hash)"]
+      [path, path, file'sig, sig'id]
 
 view :: Opts -> IO ()
 view Opts {..} =
   do
-    let View graph reorg file = o'command
+    let View graph reorg priv pub file = o'command
     unlessM
       (doesFileExist file)
-      (err $ "Error, file file does not exist: " ++ file)
+      (err $ "Error, file does not exist: " ++ file)
     bytes <- B.readFile file
     let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
         ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
@@ -157,10 +174,14 @@ view Opts {..} =
                 export'graph file (write'dot dot'header circ)
                 unless o'quite (ok file)
               else do pp . unwrap $ circuit
+        | isRight nilsig ->
+            if
+                | priv -> print . c'privs . n'circuit . unwrap $ nilsig
+                | pub -> print . c'pubs . n'circuit . unwrap $ nilsig
+                | otherwise -> pp . unwrap $ nilsig
         | isRight ekey -> pp . unwrap $ ekey
         | isRight vkey -> pp . unwrap $ vkey
         | isRight proof -> pp . unwrap $ proof
-        | isRight nilsig -> pp . unwrap $ nilsig
         | otherwise -> pp . str'from'bytes $ bytes
 
 test :: IO ()

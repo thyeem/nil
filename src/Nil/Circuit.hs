@@ -44,7 +44,7 @@ import Data.Store (Store)
 import GHC.Generics (Generic)
 import Nil.Data (NIL)
 import Nil.Ecdata (BN254, Fr, G1)
-import Nil.Lexer (Keywords (..), Ops (..), Prims (..), tokenize)
+import Nil.Lexer (Keywords (..), Ops (..), Prims (..), normalize, tokenize)
 import Nil.Parser (AST (..), Expr (..), parse)
 import Nil.Utils (Pretty (..), bytes'from'str, die, int'from'bytes, sha256)
 
@@ -222,7 +222,7 @@ out'wirep Wire {..} = case w'key of
 
 -- | Implicitly add identity expressions to increase number of gates
 add'identity :: Int -> String -> String
-add'identity n = unwords . take (n + 1) . iterate (expr . number)
+add'identity n = unwords . take (n + 1) . iterate (expr . number) . normalize
   where
     number = show . int'from'bytes . sha256 . bytes'from'str
     expr x = unwords ["+", x, "-", x]

@@ -270,15 +270,9 @@ bits'from'int x = (1 .&.) . (x `shiftR`) <$> [0 .. n]
   where
     n = (floor @Float) . logBase 2 $ fromIntegral x
 
-base64FromBytes :: B.ByteString -> String
-base64FromBytes = str'from'bytes . B64.encode
-
-bytesFromBase64 :: String -> B.ByteString
-bytesFromBase64 = B64.decodeLenient . bytes'from'str
-
 -- | Get fixed-length-of-big-endian-bytes from a given integer
-bytes'from'int'len :: Int -> Integer -> B.ByteString
-bytes'from'int'len len x
+bytes'from'int' :: Int -> Integer -> B.ByteString
+bytes'from'int' len x
   | diff > 0 = (B.concat . replicate diff $ nul) <> bytes
   | otherwise = bytes
   where
@@ -286,12 +280,22 @@ bytes'from'int'len len x
     nul = bytes'from'str "\NUL"
     diff = len - B.length bytes
 
+base64'from'bytes :: B.ByteString -> String
+base64'from'bytes = str'from'bytes . B64.encode
+
+bytes'from'base64 :: String -> B.ByteString
+bytes'from'base64 = B64.decodeLenient . bytes'from'str
+
 random'bytes :: Int -> IO B.ByteString
 random'bytes = getEntropy
 
 -- | Generate random hex string of given length
 random'hex :: Int -> IO String
 random'hex = random'bytes >=> pure . hex'from'bytes
+
+-- | Get a message digest of FILE using a given hasher
+filehex :: (B.ByteString -> B.ByteString) -> FilePath -> IO String
+filehex hasher file = hex'from'bytes . hasher <$> B.readFile file
 
 -- | Zip with a binary op, a default value and the longest list.
 lzip'with :: (a -> a -> a) -> a -> [a] -> [a] -> [a]

@@ -9,6 +9,7 @@
 
 module Nil.Eval where
 
+import Data.ByteString (ByteString)
 import Data.List (foldl', sort)
 import Data.Map (keys)
 import Data.Maybe (fromJust)
@@ -16,7 +17,7 @@ import Nil.Circuit
 import Nil.Curve (Curve (..), ap, mulg, p'y)
 import Nil.Data (NIL (..), UL (..), nil, nil', unil, unil')
 import Nil.Field (Field)
-import Nil.Utils (blake2b, bytes'from'int'len, die, int'from'bytes)
+import Nil.Utils (blake2b, bytes'from'int, die, int'from'bytes, sha256)
 
 -- | Get vector of all wire-values used in 'circuit':
 -- This is values corresponding to 'wire'keys' and the same as QAP witness vector
@@ -104,7 +105,7 @@ eval'gate wmap gate@Gate {..} =
     Mod' -> eval'mod wmap gate
     Exp' -> eval'exp wmap gate
     End -> eval'end wmap gate
-    Hash' -> eval'hash wmap gate
+    Hash' -> eval'hash sha256 wmap gate
     EPx' -> eval'epx wmap gate
     EPy' -> eval'epy wmap gate
     EkG' -> eval'ekg wmap gate
@@ -190,18 +191,19 @@ eval'end wmap Gate {..} = (wmap <~~ end) <~~ set'key return'key end
 -- | Evaluate hash operator
 eval'hash ::
   (Integral r, Field r, Integral q, Field q) =>
+  (ByteString -> ByteString) ->
   Wmap (NIL i r q) ->
   Gate (NIL i r q) ->
   Wmap (NIL i r q)
-eval'hash wmap Gate {..} = wmap <~~ (hash (wmap ~~ g'rwire) ~~~ g'owire)
+eval'hash hasher wmap Gate {..} = wmap <~~ (hash (wmap ~~ g'rwire) ~~~ g'owire)
   where
     NIL c _ = wmap ~~ g'lwire
     hash =
       nil c
         . fromIntegral
         . int'from'bytes
-        . blake2b 32 mempty
-        . bytes'from'int'len 32
+        . hasher
+        . bytes'from'int
         . fromIntegral
         . unil
 {-# INLINEABLE eval'hash #-}

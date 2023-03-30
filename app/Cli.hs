@@ -19,7 +19,7 @@ data Command
   | Init Bool String
   | Sign String String
   | Check String String
-  | View Bool Bool String
+  | View Bool Bool Bool Bool String
   | Test String String String
   | Demo Bool String
   deriving (Show)
@@ -94,7 +94,7 @@ prove =
             help "Evaluation key file"
           ]
         <*> (strArgument . mconcat)
-          [ metavar "FILE",
+          [ metavar "WITNESS",
             help "Witness file in JSON"
           ]
 
@@ -119,7 +119,7 @@ verify =
             help "Verification key file"
           ]
         <*> (strArgument . mconcat)
-          [ metavar "FILE",
+          [ metavar "INSTANCE",
             help "Instance file in JSON"
           ]
 
@@ -150,16 +150,14 @@ sign =
     options =
       Sign
         <$> (strOption . mconcat)
-          [ long "secrets",
+          [ long "sig",
             short 's',
             metavar "FILE",
-            help "Secret file"
+            help "Signature file to multi-sign"
           ]
-        <*> (strOption . mconcat)
-          [ long "key",
-            short 'k',
-            metavar "FILE",
-            help "key file"
+        <*> (strArgument . mconcat)
+          [ metavar "SECRET",
+            help "Secret file in JSON"
           ]
 
 check :: Command'
@@ -171,16 +169,14 @@ check =
     options =
       Check
         <$> (strOption . mconcat)
-          [ long "",
-            short 's',
-            metavar "FILE",
-            help "Proof file"
+          [ long "--hash",
+            short 'h',
+            metavar "HEX",
+            help "Check if the signature matches the given hex-string"
           ]
-        <*> (strOption . mconcat)
-          [ long "key",
-            short 'k',
-            metavar "FILE",
-            help "key file"
+        <*> (strArgument . mconcat)
+          [ metavar "FILE",
+            help "Signature file to verify"
           ]
 
 view :: Command'
@@ -200,6 +196,16 @@ view =
           [ long "reorg",
             short 'r',
             help "(circuit/sig-only) Reorg a circuit"
+          ]
+        <*> (switch . mconcat)
+          [ long "priv",
+            short 'w',
+            help "(circuit/sig-only) Display private secret items only"
+          ]
+        <*> (switch . mconcat)
+          [ long "pub",
+            short 'x',
+            help "(circuit/sig-only) Display public info items only"
           ]
         <*> (strArgument . mconcat)
           [ metavar "FILE",
