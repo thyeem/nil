@@ -141,7 +141,7 @@ sign Opts {..} = do
   let path = takeDirectory sig
       sig'id = hex'from'bytes . sha256 . encode $ signed
       file'sig = sig'id ++ ".sig"
-  B.writeFile (path ++ "/" ++ file'sig) . encode $ sig
+  B.writeFile (path ++ "/" ++ file'sig) . encode $ signed
   unless o'quite $
     info'io
       ["filepath", "Signature", "(hash)"]

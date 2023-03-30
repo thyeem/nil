@@ -171,7 +171,9 @@ check =
         <$> (strOption . mconcat)
           [ long "hash",
             metavar "HEX",
-            help "Check if the signature matches the given hex-string"
+            value mempty,
+            help
+              "Check if the signature matches the given hex-string"
           ]
         <*> (strOption . mconcat)
           [ long "sig",
