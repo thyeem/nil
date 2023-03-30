@@ -275,7 +275,7 @@ gates'from'ast :: (Num a) => State a -> AST -> [Gate a]
 gates'from'ast state = \case
   Root _ body out ->
     let statements = reverse $ foldl' go [] [body, out]
-     in reverse . fst $ foldl' conv state statements
+     in reverse . fst $ foldl' parse'ast state statements
   _ -> die "Error, not found root from the given AST"
   where
     go seq' = \case
@@ -285,12 +285,12 @@ gates'from'ast state = \case
       e -> die $ "Error, invalid AST used" ++ show e
 {-# INLINEABLE gates'from'ast #-}
 
--- | Convert AST into gates
-conv :: (Num a) => State a -> AST -> State a
-conv state = \case
-  Bind a@(Value V {}) b -> conv'expr state (Ebin Assign a b)
+-- | Parse AST into gates
+parse'ast :: (Num a) => State a -> AST -> State a
+parse'ast state = \case
+  Bind a@(Value V {}) b -> expr' state (Ebin Assign a b)
   Out Return x ->
-    let (gates, wmap) = conv'expr state x
+    let (gates, wmap) = expr' state x
         latest'outwire
           | null gates = die "Error, not found gate. There must be at least one."
           | otherwise = g'owire . head $ gates
@@ -303,82 +303,82 @@ conv state = \case
           wmap
         )
   e -> die $ "Error, invalid AST found: " ++ show e
-{-# INLINEABLE conv #-}
+{-# INLINEABLE parse'ast #-}
 
--- | Convert Expr into gates
-conv'expr :: (Num a) => State a -> Expr -> State a
-conv'expr state = \case
+-- | Expr parser: convert expressions into gates
+expr' :: (Num a) => State a -> Expr -> State a
+expr' state = \case
   Value {} -> state
-  Euna Minus a -> conv'expr state (Ebin Star (Value (N (-1))) a)
-  Euna o a -> conv'expr state (Ebin o (Value (N 1)) a)
-  Eif a b c -> conv'if state a b c
-  Rbin o a b -> conv'expr state (Ebin o a b)
-  Ebin Minus a b -> conv'expr state (Ebin Plus a (Euna Minus b))
+  Euna Minus a -> expr' state (Ebin Star (Value (N (-1))) a)
+  Euna o a -> expr' state (Ebin o (Value (N 1)) a)
+  Eif a b c -> expr'if state a b c
+  Rbin o a b -> expr' state (Ebin o a b)
+  Ebin Minus a b -> expr' state (Ebin Plus a (Euna Minus b))
   Ebin Slash a b ->
-    let [before'a, after'a, after'b] = scanl conv'expr state [a, b]
-     in add'gate
+    let [before'a, after'a, after'b] = scanl expr' state [a, b]
+     in gate'
           Star
           after'b
-          (from'expr before'a a)
-          (set'recip True . from'expr after'a $ b)
+          (expr'wire before'a a)
+          (set'recip True . expr'wire after'a $ b)
   Ebin o a b ->
-    let [before'a, after'a, after'b] = scanl conv'expr state [a, b]
-     in add'gate o after'b (from'expr before'a a) (from'expr after'a b)
+    let [before'a, after'a, after'b] = scanl expr' state [a, b]
+     in gate' o after'b (expr'wire before'a a) (expr'wire after'a b)
   e -> die $ "Error, invalid expr found: " ++ show e
-{-# INLINEABLE conv'expr #-}
+{-# INLINEABLE expr' #-}
 
--- | Convert if-expression into gates:
+-- | If-Convert if-expression into gates:
 -- if a then b else c == a*b + (1-a)*c
-conv'if :: (Num a) => State a -> Expr -> Expr -> Expr -> State a
-conv'if state a b c =
-  let outer = g'owire . head . fst
-      cond'a = conv'expr state a
+expr'if :: (Num a) => State a -> Expr -> Expr -> Expr -> State a
+expr'if state a b c =
+  let out = g'owire . head . fst
+      cond'a = expr' state a
       a'mul'b =
-        add'gate
+        gate'
           Star
-          (conv'expr cond'a b)
-          (from'expr state a)
-          (from'expr cond'a b)
-      neg'a = add'gate Star a'mul'b (val'const (-1)) (outer cond'a)
-      neg'a'one = add'gate Plus neg'a unit'const (outer neg'a)
+          (expr' cond'a b)
+          (expr'wire state a)
+          (expr'wire cond'a b)
+      neg'a = gate' Star a'mul'b (val'const (-1)) (out cond'a)
+      neg'a'one = gate' Plus neg'a unit'const (out neg'a)
       neg'a'one'mul'c =
-        add'gate
+        gate'
           Star
-          (conv'expr neg'a'one c)
-          (outer neg'a'one)
-          (from'expr neg'a'one c)
-   in add'gate Plus neg'a'one'mul'c (outer a'mul'b) (outer neg'a'one'mul'c)
-{-# INLINEABLE conv'if #-}
+          (expr' neg'a'one c)
+          (out neg'a'one)
+          (expr'wire neg'a'one c)
+   in gate' Plus neg'a'one'mul'c (out a'mul'b) (out neg'a'one'mul'c)
+{-# INLINEABLE expr'if #-}
 
 -- | Convert expressions into wires based on the given state
-from'expr :: (Num a) => State a -> Expr -> Wire a
-from'expr state = \case
+expr'wire :: (Num a) => State a -> Expr -> Wire a
+expr'wire state = \case
   Value (N n) -> val'const (fromIntegral n)
   Value (V v) -> unit'var v
-  a -> g'owire . head . fst . conv'expr state $ a
-{-# INLINE from'expr #-}
+  a -> g'owire . head . fst . expr' state $ a
+{-# INLINE expr'wire #-}
 
 -- | Construct a gate with given wires and add to the given state
--- This is tail-call where every recursive 'conv'expr' call ends
-add'gate :: (Num a) => Ops -> State a -> Wire a -> Wire a -> State a
-add'gate op (gates, wmap) lwire rwire = case op of
+-- This is tail-call where every recursive 'expr' call ends
+gate' :: (Num a) => Ops -> State a -> Wire a -> Wire a -> State a
+gate' op (gates, wmap) lwire rwire = case op of
   Assign -> (gates, bind'wires wmap lwire rwire)
   _ ->
     let norm wire@Wire {..}
           | out'wirep wire = wire
           | otherwise = set'recip w'recip (wmap ~~> wire)
-        out'expr =
+        prefix'expr =
           set'expr
             (unwords ["(" ++ pretty op, w'expr lwire, w'expr rwire ++ ")"])
      in ( Gate
             (gate'op op)
             (norm lwire)
             (norm rwire)
-            (out'expr . out'wire $ gates)
+            (prefix'expr . out'wire $ gates)
             : gates,
           wmap
         )
-{-# INLINE add'gate #-}
+{-# INLINE gate' #-}
 
 -- | Get the gate operator corresponding to a given token
 gate'op :: Ops -> Gateop
