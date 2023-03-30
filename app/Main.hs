@@ -147,10 +147,22 @@ sign Opts {..} = do
       ["filepath", "Signature", "(hash)"]
       [path, path, file'sig, sig'id]
 
+check :: Opts -> IO ()
+check Opts {..} = do
+  let Check hash sig ret = o'command
+  unlessM
+    (doesFileExist sig)
+    (err $ "Error, file does not exist: " ++ sig)
+  sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
+  ret_ <- read'input ret :: IO (Wmap Fr)
+  let verified = nil'check bn254'gt (w'val $ ret_ ~> return'key) sig_
+
+  ok (show verified)
+
 view :: Opts -> IO ()
 view Opts {..} =
   do
-    let View graph reorg priv pub file = o'command
+    let View hash graph reorg priv pub file = o'command
     unlessM
       (doesFileExist file)
       (err $ "Error, file does not exist: " ++ file)
@@ -176,6 +188,7 @@ view Opts {..} =
               else do pp . unwrap $ circuit
         | isRight nilsig ->
             if
+                | hash -> putStrLn . hex'from'bytes . hash'sig bn254'gt . unwrap $ nilsig
                 | priv -> print . c'privs . n'circuit . unwrap $ nilsig
                 | pub -> print . c'pubs . n'circuit . unwrap $ nilsig
                 | otherwise -> pp . unwrap $ nilsig

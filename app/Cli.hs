@@ -18,8 +18,8 @@ data Command
   | Verify String String String
   | Init Bool String
   | Sign String String
-  | Check String String
-  | View Bool Bool Bool Bool String
+  | Check String String String
+  | View Bool Bool Bool Bool Bool String
   | Test String String String
   | Demo Bool String
   deriving (Show)
@@ -169,14 +169,19 @@ check =
     options =
       Check
         <$> (strOption . mconcat)
-          [ long "--hash",
-            short 'h',
+          [ long "hash",
             metavar "HEX",
             help "Check if the signature matches the given hex-string"
           ]
-        <*> (strArgument . mconcat)
-          [ metavar "FILE",
+        <*> (strOption . mconcat)
+          [ long "sig",
+            short 's',
+            metavar "FILE",
             help "Signature file to verify"
+          ]
+        <*> (strArgument . mconcat)
+          [ metavar "RETURN",
+            help "Expected funtion output in JSON"
           ]
 
 view :: Command'
@@ -188,24 +193,28 @@ view =
     options =
       View
         <$> (switch . mconcat)
+          [ long "hash",
+            help "(sig) Disaply hash-value of signature only"
+          ]
+        <*> (switch . mconcat)
           [ long "graph",
             short 'g',
-            help "(circuit/sig-only) Export a circuit as graph"
+            help "(circuit/sig) Export a circuit as graph"
           ]
         <*> (switch . mconcat)
           [ long "reorg",
             short 'r',
-            help "(circuit/sig-only) Reorg a circuit"
+            help "(circuit/sig) Reorg a circuit"
           ]
         <*> (switch . mconcat)
           [ long "priv",
             short 'w',
-            help "(circuit/sig-only) Display private secret items only"
+            help "(circuit/sig) Display private secret items only"
           ]
         <*> (switch . mconcat)
           [ long "pub",
             short 'x',
-            help "(circuit/sig-only) Display public info items only"
+            help "(circuit/sig) Display public info items only"
           ]
         <*> (strArgument . mconcat)
           [ metavar "FILE",

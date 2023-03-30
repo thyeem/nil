@@ -327,16 +327,27 @@ conv'expr state = \case
   e -> die $ "Error, invalid expr found: " ++ show e
 {-# INLINEABLE conv'expr #-}
 
--- | Convert if-expression into gates
+-- | Convert if-expression into gates:
+-- if a then b else c == a*b + (1-a)*c
 conv'if :: (Num a) => State a -> Expr -> Expr -> Expr -> State a
 conv'if state a b c =
   let outer = g'owire . head . fst
-      [before'a, after'a, after'b, _] = scanl conv'expr state [a, b, c]
-      then' = add'gate Star after'b (from'expr before'a a) (from'expr after'a b)
-      else' = add'gate Star unless' (outer unless') (from'expr after'b c)
-      unless' = add'gate Plus neg'if unit'const (outer neg'if)
-      neg'if = add'gate Star then' (val'const (-1)) (from'expr before'a a)
-   in add'gate Plus else' (outer then') (outer else')
+      cond'a = conv'expr state a
+      a'mul'b =
+        add'gate
+          Star
+          (conv'expr cond'a b)
+          (from'expr state a)
+          (from'expr cond'a b)
+      neg'a = add'gate Star a'mul'b (val'const (-1)) (outer cond'a)
+      neg'a'one = add'gate Plus neg'a unit'const (outer neg'a)
+      neg'a'one'mul'c =
+        add'gate
+          Star
+          (conv'expr neg'a'one c)
+          (outer neg'a'one)
+          (from'expr neg'a'one c)
+   in add'gate Plus neg'a'one'mul'c (outer a'mul'b) (outer neg'a'one'mul'c)
 {-# INLINEABLE conv'if #-}
 
 -- | Convert expressions into wires based on the given state
