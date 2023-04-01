@@ -19,7 +19,7 @@ data Command
   | Init Bool String
   | Sign String String
   | Check String String String
-  | View Bool Bool Bool Bool Bool String
+  | View Bool Bool Bool Bool String
   | Test String String String
   | Demo Bool String
   deriving (Show)
@@ -202,11 +202,6 @@ view =
           [ long "graph",
             short 'g',
             help "(circuit/sig) Export a circuit as graph"
-          ]
-        <*> (switch . mconcat)
-          [ long "reorg",
-            short 'r',
-            help "(circuit/sig) Reorg a circuit"
           ]
         <*> (switch . mconcat)
           [ long "priv",

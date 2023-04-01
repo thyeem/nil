@@ -230,7 +230,7 @@ add'identity n = unwords . take (n + 1) . iterate (expr . number) . normalize
 
 -- | Derive circuit from the domain-specific language, Language
 compile'language :: (Num a) => String -> Circuit a
-compile'language = circuit'from'ast . parse . tokenize . add'identity 2
+compile'language = circuit'from'ast . parse . tokenize . add'identity 3
 {-# INLINE compile'language #-}
 
 -- | Construct a 'circuit' from 'AST'

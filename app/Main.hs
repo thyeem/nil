@@ -76,6 +76,15 @@ setup Opts {..} = do
 prove :: Opts -> IO ()
 prove Opts {..} = do
   let Prove circuit ekey wit = o'command
+  unlessM
+    (doesFileExist circuit)
+    (err $ "Error, file does not exist: " ++ circuit)
+  unlessM
+    (doesFileExist ekey)
+    (err $ "Error, file does not exist: " ++ ekey)
+  unlessM
+    (doesFileExist wit)
+    (err $ "Error, file does not exist: " ++ wit)
   circuit_ <- decode'file (Proxy :: Proxy (Circuit Fr)) circuit
   ekey_ <- decode'file (Proxy :: Proxy EvaluationKey) ekey
   witness_ <- read'input wit :: IO (Wmap Fr)
@@ -136,17 +145,20 @@ sign Opts {..} = do
   unlessM
     (doesFileExist sig)
     (err $ "Error, file does not exist: " ++ sig)
+  unlessM
+    (doesFileExist secrets)
+    (err $ "Error, file does not exist: " ++ secrets)
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
   secrets_ <- read'input secrets :: IO (Wmap Fr)
   signed <- nil'sign bn254'gt (extend'wire bn254'g1 <$> secrets_) sig_
-  let path = takeDirectory sig
+  let path = takeDirectory secrets
       sig'id = hex'from'bytes . sha256 . encode $ signed
       file'sig = sig'id ++ ".sig"
   B.writeFile (path ++ "/" ++ file'sig) . encode $ signed
   unless o'quite $
     info'io
       ["filepath", "Signature", "(hash)"]
-      [path, path, file'sig, sig'id]
+      [path, file'sig, sig'id]
 
 check :: Opts -> IO ()
 check Opts {..} = do
@@ -162,7 +174,7 @@ check Opts {..} = do
 view :: Opts -> IO ()
 view Opts {..} =
   do
-    let View hash graph reorg priv pub file = o'command
+    let View hash graph priv pub file = o'command
     unlessM
       (doesFileExist file)
       (err $ "Error, file does not exist: " ++ file)
@@ -174,23 +186,25 @@ view Opts {..} =
         nilsig = decode'bytes (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) bytes
         unwrap = fromRight (die mempty)
     when (isRight circuit) $ do
-      circ <-
-        if reorg
-          then reorg'circuit (unwrap circuit)
-          else pure (unwrap circuit)
-      let circ'id = hex'from'bytes . sha256 . encode $ circ
+      let circ = unwrap circuit
+          circ'id = hex'from'bytes . sha256 . encode $ circ
       when graph $ do
-        let file = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
-        export'graph file (write'dot dot'header circ)
-        unless o'quite (ok file)
+        let dag = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
+        export'graph dag (write'dot dot'header circ)
+        unless o'quite (ok dag) >> exit
       when priv $ mapM_ putStrLn (c'privs circ) >> exit
       when pub $ mapM_ putStrLn (c'pubs circ) >> exit
       pp circ >> exit
     when (isRight nilsig) $ do
       let sig = unwrap nilsig
+          sig'id = hex'from'bytes . sha256 . encode $ sig
           dumper items = sort [a ++ "  -->  " ++ b | (a, b) <- items]
           privs = c'privs . n'circuit $ sig
           pubs = c'pubs . n'circuit $ sig
+      when graph $ do
+        let dag = takeDirectory file ++ "/" ++ sig'id ++ ".pdf"
+        export'graph dag (write'dot dot'header $ n'circuit sig)
+        unless o'quite (ok dag) >> exit
       when hash $
         putStrLn (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
       when priv $

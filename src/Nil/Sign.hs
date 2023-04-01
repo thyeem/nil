@@ -259,8 +259,8 @@ nil'check ::
 nil'check curve fval sig@Nilsig {..}
   | not . null $ entries =
       die $
-        "Error, used Nilsig not fully signed yet: "
-          ++ show (nub . w'key . g'lwire <$> entries)
+        "Error, signature not fully signed yet. see the following secret(s):\n\n"
+          ++ unlines (nub $ w'key . g'lwire <$> entries)
   | otherwise = pairing curve out chi |=| (pairing curve phi chi ^ fval)
   where
     omap = omap'from'gates . c'gates $ n'circuit
