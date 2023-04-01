@@ -8,7 +8,8 @@ import Control.Monad (unless, when)
 import Control.Monad.Extra (unlessM)
 import qualified Data.ByteString as B
 import Data.Either (fromRight, isRight)
-import Data.List (intercalate)
+import Data.List (intercalate, sort)
+import Data.Map (assocs)
 import Data.Proxy
 import Data.Store (PeekException, decode, encode)
 import Nil
@@ -29,7 +30,7 @@ project opts@Opts {..} = do
     Verify {} -> verify opts
     Init {} -> init' opts
     Sign {} -> sign opts
-    Check {} -> print "check"
+    Check {} -> check opts
     View {} -> view opts
     Test {} -> print "test"
     Demo {} -> demo opts
@@ -156,7 +157,6 @@ check Opts {..} = do
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
   ret_ <- read'input ret :: IO (Wmap Fr)
   let verified = nil'check bn254'gt (w'val $ ret_ ~> return'key) sig_
-
   ok (show verified)
 
 view :: Opts -> IO ()
@@ -173,29 +173,35 @@ view Opts {..} =
         proof = decode'bytes (Proxy :: Proxy Proof) bytes
         nilsig = decode'bytes (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) bytes
         unwrap = fromRight (die mempty)
-    if
-        | isRight circuit -> do
-            circ <-
-              if reorg
-                then reorg'circuit (unwrap circuit)
-                else pure (unwrap circuit)
-            let circ'id = hex'from'bytes . sha256 . encode $ circ
-            if graph
-              then do
-                let file = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
-                export'graph file (write'dot dot'header circ)
-                unless o'quite (ok file)
-              else do pp . unwrap $ circuit
-        | isRight nilsig ->
-            if
-                | hash -> putStrLn . hex'from'bytes . hash'sig bn254'gt . unwrap $ nilsig
-                | priv -> print . c'privs . n'circuit . unwrap $ nilsig
-                | pub -> print . c'pubs . n'circuit . unwrap $ nilsig
-                | otherwise -> pp . unwrap $ nilsig
-        | isRight ekey -> pp . unwrap $ ekey
-        | isRight vkey -> pp . unwrap $ vkey
-        | isRight proof -> pp . unwrap $ proof
-        | otherwise -> pp . str'from'bytes $ bytes
+    when (isRight circuit) $ do
+      circ <-
+        if reorg
+          then reorg'circuit (unwrap circuit)
+          else pure (unwrap circuit)
+      let circ'id = hex'from'bytes . sha256 . encode $ circ
+      when graph $ do
+        let file = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
+        export'graph file (write'dot dot'header circ)
+        unless o'quite (ok file)
+      when priv $ mapM_ putStrLn (c'privs circ) >> exit
+      when pub $ mapM_ putStrLn (c'pubs circ) >> exit
+      pp circ >> exit
+    when (isRight nilsig) $ do
+      let sig = unwrap nilsig
+          dumper items = sort [a ++ "  -->  " ++ b | (a, b) <- items]
+          privs = c'privs . n'circuit $ sig
+          pubs = c'pubs . n'circuit $ sig
+      when hash $
+        putStrLn (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
+      when priv $
+        mapM_ putStrLn (dumper . assocs $ which'signed sig privs) >> exit
+      when pub $
+        mapM_ putStrLn (dumper . assocs $ which'signed sig pubs) >> exit
+      pp sig >> exit
+    when (isRight ekey) $ pp (unwrap ekey) >> exit
+    when (isRight vkey) $ pp (unwrap vkey) >> exit
+    when (isRight proof) $ pp (unwrap proof) >> exit
+    pp . str'from'bytes $ bytes
 
 test :: IO ()
 test = undefined

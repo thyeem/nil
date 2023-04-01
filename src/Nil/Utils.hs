@@ -344,11 +344,19 @@ stderr = System.IO.hPutStrLn System.IO.stderr
 
 -- | stdout and exit(0)
 ok :: String -> IO ()
-ok msg = stdout msg >> exitSuccess
+ok msg = stdout msg >> exit
 
 -- | stdout and exit(1)
 err :: String -> IO ()
-err msg = stderr msg >> exitFailure
+err msg = stderr msg >> exif
+
+-- | exit(0)
+exit :: IO ()
+exit = exitSuccess
+
+-- | exit(1)
+exif :: IO ()
+exif = exitFailure
 
 -- | print each of [a] on a separate line
 prints :: (Show a) => [a] -> IO ()

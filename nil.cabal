@@ -71,6 +71,7 @@ executable nil
     build-depends:
         base
       , bytestring
+      , containers
       , directory
       , filepath
       , gitrev

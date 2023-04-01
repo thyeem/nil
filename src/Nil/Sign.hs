@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TupleSections #-}
 
 -----------------------------------------------------------------------------
 -- nil'sign: partially evaluate circuit with secrets
@@ -18,7 +19,7 @@ import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString, append)
 import Data.Function (on)
 import Data.List (find, foldl', nub, sort)
-import Data.Map (Map, delete, member)
+import Data.Map (Map, delete, fromList, member)
 import Data.Store (Store)
 import GHC.Generics (Generic)
 import Nil.Circuit
@@ -359,3 +360,19 @@ nil'test verbose language wmap = do
     stderr $ "Evaluated f-value: " ++ show fval
     stderr $ "Verified: " ++ show verified
   pure verified
+
+which'signed :: Nilsig i j r q -> [String] -> Map String String
+which'signed sig@Nilsig {..} items = foldl' rep which entries
+  where
+    entries =
+      w'key . g'lwire
+        <$> find'entries (omap'from'gates . c'gates $ n'circuit)
+    which =
+      fromList
+        . ((,"signed") <$>)
+        . filter (/= return'key)
+        $ items
+    rep o key
+      | member key o = o <~ (key, "not yet")
+      | otherwise = o
+{-# INLINE which'signed #-}
