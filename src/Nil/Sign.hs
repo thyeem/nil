@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TupleSections #-}
 
 -----------------------------------------------------------------------------
 -- nil'sign: partially evaluate circuit with secrets
@@ -361,17 +360,20 @@ nil'test verbose language wmap = do
     stderr $ "Verified: " ++ show verified
   pure verified
 
-which'signed :: Nilsig i j r q -> [String] -> Map String String
-which'signed sig@Nilsig {..} items = foldl' rep which entries
+which'signed :: Nilsig i j r q -> String -> Map String String
+which'signed sig@Nilsig {..} mode = foldl' rep which entries
   where
+    items
+      | mode == "priv" = c'privs n'circuit
+      | mode == "pub" = c'pubs n'circuit
+      | otherwise = die $ "Error, no such mode: " ++ mode
     entries =
       w'key . g'lwire
         <$> find'entries (omap'from'gates . c'gates $ n'circuit)
     which =
-      fromList
-        . ((,"signed") <$>)
-        . filter (/= return'key)
-        $ items
+      fromList $
+        (\x -> if x == return'key then (x, "not yet") else (x, "signed"))
+          <$> items
     rep o key
       | member key o = o <~ (key, "not yet")
       | otherwise = o

@@ -1,4 +1,3 @@
-{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
@@ -38,9 +37,7 @@ project opts@Opts {..} = do
 setup :: Opts -> IO ()
 setup Opts {..} = do
   let Setup graph language = o'command
-  unlessM
-    (doesFileExist language)
-    (err $ "Error, language file does not exist: " ++ language)
+  guard'file language
   crs <- toxicwaste
   circuit <- compile'language <$> readFile language
   let qap = qap'from'circuit circuit
@@ -76,15 +73,9 @@ setup Opts {..} = do
 prove :: Opts -> IO ()
 prove Opts {..} = do
   let Prove circuit ekey wit = o'command
-  unlessM
-    (doesFileExist circuit)
-    (err $ "Error, file does not exist: " ++ circuit)
-  unlessM
-    (doesFileExist ekey)
-    (err $ "Error, file does not exist: " ++ ekey)
-  unlessM
-    (doesFileExist wit)
-    (err $ "Error, file does not exist: " ++ wit)
+  guard'file circuit
+  guard'file ekey
+  guard'file wit
   circuit_ <- decode'file (Proxy :: Proxy (Circuit Fr)) circuit
   ekey_ <- decode'file (Proxy :: Proxy EvaluationKey) ekey
   witness_ <- read'input wit :: IO (Wmap Fr)
@@ -100,6 +91,7 @@ prove Opts {..} = do
     info'io
       ["Eval (out)", "filepath", "Proof"]
       [show (toInteger out), path, file'proof]
+  ok (path ++ "/" ++ file'proof)
 
 verify :: Opts -> IO ()
 verify Opts {..} = do
@@ -113,13 +105,12 @@ verify Opts {..} = do
     info'io
       ["Statement", "Verified"]
       [show (toInteger claim), show verified]
+  ok (show verified)
 
 init' :: Opts -> IO ()
 init' Opts {..} = do
   let Init graph language = o'command
-  unlessM
-    (doesFileExist language)
-    (err $ "Error, file does not exist: " ++ language)
+  guard'file language
   circuit <- compile'language <$> readFile language
   sig@Nilsig {..} <-
     nil'init bn254'g1 bn254'g2 bn254'gt circuit ::
@@ -142,12 +133,8 @@ init' Opts {..} = do
 sign :: Opts -> IO ()
 sign Opts {..} = do
   let Sign sig secrets = o'command
-  unlessM
-    (doesFileExist sig)
-    (err $ "Error, file does not exist: " ++ sig)
-  unlessM
-    (doesFileExist secrets)
-    (err $ "Error, file does not exist: " ++ secrets)
+  guard'file sig
+  guard'file secrets
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
   secrets_ <- read'input secrets :: IO (Wmap Fr)
   signed <- nil'sign bn254'gt (extend'wire bn254'g1 <$> secrets_) sig_
@@ -159,63 +146,69 @@ sign Opts {..} = do
     info'io
       ["filepath", "Signature", "(hash)"]
       [path, file'sig, sig'id]
+  ok (path ++ "/" ++ file'sig)
 
 check :: Opts -> IO ()
 check Opts {..} = do
   let Check hash sig ret = o'command
-  unlessM
-    (doesFileExist sig)
-    (err $ "Error, file does not exist: " ++ sig)
+  guard'file sig
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
   ret_ <- read'input ret :: IO (Wmap Fr)
-  let verified = nil'check bn254'gt (w'val $ ret_ ~> return'key) sig_
+  let fval = w'val $ ret_ ~> return'key
+      verified = nil'check bn254'gt (w'val $ ret_ ~> return'key) sig_
+  unless o'quite $
+    info'io
+      ["F-value", "Verified"]
+      [show (toInteger fval), show verified]
   ok (show verified)
 
 view :: Opts -> IO ()
-view Opts {..} =
+view opts@Opts {..} =
   do
     let View hash graph priv pub file = o'command
-    unlessM
-      (doesFileExist file)
-      (err $ "Error, file does not exist: " ++ file)
+    guard'file file
     bytes <- B.readFile file
     let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
         ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
         vkey = decode'bytes (Proxy :: Proxy VerificationKey) bytes
         proof = decode'bytes (Proxy :: Proxy Proof) bytes
         nilsig = decode'bytes (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) bytes
-        unwrap = fromRight (die mempty)
-    when (isRight circuit) $ do
-      let circ = unwrap circuit
-          circ'id = hex'from'bytes . sha256 . encode $ circ
-      when graph $ do
-        let dag = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
-        export'graph dag (write'dot dot'header circ)
-        unless o'quite (ok dag) >> exit
-      when priv $ mapM_ putStrLn (c'privs circ) >> exit
-      when pub $ mapM_ putStrLn (c'pubs circ) >> exit
-      pp circ >> exit
-    when (isRight nilsig) $ do
-      let sig = unwrap nilsig
-          sig'id = hex'from'bytes . sha256 . encode $ sig
-          dumper items = sort [a ++ "  -->  " ++ b | (a, b) <- items]
-          privs = c'privs . n'circuit $ sig
-          pubs = c'pubs . n'circuit $ sig
-      when graph $ do
-        let dag = takeDirectory file ++ "/" ++ sig'id ++ ".pdf"
-        export'graph dag (write'dot dot'header $ n'circuit sig)
-        unless o'quite (ok dag) >> exit
-      when hash $
-        putStrLn (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
-      when priv $
-        mapM_ putStrLn (dumper . assocs $ which'signed sig privs) >> exit
-      when pub $
-        mapM_ putStrLn (dumper . assocs $ which'signed sig pubs) >> exit
-      pp sig >> exit
+        unwrap = fromRight (die "unreachable: view")
+    when (isRight circuit) (view'circuit opts (unwrap circuit))
+    when (isRight nilsig) (view'sig opts (unwrap nilsig))
     when (isRight ekey) $ pp (unwrap ekey) >> exit
     when (isRight vkey) $ pp (unwrap vkey) >> exit
     when (isRight proof) $ pp (unwrap proof) >> exit
-    pp . str'from'bytes $ bytes
+    putStrLn . str'from'bytes $ bytes
+
+view'circuit :: Opts -> Circuit Fr -> IO ()
+view'circuit Opts {..} circ = do
+  let View hash graph priv pub file = o'command
+      circ'id = hex'from'bytes . sha256 . encode $ circ
+  when graph $ do
+    let dag = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
+    export'graph dag (write'dot dot'header circ)
+    unless o'quite (ok dag) >> exit
+  when priv $ mapM_ putStrLn (c'privs circ) >> exit
+  when pub $ mapM_ putStrLn (c'pubs circ) >> exit
+  pp circ >> exit
+
+view'sig :: Opts -> Nilsig BN254 BN254'G2 Fr G1 -> IO ()
+view'sig Opts {..} sig = do
+  let View hash graph priv pub file = o'command
+      sig'id = hex'from'bytes . sha256 . encode $ sig
+      dumper items = sort [a ++ "  -->  " ++ b | (a, b) <- items]
+  when graph $ do
+    let dag = takeDirectory file ++ "/" ++ sig'id ++ ".pdf"
+    export'graph dag (write'dot dot'header $ n'circuit sig)
+    unless o'quite (ok dag) >> exit
+  when hash $
+    putStrLn (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
+  when priv $
+    mapM_ putStrLn (dumper . assocs $ which'signed sig "priv") >> exit
+  when pub $
+    mapM_ putStrLn (dumper . assocs $ which'signed sig "pub") >> exit
+  pp sig >> exit
 
 test :: IO ()
 test = undefined
@@ -223,13 +216,12 @@ test = undefined
 demo :: Opts -> IO ()
 demo Opts {..} = do
   let Demo list item = o'command
-      items = ["mpc", "zkp", "sofia"]
+      items = ["mpc", "zkp"]
   when list $ do
     info'io
       items
       [ "multi-party computation demo using nil-sign",
-        "zero-knowledge proof demo using pinocchio protocol",
-        "tmp"
+        "zero-knowledge proof demo using pinocchio protocol"
       ]
     err mempty
   when (item `notElem` items) (err $ "Error, no such demo item: " ++ item)
@@ -285,3 +277,7 @@ demo'mpc verbose =
         Wmap Fr
     )
     >>= print
+
+guard'file :: FilePath -> IO ()
+guard'file file =
+  unlessM (doesFileExist file) (err $ "Error, file does not exist: " ++ file)
