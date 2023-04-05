@@ -67,7 +67,7 @@ setup Opts {..} = do
   -- export graph
   when graph $ do
     let file'dag = circ'id ++ ".pdf"
-    export'graph file'dag (write'dot dot'header circuit)
+    export'graph (path ++ "/" ++ file'dag) (write'dot dot'header circuit)
     unless o'quite (info'io ["Graph"] [file'dag])
 
 prove :: Opts -> IO ()
@@ -127,7 +127,7 @@ init' Opts {..} = do
   -- export graph
   when graph $ do
     let file'dag = sig'id ++ ".pdf"
-    export'graph file'dag (write'dot dot'header circuit)
+    export'graph (path ++ "/" ++ file'dag) (write'dot dot'header circuit)
     unless o'quite (info'io ["graph"] [file'dag])
 
 sign :: Opts -> IO ()
