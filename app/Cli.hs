@@ -17,7 +17,7 @@ data Command
   | Prove String String String
   | Verify String String String
   | Init Bool String
-  | Sign String String
+  | Sign Bool String String
   | Check String String String
   | View Bool Bool Bool Bool String
   | Test String String String
@@ -149,7 +149,12 @@ sign =
   where
     options =
       Sign
-        <$> (strOption . mconcat)
+        <$> (switch . mconcat)
+          [ long "graph",
+            short 'g',
+            help "Export a circuit as graph"
+          ]
+        <*> (strOption . mconcat)
           [ long "sig",
             short 's',
             metavar "FILE",

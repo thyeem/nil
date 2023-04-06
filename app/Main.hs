@@ -31,7 +31,7 @@ project opts@Opts {..} = do
     Sign {} -> sign opts
     Check {} -> check opts
     View {} -> view opts
-    Test {} -> print "test"
+    Test {} -> undefined
     Demo {} -> demo opts
 
 setup :: Opts -> IO ()
@@ -112,7 +112,7 @@ init' Opts {..} = do
   let Init graph language = o'command
   guard'file language
   circuit <- compile'language <$> readFile language
-  sig@Nilsig {..} <-
+  sig <-
     nil'init bn254'g1 bn254'g2 bn254'gt circuit ::
       IO (Nilsig BN254 BN254'G2 Fr G1)
   let path = takeDirectory language
@@ -123,16 +123,17 @@ init' Opts {..} = do
     info'io
       ["filepath", "Signature", "(hash)"]
       [path, file'sig, sig'id]
-
   -- export graph
   when graph $ do
     let file'dag = sig'id ++ ".pdf"
-    export'graph (path ++ "/" ++ file'dag) (write'dot dot'header circuit)
+    export'graph
+      (path ++ "/" ++ file'dag)
+      (write'dot dot'header $ n'circuit sig)
     unless o'quite (info'io ["graph"] [file'dag])
 
 sign :: Opts -> IO ()
 sign Opts {..} = do
-  let Sign sig secrets = o'command
+  let Sign graph sig secrets = o'command
   guard'file sig
   guard'file secrets
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
@@ -146,6 +147,13 @@ sign Opts {..} = do
     info'io
       ["filepath", "Signature", "(hash)"]
       [path, file'sig, sig'id]
+  -- export graph
+  when graph $ do
+    let file'dag = sig'id ++ ".pdf"
+    export'graph
+      (path ++ "/" ++ file'dag)
+      (write'dot dot'header $ n'circuit signed)
+    unless o'quite (info'io ["graph"] [file'dag])
   ok (path ++ "/" ++ file'sig)
 
 check :: Opts -> IO ()
