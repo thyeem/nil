@@ -257,7 +257,7 @@ symbols'from'ast = \case
       In Pub (Value (V v)) ast' -> go (v : insts) wits ast'
       In Priv (Value (V v)) ast' -> go insts (v : wits) ast'
       Null -> (reverse $ return'key : insts, reverse wits)
-      e -> die $ "Error, invalid AST used" ++ show e
+      e -> die $ "Error, found invalid statement:\n" ++ pretty e
 {-# INLINEABLE symbols'from'ast #-}
 
 -- | Initialize circuit parser state
@@ -282,7 +282,8 @@ gates'from'ast state = \case
       Seq s@Bind {} ast -> go (s : seq') ast
       o@Out {} -> o : seq'
       Null -> seq'
-      e -> die $ "Error, invalid AST used" ++ show e
+      Seq (Out Return _) Null -> die "Error, must be only one return statement."
+      e -> die $ "Error, found invalid statement:\n" ++ pretty e
 {-# INLINEABLE gates'from'ast #-}
 
 -- | Parse AST into gates
@@ -302,7 +303,7 @@ parse'ast state = \case
             : gates,
           wmap
         )
-  e -> die $ "Error, invalid AST found: " ++ show e
+  e -> die $ "Error, found invalid statement: " ++ pretty e
 {-# INLINEABLE parse'ast #-}
 
 -- | Expr parser: convert expressions into gates
@@ -324,7 +325,7 @@ expr' state = \case
   Ebin o a b ->
     let [before'a, after'a, after'b] = scanl expr' state [a, b]
      in gate' o after'b (expr'wire before'a a) (expr'wire after'a b)
-  e -> die $ "Error, invalid expr found: " ++ show e
+  e -> die $ "Error, found invalid expression: " ++ pretty e
 {-# INLINEABLE expr' #-}
 
 -- | If-Convert if-expression into gates:
