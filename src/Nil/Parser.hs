@@ -78,13 +78,13 @@ parse'stmt tokens = case next tokens of
 -- | Parse statement of input declaration
 parse'args :: Parser AST
 parse'args (Sym LParen : ts)
-  | last ts /= Sym RParen = die $ "Error, syntax error of: " ++ pretty (last ts)
+  | last ts /= Sym RParen = die $ "Error, not balanced parens around: " ++ pretty (last ts)
   | otherwise = (ast, [])
   where
     ast = foldr input Null (init ts `splitby` [Sym Comma])
     input [Kwd Pub, Prim v@(V _)] ast' = In Pub (Value v) ast'
     input [Kwd Priv, Prim v@(V _)] ast' = In Priv (Value v) ast'
-    input t _ = die $ "Error, syntax error of: " ++ pretty t
+    input _ ast' = die $ "Error, during parsing args: " ++ pretty ast'
 parse'args t = die $ "Error, syntax error of: " ++ pretty t
 
 -- | Parse return-statement
@@ -149,7 +149,7 @@ parse'hash = parse'uop Bang
 parseParens :: Parser Expr
 parseParens tokens
   | next ts /= Sym RParen =
-      die $ "Error, not balanced parentheses: " ++ pretty (Sym LParen)
+      die $ "Error, not balanced parens: " ++ pretty (Sym LParen)
   | otherwise = (expr', munch ts)
   where
     (expr', ts) = expr tokens
