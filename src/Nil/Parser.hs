@@ -84,7 +84,7 @@ parse'args (Sym LParen : ts)
     ast = foldr input Null (init ts `splitby` [Sym Comma])
     input [Kwd Pub, Prim v@(V _)] ast' = In Pub (Value v) ast'
     input [Kwd Priv, Prim v@(V _)] ast' = In Priv (Value v) ast'
-    input _ ast' = die $ "Error, during parsing args: " ++ pretty ast'
+    input t _ = die $ "Error, during parsing args: " ++ pretty t
 parse'args t = die $ "Error, syntax error of: " ++ pretty t
 
 -- | Parse return-statement

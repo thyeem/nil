@@ -46,7 +46,7 @@ import Nil.Data (NIL)
 import Nil.Ecdata (BN254, Fr, G1)
 import Nil.Lexer (Keywords (..), Ops (..), Prims (..), normalize, tokenize)
 import Nil.Parser (AST (..), Expr (..), parse)
-import Nil.Utils (Pretty (..), bytes'from'str, die, int'from'bytes, sha256)
+import Nil.Utils (Pretty (..), bytes'from'str, die, hex'from'bytes, int'from'bytes, sha256)
 
 -- | @Arithmetic@ 'Circuit' over any data type @a@
 -- A circuit is simply a compound of gates and wires,
@@ -151,20 +151,25 @@ type State a = ([Gate a], Wmap a)
   | otherwise = wmap ~> w'key
 {-# INLINE (~~>) #-}
 
--- | The name prepared wire representing constant basis
+-- | Represents constant wire key
 const'key :: String
 const'key = "&1"
 {-# INLINE const'key #-}
 
--- | The name prepared wire representing end node
+-- | Represents return wire key
 return'key :: String
 return'key = "return"
 {-# INLINE return'key #-}
 
--- | The name prepared wire representing outwire of end node
+-- | Represents outwire key of end node
 end'key :: String
 end'key = "~end"
 {-# INLINE end'key #-}
+
+-- | Represents outwire key of dummy identity gates
+iden'key :: String
+iden'key = "~0"
+{-# INLINE iden'key #-}
 
 -- | Name prefix for auxiliary variables
 out'prefix :: Char
@@ -230,7 +235,7 @@ add'identity n = unwords . take (n + 1) . iterate (expr . number) . normalize
 
 -- | Derive circuit from the domain-specific language, Language
 compile'language :: (Num a) => String -> Circuit a
-compile'language = circuit'from'ast . parse . tokenize . add'identity 3
+compile'language = circuit'from'ast . parse . tokenize . add'identity 2
 {-# INLINE compile'language #-}
 
 -- | Construct a 'circuit' from 'AST'
@@ -263,11 +268,26 @@ symbols'from'ast = \case
 -- | Initialize circuit parser state
 init'state :: (Num a) => [String] -> [String] -> State a
 init'state pubs privs =
-  ( [],
+  ( rep (foldl' go [] wires),
     fromList $
       (\wire -> (w'key wire, wire))
         <$> (unit'var <$> pubs ++ privs)
   )
+  where
+    rep = \case
+      g@Gate {..} : gs -> g {g'owire = unit'var iden'key} : gs
+      _ -> []
+    wires =
+      concat
+        [ [unit'var p, set'val (-1) . unit'var $ p]
+          | p <- pubs,
+            p /= return'key
+        ]
+    out = unit'var . ("~o" ++) . hasher
+    hasher = take 16 . hex'from'bytes . sha256 . bytes'from'str . w'key
+    go gs wire
+      | null gs = [Gate Add (val'const 0) wire (out unit'const)]
+      | otherwise = Gate Add (g'owire (head gs)) wire (out wire) : gs
 {-# INLINE init'state #-}
 
 -- | Construct Gates by traversing AST
@@ -292,14 +312,10 @@ parse'ast state = \case
   Bind a@(Value V {}) b -> expr' state (Ebin Assign a b)
   Out Return x ->
     let (gates, wmap) = expr' state x
-        latest'outwire
+        eval'out
           | null gates = die "Error, not found gate. There must be at least one."
           | otherwise = g'owire . head $ gates
-     in ( Gate
-            End
-            (unit'var return'key)
-            latest'outwire
-            (unit'var $ out'prefix : "end")
+     in ( Gate End (unit'var return'key) eval'out (unit'var end'key)
             : gates,
           wmap
         )
@@ -319,12 +335,12 @@ expr' state = \case
     let [before'a, after'a, after'b] = scanl expr' state [a, b]
      in gate'
           Star
-          after'b
           (expr'wire before'a a)
           (set'recip True . expr'wire after'a $ b)
+          after'b
   Ebin o a b ->
     let [before'a, after'a, after'b] = scanl expr' state [a, b]
-     in gate' o after'b (expr'wire before'a a) (expr'wire after'a b)
+     in gate' o (expr'wire before'a a) (expr'wire after'a b) after'b
   e -> die $ "Error, found invalid expression: " ++ pretty e
 {-# INLINEABLE expr' #-}
 
@@ -337,18 +353,18 @@ expr'if state a b c =
       a'mul'b =
         gate'
           Star
-          (expr' cond'a b)
           (expr'wire state a)
           (expr'wire cond'a b)
-      neg'a = gate' Star a'mul'b (val'const (-1)) (out cond'a)
-      neg'a'one = gate' Plus neg'a unit'const (out neg'a)
+          (expr' cond'a b)
+      neg'a = gate' Star (val'const (-1)) (out cond'a) a'mul'b
+      neg'a'one = gate' Plus unit'const (out neg'a) neg'a
       neg'a'one'mul'c =
         gate'
           Star
-          (expr' neg'a'one c)
           (out neg'a'one)
           (expr'wire neg'a'one c)
-   in gate' Plus neg'a'one'mul'c (out a'mul'b) (out neg'a'one'mul'c)
+          (expr' neg'a'one c)
+   in gate' Plus (out a'mul'b) (out neg'a'one'mul'c) neg'a'one'mul'c
 {-# INLINEABLE expr'if #-}
 
 -- | Convert expressions into wires based on the given state
@@ -361,8 +377,8 @@ expr'wire state = \case
 
 -- | Construct a gate with given wires and add to the given state
 -- This is tail-call where every recursive 'expr' call ends
-gate' :: (Num a) => Ops -> State a -> Wire a -> Wire a -> State a
-gate' op (gates, wmap) lwire rwire = case op of
+gate' :: (Num a) => Ops -> Wire a -> Wire a -> State a -> State a
+gate' op lwire rwire (gates, wmap) = case op of
   Assign -> (gates, bind'wires wmap lwire rwire)
   _ ->
     let norm wire@Wire {..}
