@@ -53,6 +53,7 @@ import Nil.Utils
   ( Pretty (..),
     bytes'from'str,
     die,
+    info'io,
     int'from'bytes,
     int'from'str,
     ranf,
@@ -410,15 +411,17 @@ zktest verbose language witnesses instances = do
   let out = statement bn254'g1 witnesses circuit
       vec'wit = wire'vals bn254'g1 witnesses circuit
       proof = zkprove qap ekey vec'wit
-  when verbose $ stderr ("Prover returns: " ++ show out)
+  when verbose $ info'io 18 ["Prover returns"] [show out]
 
   -- zk-verify
   let verified = zkverify proof vkey (vec'fromWmap instances)
   when verbose $ do
     stderr mempty
     stderr "Verifying zk-proof..."
-    stderr ("Statement:      " ++ (show . w'val $ instances ~> "return"))
-    stderr ("Verified: " ++ show verified)
+    info'io
+      18
+      ["Statement", "Verified"]
+      [show . w'val $ instances ~> "return", show verified]
   pure verified
 {-# INLINEABLE zktest #-}
 

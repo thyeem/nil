@@ -47,6 +47,7 @@ import Nil.Utils
     die,
     foldM',
     hex'from'bytes,
+    info'io,
     ranf,
     sha256,
     stderr,
@@ -264,8 +265,7 @@ nil'check curve fval sig@Nilsig {..}
   where
     omap = omap'from'gates . c'gates $ n'circuit
     entries = find'entries omap
-    wmap = extend'wire (p'curve phi) <$> wmap'fromList [(return'key, fval)]
-    out = unil' . w'val $ eval'circuit wmap n'circuit ~> return'key
+    out = unil' . w'val $ eval'circuit mempty n'circuit ~> return'key
     (phi, chi) = n'key
 {-# INLINEABLE nil'check #-}
 
@@ -351,13 +351,15 @@ nil'test verbose language wmap = do
   -- expected return: f(Wij)
   let fval = statement bn254'g1 wmap circuit
   let ret = w'val $ wmap ~> return'key
+  let out = unil' . w'val $ eval'circuit mempty (n'circuit signed) ~> return'key
   let verified = nil'check bn254'gt ret signed
   when verbose $ do
     stderr mempty
     stderr "Checking validity of nil-signature..."
-    stderr $ "    Given f-value: " ++ show ret
-    stderr $ "Evaluated f-value: " ++ show fval
-    stderr $ "Verified: " ++ show verified
+    info'io
+      18
+      ["Evaluated circuit", "Expected f-value", "Claimed f-value", "Verified"]
+      ["\n" ++ pretty out, show fval, show ret, show verified]
   pure verified
 
 which'signed :: Nilsig i j r q -> String -> Map String String

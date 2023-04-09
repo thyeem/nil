@@ -55,6 +55,7 @@ setup Opts {..} = do
   -- and their SHA-256 hashes as fingerprints
   unless o'quite $ do
     info'io
+      12
       ["filepath", "Circuit", "(hash)", "E-key", "(hash)", "V-key", "(hash)"]
       [ path,
         file'circ,
@@ -68,7 +69,7 @@ setup Opts {..} = do
   when graph $ do
     let file'dag = circ'id ++ ".pdf"
     export'graph (path ++ "/" ++ file'dag) (write'dot dot'header circuit)
-    unless o'quite (info'io ["Graph"] [file'dag])
+    unless o'quite (info'io 12 ["Graph"] [file'dag])
 
 prove :: Opts -> IO ()
 prove Opts {..} = do
@@ -80,7 +81,7 @@ prove Opts {..} = do
   ekey_ <- decode'file (Proxy :: Proxy EvaluationKey) ekey
   witness_ <- read'input wit :: IO (Wmap Fr)
   let qap = qap'from'circuit circuit_
-      out = statement bn254'g1 witness_ circuit_
+      claim = statement bn254'g1 witness_ circuit_
       vec'wit = wire'vals bn254'g1 witness_ circuit_
       proof = zkprove qap ekey_ vec'wit
       path = takeDirectory wit
@@ -89,8 +90,9 @@ prove Opts {..} = do
   B.writeFile (path ++ "/" ++ file'proof) . encode $ proof
   unless o'quite $
     info'io
-      ["Eval (out)", "filepath", "Proof"]
-      [show (toInteger out), path, file'proof]
+      12
+      ["Statement", "filepath", "Proof"]
+      [show claim, path, file'proof]
   ok (path ++ "/" ++ file'proof)
 
 verify :: Opts -> IO ()
@@ -99,12 +101,13 @@ verify Opts {..} = do
   proof_ <- decode'file (Proxy :: Proxy Proof) proof
   vkey_ <- decode'file (Proxy :: Proxy VerificationKey) vkey
   instance_ <- read'input inst :: IO (Wmap Fr)
-  let claim = w'val $ instance_ ~> return'key
+  let target = w'val $ instance_ ~> return'key
       verified = zkverify proof_ vkey_ (vec'fromWmap instance_)
   unless o'quite $
     info'io
+      12
       ["Statement", "Verified"]
-      [show (toInteger claim), show verified]
+      [show target, show verified]
   ok (show verified)
 
 init' :: Opts -> IO ()
@@ -121,6 +124,7 @@ init' Opts {..} = do
   B.writeFile (path ++ "/" ++ file'sig) . encode $ sig
   unless o'quite $
     info'io
+      12
       ["filepath", "Signature", "(hash)"]
       [path, file'sig, sig'id]
   -- export graph
@@ -129,7 +133,7 @@ init' Opts {..} = do
     export'graph
       (path ++ "/" ++ file'dag)
       (write'dot dot'header $ n'circuit sig)
-    unless o'quite (info'io ["graph"] [file'dag])
+    unless o'quite (info'io 12 ["graph"] [file'dag])
 
 sign :: Opts -> IO ()
 sign Opts {..} = do
@@ -145,6 +149,7 @@ sign Opts {..} = do
   B.writeFile (path ++ "/" ++ file'sig) . encode $ signed
   unless o'quite $
     info'io
+      12
       ["filepath", "Signature", "(hash)"]
       [path, file'sig, sig'id]
   -- export graph
@@ -153,7 +158,7 @@ sign Opts {..} = do
     export'graph
       (path ++ "/" ++ file'dag)
       (write'dot dot'header $ n'circuit signed)
-    unless o'quite (info'io ["graph"] [file'dag])
+    unless o'quite (info'io 12 ["graph"] [file'dag])
   ok (path ++ "/" ++ file'sig)
 
 check :: Opts -> IO ()
@@ -163,11 +168,13 @@ check Opts {..} = do
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
   ret_ <- read'input ret :: IO (Wmap Fr)
   let fval = w'val $ ret_ ~> return'key
+      out = unil' . w'val $ eval'circuit mempty (n'circuit sig_) ~> return'key
       verified = nil'check bn254'gt (w'val $ ret_ ~> return'key) sig_
   unless o'quite $
     info'io
-      ["F-value", "Verified"]
-      [show (toInteger fval), show verified]
+      12
+      ["Evaluated", "Claimed", "Verified"]
+      ["\n" ++ pretty out, show fval, show verified]
   ok (show verified)
 
 view :: Opts -> IO ()
@@ -227,6 +234,7 @@ demo Opts {..} = do
       items = ["mpc", "zkp"]
   when list $ do
     info'io
+      12
       items
       [ "multi-party computation demo using nil-sign",
         "zero-knowledge proof demo using pinocchio protocol"

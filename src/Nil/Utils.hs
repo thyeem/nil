@@ -470,11 +470,11 @@ twocols def fmt a b =
 {-# INLINE twocols #-}
 
 -- | info
-info :: [String] -> [String] -> String
-info = twocols mempty "%12s    %s"
+info :: Int -> [String] -> [String] -> String
+info width = twocols mempty ("%" ++ show width ++ "s    %s")
 {-# INLINE info #-}
 
 -- | Default formatted printer of this project
-info'io :: [String] -> [String] -> IO ()
-info'io = (stderr .) . info
+info'io :: Int -> [String] -> [String] -> IO ()
+info'io width = (stderr .) . info width
 {-# INLINE info'io #-}

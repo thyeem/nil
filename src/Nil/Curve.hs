@@ -453,6 +453,7 @@ instance (Show f, Field f) => Show (Point i f) where
 instance (Show f, Pretty f) => Pretty (Curve i f) where
   pretty Curve {..} =
     info
+      12
       ["name", "char", "order", "cofactor", "a", "b", "Gx", "Gy"]
       [ c'name,
         pretty c'p,
@@ -469,9 +470,11 @@ instance (Show f, Pretty f, Field f) => Pretty (Point c f) where
     O -> "Point at Infinity"
     A c x y ->
       info
+        12
         ["curve", "x", "y"]
         [c'name c, pretty x, pretty y]
     J c x y z ->
       info
+        12
         ["curve", "X", "Y", "Z"]
         [c'name c, pretty x, pretty y, pretty z]
