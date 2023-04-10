@@ -180,7 +180,7 @@ check Opts {..} = do
 view :: Opts -> IO ()
 view opts@Opts {..} =
   do
-    let View hash graph priv pub file = o'command
+    let View hash nilkey graph priv pub file = o'command
     guard'file file
     bytes <- B.readFile file
     let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
@@ -198,7 +198,7 @@ view opts@Opts {..} =
 
 view'circuit :: Opts -> Circuit Fr -> IO ()
 view'circuit Opts {..} circ = do
-  let View hash graph priv pub file = o'command
+  let View _ _ graph priv pub file = o'command
       circ'id = hex'from'bytes . sha256 . encode $ circ
   when graph $ do
     let dag = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
@@ -210,7 +210,7 @@ view'circuit Opts {..} circ = do
 
 view'sig :: Opts -> Nilsig BN254 BN254'G2 Fr G1 -> IO ()
 view'sig Opts {..} sig = do
-  let View hash graph priv pub file = o'command
+  let View hash nilkey graph priv pub file = o'command
       sig'id = hex'from'bytes . sha256 . encode $ sig
       dumper items = sort [a ++ "  -->  " ++ b | (a, b) <- items]
   when graph $ do
@@ -219,6 +219,8 @@ view'sig Opts {..} sig = do
     unless o'quite (ok dag) >> exit
   when hash $
     putStrLn (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
+  when nilkey $
+    pp (n'key sig) >> exit
   when priv $
     mapM_ putStrLn (dumper . assocs $ which'signed sig "priv") >> exit
   when pub $

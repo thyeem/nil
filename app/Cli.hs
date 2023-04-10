@@ -19,7 +19,7 @@ data Command
   | Init Bool String
   | Sign Bool String String
   | Check String String String
-  | View Bool Bool Bool Bool String
+  | View Bool Bool Bool Bool Bool String
   | Test String String String
   | Demo Bool String
   deriving (Show)
@@ -202,6 +202,11 @@ view =
         <$> (switch . mconcat)
           [ long "hash",
             help "(sig) Disaply hash-value of signature only"
+          ]
+        <*> (switch . mconcat)
+          [ long "nilkey",
+            short 'k',
+            help "(sig) Disaply nil-key of signature only"
           ]
         <*> (switch . mconcat)
           [ long "graph",
