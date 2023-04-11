@@ -20,7 +20,7 @@ data Command
   | Sign Bool String String
   | Check String String String
   | View Bool Bool Bool Bool Bool String
-  | Test String String String
+  | Test Bool String String String
   | Demo Bool String
   deriving (Show)
 
@@ -95,7 +95,7 @@ prove =
           ]
         <*> (strArgument . mconcat)
           [ metavar "WITNESS",
-            help "Witness file in JSON"
+            help "JSON file of witnesses"
           ]
 
 verify :: Command'
@@ -120,7 +120,7 @@ verify =
           ]
         <*> (strArgument . mconcat)
           [ metavar "INSTANCE",
-            help "Instance file in JSON"
+            help "JSON file of instances"
           ]
 
 init' :: Command'
@@ -161,8 +161,8 @@ sign =
             help "Signature file to multi-sign"
           ]
         <*> (strArgument . mconcat)
-          [ metavar "SECRET",
-            help "Secret file in JSON"
+          [ metavar "SECRETS",
+            help "JSON file of secrets"
           ]
 
 check :: Command'
@@ -188,7 +188,7 @@ check =
           ]
         <*> (strArgument . mconcat)
           [ metavar "RETURN",
-            help "Expected funtion output in JSON"
+            help "JSON file of expected f-value"
           ]
 
 view :: Command'
@@ -236,23 +236,30 @@ test =
   where
     options =
       Test
-        <$> (strOption . mconcat)
+        <$> (switch . mconcat)
+          [ long "eval-only",
+            short 'e',
+            help "Display circuit evaluation result only"
+          ]
+        <*> (strOption . mconcat)
           [ long "lang",
             short 'l',
             metavar "FILE",
             help "Language file"
           ]
         <*> (strOption . mconcat)
-          [ long "wit",
-            short 'w',
+          [ long "data",
+            short 'd',
             metavar "FILE",
-            help "Witness file in JSON"
+            help "JSON file of all input entries"
           ]
         <*> (strOption . mconcat)
-          [ long "inst",
-            short 'x',
-            metavar "FILE",
-            help "Instance file in JSON"
+          [ long "mode",
+            short 'm',
+            metavar "MODE",
+            help "Choose mode to test",
+            value "mpc",
+            showDefault
           ]
 
 demo :: Command'
@@ -268,9 +275,11 @@ demo =
             short 'l',
             help "List demos available"
           ]
-        <*> (strArgument . mconcat)
-          [ metavar "ITEM",
-            help "Choose one from the available demos",
+        <*> (strOption . mconcat)
+          [ long "mode",
+            short 'm',
+            metavar "MODE",
+            help "Choose an item from the available demos",
             value "mpc",
             showDefault
           ]

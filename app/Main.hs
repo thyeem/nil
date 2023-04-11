@@ -8,7 +8,7 @@ import Control.Monad.Extra (unlessM)
 import qualified Data.ByteString as B
 import Data.Either (fromRight, isRight)
 import Data.List (intercalate, sort)
-import Data.Map (assocs)
+import Data.Map (assocs, filterWithKey)
 import Data.Proxy
 import Data.Store (PeekException, decode, encode)
 import Nil
@@ -31,7 +31,7 @@ project opts@Opts {..} = do
     Sign {} -> sign opts
     Check {} -> check opts
     View {} -> view opts
-    Test {} -> undefined
+    Test {} -> test opts
     Demo {} -> demo opts
 
 setup :: Opts -> IO ()
@@ -194,7 +194,7 @@ view opts@Opts {..} =
     when (isRight ekey) $ pp (unwrap ekey) >> exit
     when (isRight vkey) $ pp (unwrap vkey) >> exit
     when (isRight proof) $ pp (unwrap proof) >> exit
-    putStrLn . str'from'bytes $ bytes
+    stdout . str'from'bytes $ bytes
 
 view'circuit :: Opts -> Circuit Fr -> IO ()
 view'circuit Opts {..} circ = do
@@ -204,8 +204,8 @@ view'circuit Opts {..} circ = do
     let dag = takeDirectory file ++ "/" ++ circ'id ++ ".pdf"
     export'graph dag (write'dot dot'header circ)
     unless o'quite (ok dag) >> exit
-  when priv $ mapM_ putStrLn (c'privs circ) >> exit
-  when pub $ mapM_ putStrLn (c'pubs circ) >> exit
+  when priv $ mapM_ stdout (c'privs circ) >> exit
+  when pub $ mapM_ stdout (c'pubs circ) >> exit
   pp circ >> exit
 
 view'sig :: Opts -> Nilsig BN254 BN254'G2 Fr G1 -> IO ()
@@ -218,33 +218,50 @@ view'sig Opts {..} sig = do
     export'graph dag (write'dot dot'header $ n'circuit sig)
     unless o'quite (ok dag) >> exit
   when hash $
-    putStrLn (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
+    stdout (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
   when nilkey $
     pp (n'key sig) >> exit
   when priv $
-    mapM_ putStrLn (dumper . assocs $ which'signed sig "priv") >> exit
+    mapM_ stdout (dumper . assocs $ which'signed sig "priv") >> exit
   when pub $
-    mapM_ putStrLn (dumper . assocs $ which'signed sig "pub") >> exit
+    mapM_ stdout (dumper . assocs $ which'signed sig "pub") >> exit
   pp sig >> exit
 
-test :: IO ()
-test = undefined
+test :: Opts -> IO ()
+test Opts {..} = do
+  let Test eval lang dat mode = o'command
+      modes = ["mpc", "zkp"]
+  guard'file lang
+  guard'file dat
+  lang_ <- readFile lang
+  dat_ <- read'input dat :: IO (Wmap Fr)
+  let circuit = compile'language lang_
+      keys = filter (/= return'key) (c'privs circuit ++ c'pubs circuit)
+  when (mode `notElem` modes) (err $ "Error, no such mode: " ++ mode)
+  when eval $ do
+    pp (statement bn254'g1 dat_ circuit) >> exit
+  when (mode == "mpc") $ do
+    nil'test True lang_ dat_ >> exit
+  when (mode == "zkp") $ do
+    let wit = filterWithKey (\k _ -> k `elem` keys) dat_
+        inst = filterWithKey (\k _ -> k `elem` c'pubs circuit) dat_
+    zktest True lang_ wit inst >> exit
 
 demo :: Opts -> IO ()
 demo Opts {..} = do
-  let Demo list item = o'command
-      items = ["mpc", "zkp"]
+  let Demo list mode = o'command
+      modes = ["mpc", "zkp"]
   when list $ do
     info'io
       12
-      items
+      modes
       [ "multi-party computation demo using nil-sign",
         "zero-knowledge proof demo using pinocchio protocol"
       ]
     err mempty
-  when (item `notElem` items) (err $ "Error, no such demo item: " ++ item)
-  when (item == "mpc") $ demo'mpc (not o'quite)
-  when (item == "zkp") $ demo'zkp (not o'quite)
+  when (mode `notElem` modes) (err $ "Error, no such demo: " ++ mode)
+  when (mode == "mpc") $ demo'mpc (not o'quite)
+  when (mode == "zkp") $ demo'zkp (not o'quite)
 
 demo'zkp :: Bool -> IO ()
 demo'zkp verbose =
