@@ -1,0 +1,97 @@
+name: nil
+version: 0.1.0.0
+license: MIT
+author: Francis Lim
+maintainer: thyeem@gmail.com
+copyright: 2022-2023 Francis
+synopsis: Zero-Knowledge Suite in parallelism
+category: Crypto, Cryptography
+description: .
+
+extra-source-files:
+- README.md
+
+dependencies:
+- base
+- aeson
+- base16-bytestring
+- base64-bytestring
+- blake2
+- bytestring
+- containers
+- cryptohash-sha256
+- cryptohash-sha512
+- deepseq
+- entropy
+- filepath
+- hedis
+- parallel
+- pretty-simple
+- process
+- QuickCheck
+- random
+- store
+- text
+
+ghc-options:
+# - -Wall
+# - -Werror
+- -Wno-name-shadowing
+- -Wno-orphans
+
+library:
+  source-dirs: src
+
+executables:
+  nil:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -dynamic
+    - -feager-blackholing
+    - -fexpose-all-unfoldings
+    - -O2
+    - -g0
+    # - -eventlog
+    dependencies:
+    - base
+    - bytestring
+    - containers
+    - directory
+    - filepath
+    - gitrev
+    - extra
+    - store
+    - optparse-applicative
+    - nil
+    # when:
+    # - condition: false
+      # other-modules: Paths_nil
+
+tests:
+  unit:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    dependencies:
+    - base
+    - hspec
+    - hspec-discover
+    - QuickCheck
+    - nil
+    # verbatim: |
+    # build-tool-depends:
+      # hspec-discover:hspec-discover
+
+  doctest:
+    main: doctests.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    dependencies:
+    - base
+    - doctest

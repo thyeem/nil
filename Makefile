@@ -1,24 +1,13 @@
 bin := nil
-ghc := --with-compiler=ghc-9.2.7
-opts := --ghc-options="-threaded -rtsopts -with-rtsopts=-N -feager-blackholing -dynamic"
-fast := --ghc-options="-O0"
-sanity := --ghc-options="-Wall -Werror"
-release := --ghc-options="-O2 -fexpose-all-unfoldings"
-test-opts := $(fast) --test-show-details=direct
 path := ${HOME}/.local/bin
 
 .PHONY: build
 build:
-	cabal build $(ghc) $(opts) $(fast)
-
-.PHONY: check
-check:
-	make clean
-	cabal build $(ghc) $(opts) $(fast) $(sanity)
+	stack build
 
 .PHONY: release
 release:
-	cabal build $(ghc) $(opts) $(release)
+	stack build $(ghc) $(opts) $(release)
 
 .PHONY: install
 install:
@@ -27,7 +16,7 @@ install:
 
 .PHONY: deploy
 deploy:
-	cp -f $(shell cabal list-bin $(bin)) app
+	cp -f $(shell stack path --local-install-root)/bin/$(bin) app
 	/usr/bin/strip app/$(bin)
 	mkdir -p $(path)
 	rm -f $(path)/$(bin)
@@ -36,15 +25,15 @@ deploy:
 .PHONY: clean
 clean:
 	git clean -xdf
-	cabal clean
+	stack clean --full
 
 .PHONY: test
 test:
-	cabal test test $(test-opts) --test-option=--match --test-option="$(match)"
+	stack test
 
 .PHONY: doc
 doc:
-	cabal haddock --haddock-hyperlink-source
+	stack haddock
 
 .PHONY: opendoc
 opendoc:
