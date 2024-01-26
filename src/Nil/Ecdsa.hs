@@ -1,32 +1,19 @@
 -- | Digital Signature Algorithm (DSA) using elliptic curve cryptography
 module Nil.Ecdsa where
 
-import Control.DeepSeq (NFData)
-import Data.ByteString (ByteString)
-import Data.Maybe (fromJust)
-import Nil.Base ((~%))
-import Nil.Curve
-  ( Curve (..),
-    Point,
-    apbq'sum,
-    c'g,
-    mulg,
-    p'x,
-  )
-import Nil.Ecdata
-  ( BN254,
-    Fp,
-    G1,
-    Secp256k1,
-    bn254'g1,
-    secp256k1,
-  )
-import Nil.Field (Field)
-import Nil.Utils
-  ( blake2b,
-    int'from'bytes,
-  )
-import System.Random (randomRIO)
+import           Control.DeepSeq ( NFData )
+
+import           Data.ByteString ( ByteString )
+import           Data.Maybe      ( fromJust )
+
+import           Nil.Base        ( (~%) )
+import           Nil.Curve       ( Curve (..), Point, apbq'sum, c'g, mulg, p'x )
+import           Nil.Ecdata      ( BN254, Fp, G1, Secp256k1, bn254'g1,
+                                   secp256k1 )
+import           Nil.Field       ( Field )
+import           Nil.Utils       ( blake2b, int'from'bytes )
+
+import           System.Random   ( randomRIO )
 
 -- | Private key (e) as a field element
 type Privatekey = Integer
@@ -45,29 +32,31 @@ type Signature = (Integer, Integer)
 
 -- | ECDSA signature generation algorithm
 ecdsa'sign ::
-  (Eq f, Fractional f, Integral f, Field f, NFData f) =>
-  Curve i f ->
-  Hashfunc ->
-  Privatekey ->
-  Message ->
-  IO Signature
+     (Eq f, Fractional f, Integral f, Field f, NFData f)
+  => Curve i f
+  -> Hashfunc
+  -> Privatekey
+  -> Message
+  -> IO Signature
 ecdsa'sign curve hashFunc e msg = do
   let n = c'n curve
   k <- randomRIO (1, pred n)
   let r = fromIntegral . fromJust . p'x . mulg curve $ k
       z = int'from'bytes . hashFunc $ msg
       s = ((z + r * e) * (k ~% n)) `mod` n
-  if s == 0 then ecdsa'sign curve hashFunc e msg else return (r, s)
+  if s == 0
+    then ecdsa'sign curve hashFunc e msg
+    else return (r, s)
 
 -- | ECDSA verification algorithm
 ecdsa'verify ::
-  (Eq f, Fractional f, Integral f, Field f, NFData f) =>
-  Curve i f ->
-  Hashfunc ->
-  Publickey i f ->
-  Signature ->
-  Message ->
-  Bool
+     (Eq f, Fractional f, Integral f, Field f, NFData f)
+  => Curve i f
+  -> Hashfunc
+  -> Publickey i f
+  -> Signature
+  -> Message
+  -> Bool
 ecdsa'verify curve hashFunc eG (r, s) msg
   | r < 1 || r >= n = False
   | s < 1 || s >= n = False

@@ -1,20 +1,21 @@
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE MultiWayIf      #-}
+{-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -----------------------------------------------------------------------------
 -- Reorg: Circuit reorganizer and related tools
 --------------------------------------------------------------------------------
-
 module Nil.Reorg where
 
-import Control.Applicative (liftA2)
-import Data.Bifunctor (bimap)
-import Data.List (foldl', nub, sortOn)
-import Data.Map (Map, assocs, elems, member)
-import qualified Data.Set as S
-import Nil.Circuit
-import Nil.Utils (die, random'hex)
+import           Control.Applicative ( liftA2 )
+
+import           Data.Bifunctor      ( bimap )
+import           Data.List           ( foldl', nub, sortOn )
+import           Data.Map            ( Map, assocs, elems, member )
+import qualified Data.Set            as S
+
+import           Nil.Circuit
+import           Nil.Utils           ( die, random'hex )
 
 -- | Map describing a circuit with height from entry nodes
 type Omap a = Map String (Gate a, Int)
@@ -28,92 +29,89 @@ type Gmap a = Map String [Gate a]
 (<<~) :: (Eq a) => Gmap a -> (String, Gate a) -> Gmap a
 (<<~) gmap (key, gate)
   | member key gmap =
-      let gates = gmap ~> key
-       in gmap <~ (key, nub $ gate : gates)
+    let gates = gmap ~> key
+     in gmap <~ (key, nub $ gate : gates)
   | otherwise = gmap <~ (key, [gate])
-{-# INLINEABLE (<<~) #-}
 
+{-# INLINEABLE (<<~) #-}
 -- | Follow a wire to traverse graph
 (~>>) :: Gmap a -> String -> [Gate a]
 (~>>) gmap key
   | member key gmap = gmap ~> key
   | otherwise = die $ "Error, not found wire-key or reached a deadend: " ++ key
-{-# INLINEABLE (~>>) #-}
 
+{-# INLINEABLE (~>>) #-}
 -- | Replace previous gate with the new evaluated one
 (<<<) :: (Eq a) => Omap a -> Gate a -> Omap a
 (<<<) omap gate@Gate {g'owire = Wire {w'key}}
   | member w'key omap = omap <~ (w'key, (gate, snd $ omap ~> w'key))
   | otherwise = die $ "Error, not found gate of outwire: " ++ w'key
-{-# INLINEABLE (<<<) #-}
 
+{-# INLINEABLE (<<<) #-}
 -- | Get the latest info of a given gate
 (>>>) :: Omap a -> Gate a -> Gate a
-(>>>) omap gate@Gate {g'owire = Wire {w'key}}
+(>>>) omap Gate {g'owire = Wire {w'key}}
   | member w'key omap = fst $ omap ~> w'key
   | otherwise = die $ "Error, not found gate of outwire: " ++ w'key
-{-# INLINEABLE (>>>) #-}
 
+{-# INLINEABLE (>>>) #-}
 (+++) :: (Applicative f) => f [a] -> f [a] -> f [a]
 (+++) = liftA2 (++)
-{-# INLINE (+++) #-}
 
+{-# INLINE (+++) #-}
 -- | Test logical operator (AND) with a predicate and input wires
 and' :: (Wire a -> Bool) -> Gate a -> Bool
 and' p Gate {..} = p g'lwire && p g'rwire
-{-# INLINE and' #-}
 
+{-# INLINE and' #-}
 -- | Test logical operator (XOR) with a predicate and input wires
 xor' :: (Wire a -> Bool) -> Gate a -> Bool
 xor' p g = not (and' p g) && not (nor' p g)
-{-# INLINE xor' #-}
 
+{-# INLINE xor' #-}
 -- | Test logical operator (NOR) with a predicate and input wires
 nor' :: (Wire a -> Bool) -> Gate a -> Bool
 nor' p Gate {..} = not $ p g'lwire || p g'rwire
-{-# INLINE nor' #-}
 
+{-# INLINE nor' #-}
 -- | Classfy input wires satisfying the given predicate: (pass, fail)
 --   The result is valid only when applied input wires hold XOR
 either'by :: (Wire a -> Bool) -> Gate a -> (Wire a, Wire a)
 either'by p g@Gate {..}
-  | xor' p g = if p g'lwire then (g'lwire, g'rwire) else (g'rwire, g'lwire)
+  | xor' p g =
+    if p g'lwire
+      then (g'lwire, g'rwire)
+      else (g'rwire, g'lwire)
   | otherwise =
-      die $
-        unwords ["Error, not XOR between:", w'key g'lwire, "and", w'key g'rwire]
-{-# INLINE either'by #-}
+    die $
+    unwords ["Error, not XOR between:", w'key g'lwire, "and", w'key g'rwire]
 
+{-# INLINE either'by #-}
 -- | Sort Omap by height
 sort'omap :: Omap a -> [Gate a]
 sort'omap = (fst <$>) . sortOn snd . elems
-{-# INLINE sort'omap #-}
 
+{-# INLINE sort'omap #-}
 -- | Inspect operators
 valid'operator :: Gate a -> Bool
 valid'operator Gate {..} = g'op `elem` [Mul, Add, End]
-{-# INLINE valid'operator #-}
 
+{-# INLINE valid'operator #-}
 -- | When merge happens
 needs'merge :: Gate a -> Bool
-needs'merge g@Gate {..} =
-  w'recip g'rwire
-    || (and' out'wirep g && g'op == Mul)
-{-# INLINE needs'merge #-}
+needs'merge g@Gate {..} = w'recip g'rwire || (and' out'wirep g && g'op == Mul)
 
+{-# INLINE needs'merge #-}
 -- | Create a helper knot wire having a hashed unique key
 rand'wire :: (Num a) => IO (Wire a)
-rand'wire =
-  set'expr "rand-tie"
-    . unit'var
-    . ("~x" ++)
-    <$> random'hex 8
-{-# INLINE rand'wire #-}
+rand'wire = set'expr "rand-tie" . unit'var . ("~x" ++) <$> random'hex 8
 
+{-# INLINE rand'wire #-}
 -- | Toggle the reciprocal flag
 recip' :: Wire a -> Wire a
 recip' wire@Wire {..} = wire {w'recip = not w'recip}
-{-# INLINE recip' #-}
 
+{-# INLINE recip' #-}
 -- | Determine which wire will be cut: in forms of (survived, killed)
 tip'cut :: Omap a -> String -> (Wire a, Wire a)
 tip'cut omap key =
@@ -124,8 +122,8 @@ tip'cut omap key =
    in if w'recip g'rwire || (height g'lwire > height g'rwire)
         then (g'lwire, g'rwire)
         else (g'rwire, g'lwire)
-{-# INLINEABLE tip'cut #-}
 
+{-# INLINEABLE tip'cut #-}
 -- | nil-circuit
 reorg'circuit :: (Eq a, Num a) => Circuit a -> IO (Circuit a)
 reorg'circuit circuit@Circuit {..} = do
@@ -133,8 +131,8 @@ reorg'circuit circuit@Circuit {..} = do
       omap = omap'from'gates c'gates
   reorged <- reorg omap key
   pure $ circuit {c'gates = reorged}
-{-# INLINEABLE reorg'circuit #-}
 
+{-# INLINEABLE reorg'circuit #-}
 -- | Generate a Omap used in circuit reorg process.
 omap'from'gates :: [Gate a] -> Omap a
 omap'from'gates = foldl' update mempty
@@ -145,116 +143,109 @@ omap'from'gates = foldl' update mempty
             | member w'key omap = 1 + snd (omap ~> w'key)
             | otherwise = 1
        in omap <~ (w'key g'owire, (g, height))
-{-# INLINEABLE omap'from'gates #-}
 
+{-# INLINEABLE omap'from'gates #-}
 -- | Reconstruct gates and wires of a given circuit for use of nilsign
 reorg :: (Eq a, Num a) => Omap a -> String -> IO [Gate a]
 reorg omap key
   | member key omap = do
-      let (g@Gate {..}, _) = omap ~> key
-          (tip, cut) = tip'cut omap key
-      if
-          | not . valid'operator $ g ->
-              die $ "Error, found invalid op during reorg: " ++ show g'op
-          | needs'merge g ->
-              reorg omap (w'key tip) +++ merge omap g'owire tip cut
-          | otherwise ->
-              reorg omap (w'key tip) +++ reorg omap (w'key cut) +++ pure [g]
+    let (g@Gate {..}, _) = omap ~> key
+        (tip, cut) = tip'cut omap key
+    if | not . valid'operator $ g ->
+         die $ "Error, found invalid op during reorg: " ++ show g'op
+       | needs'merge g -> reorg omap (w'key tip) +++ merge omap g'owire tip cut
+       | otherwise ->
+         reorg omap (w'key tip) +++ reorg omap (w'key cut) +++ pure [g]
   | otherwise = pure []
-{-# INLINEABLE reorg #-}
 
+{-# INLINEABLE reorg #-}
 -- | merge
 merge :: (Eq a, Num a) => Omap a -> Wire a -> Wire a -> Wire a -> IO [Gate a]
 merge omap out tip cut
   | member (w'key cut) omap = do
-      let (Gate {g'op}, _) = omap ~> w'key cut
-      case g'op of
-        Mul -> merge'mul omap out tip cut
-        Add -> merge'add omap out tip cut
-        op -> die $ "Error, unexpected operator: " ++ show op
+    let (Gate {g'op}, _) = omap ~> w'key cut
+    case g'op of
+      Mul -> merge'mul omap out tip cut
+      Add -> merge'add omap out tip cut
+      op  -> die $ "Error, unexpected operator: " ++ show op
   | otherwise = pure [Gate Mul tip cut out]
-{-# INLINEABLE merge #-}
 
-merge'mul :: (Eq a, Num a) => Omap a -> Wire a -> Wire a -> Wire a -> IO [Gate a]
+{-# INLINEABLE merge #-}
+merge'mul ::
+     (Eq a, Num a) => Omap a -> Wire a -> Wire a -> Wire a -> IO [Gate a]
 merge'mul omap out tip cut = do
-  let op = if w'recip cut then recip' else id
+  let op =
+        if w'recip cut
+          then recip'
+          else id
       (tip_, cut_) = bimap op op $ tip'cut omap (w'key cut)
   tie <- rand'wire
   merge omap tie tip tip_ +++ merge omap out tie cut_
-{-# INLINEABLE merge'mul #-}
 
-merge'add :: (Eq a, Num a) => Omap a -> Wire a -> Wire a -> Wire a -> IO [Gate a]
+{-# INLINEABLE merge'mul #-}
+merge'add ::
+     (Eq a, Num a) => Omap a -> Wire a -> Wire a -> Wire a -> IO [Gate a]
 merge'add omap out tip cut = do
   if w'recip cut
-    then
-      die . unlines $
-        [ "Error, failed to reorg the wire in circuit: " ++ w'expr cut,
-          "A divisor of (/) should be a const value when it is involved with (+)"
-        ]
+    then die . unlines $
+         [ "Error, failed to reorg the wire in circuit: " ++ w'expr cut
+         , "A divisor of (/) should be a const value when it is involved with (+)"
+         ]
     else do
       let (tip_, cut_) = tip'cut omap (w'key cut)
       tie'a <- rand'wire
       tie'b <- rand'wire
-      merge omap tie'a tip tip_
-        +++ merge omap tie'b tip cut_
-        +++ pure [Gate Add tie'a tie'b out]
-{-# INLINEABLE merge'add #-}
+      merge omap tie'a tip tip_ +++
+        merge omap tie'b tip cut_ +++ pure [Gate Add tie'a tie'b out]
 
+{-# INLINEABLE merge'add #-}
 -- | The name prepared wire representing delta-shift
 shift'expr :: String
 shift'expr = ">>"
-{-# INLINE shift'expr #-}
 
+{-# INLINE shift'expr #-}
 -- | The name prepared wire representing amplifier-knot
 amp'expr :: String
 amp'expr = "*/"
-{-# INLINE amp'expr #-}
 
+{-# INLINE amp'expr #-}
 frozen'expr :: String
 frozen'expr = "##"
-{-# INLINE frozen'expr #-}
 
+{-# INLINE frozen'expr #-}
 freeze :: Wire a -> Wire a
 freeze = set'expr frozen'expr . set'key const'key
-{-# INLINE freeze #-}
 
+{-# INLINE freeze #-}
 shifter :: (Num a) => Wire a
 shifter = set'expr shift'expr unit'const
-{-# INLINE shifter #-}
 
+{-# INLINE shifter #-}
 amplifier :: (Num a) => Wire a
 amplifier = set'expr amp'expr unit'const
-{-# INLINE amplifier #-}
 
+{-# INLINE amplifier #-}
 -- | Predicate for a delta-shifter
 shift'wirep :: Wire a -> Bool
-shift'wirep Wire {..} =
-  w'key == const'key
-    && w'expr == shift'expr
-{-# INLINE shift'wirep #-}
+shift'wirep Wire {..} = w'key == const'key && w'expr == shift'expr
 
+{-# INLINE shift'wirep #-}
 -- | Predicate for a amplifier-knot
 amp'wirep :: Wire a -> Bool
-amp'wirep Wire {..} =
-  w'key == const'key
-    && w'expr == amp'expr
-{-# INLINE amp'wirep #-}
+amp'wirep Wire {..} = w'key == const'key && w'expr == amp'expr
 
+{-# INLINE amp'wirep #-}
 frozen'wirep :: Wire a -> Bool
 frozen'wirep Wire {..} = w'expr == frozen'expr
-{-# INLINE frozen'wirep #-}
 
+{-# INLINE frozen'wirep #-}
 entry'wirep :: Wire a -> Bool
 entry'wirep wire =
   and $
-    [ not . out'wirep,
-      not . shift'wirep,
-      not . amp'wirep,
-      not . frozen'wirep
-    ]
-      <*> [wire]
-{-# INLINE entry'wirep #-}
+  [not . out'wirep, not . shift'wirep, not . amp'wirep, not . frozen'wirep] <*>
+  [wire]
 
+{-# INLINE entry'wirep #-}
 -- | nilify-circuit
 nilify'circuit :: (Num a) => Circuit a -> IO (Circuit a)
 nilify'circuit circuit@Circuit {..} = do
@@ -267,22 +258,21 @@ nilify'circuit circuit@Circuit {..} = do
       then pure (init nilified) +++ add'prin'amp (last nilified)
       else pure nilified
   pure $ circuit {c'gates = gates}
-{-# INLINEABLE nilify'circuit #-}
 
+{-# INLINEABLE nilify'circuit #-}
 -- | Add shifting gates to each entry gate
 shift'gate :: (Num a) => Gate a -> IO [Gate a]
 shift'gate g@Gate {..}
   | g'op == End = pure [g]
   | xor' out'wirep g = do
-      let (ext, scalar) = either'by out'wirep g
-      shift g'op scalar ext g'owire
+    let (ext, scalar) = either'by out'wirep g
+    shift g'op scalar ext g'owire
   | nor' out'wirep g = do
-      tie <- rand'wire
-      pure [Gate Add g'lwire shifter tie]
-        +++ shift g'op g'rwire tie g'owire
+    tie <- rand'wire
+    pure [Gate Add g'lwire shifter tie] +++ shift g'op g'rwire tie g'owire
   | otherwise = pure [g]
-{-# INLINEABLE shift'gate #-}
 
+{-# INLINEABLE shift'gate #-}
 -- | Create shift gates and tie them up
 shift :: (Num a) => Gateop -> Wire a -> Wire a -> Wire a -> IO [Gate a]
 shift op scalar ext out = do
@@ -290,42 +280,40 @@ shift op scalar ext out = do
   tie'b <- rand'wire
   case op of
     Mul ->
-      pure [Gate Mul scalar ext tie'a]
-        +++ pure [Gate Mul ext shifter tie'b]
-        +++ pure [Gate Add tie'a tie'b out]
+      pure [Gate Mul scalar ext tie'a] +++
+      pure [Gate Mul ext shifter tie'b] +++ pure [Gate Add tie'a tie'b out]
     Add ->
-      pure [Gate Add scalar shifter tie'a]
-        +++ pure [Gate Add ext tie'a out]
+      pure [Gate Add scalar shifter tie'a] +++ pure [Gate Add ext tie'a out]
     _ -> die "Error,"
-{-# INLINEABLE shift #-}
 
+{-# INLINEABLE shift #-}
 -- | Add an amplifier gate when needed
 amplify'gate :: (Num a) => Omap a -> Gate a -> IO [Gate a]
 amplify'gate omap g@Gate {g'lwire, g'rwire, g'owire, g'op = op}
   | op == End = add'prin'amp g
   | op /= Add = pure [g]
   | and' from'add g = do
-      tie'a <- rand'wire
-      tie'b <- rand'wire
-      amplify g'lwire tie'a
-        +++ amplify g'rwire tie'b
-        +++ pure [Gate Add tie'a tie'b g'owire]
+    tie'a <- rand'wire
+    tie'b <- rand'wire
+    amplify g'lwire tie'a +++
+      amplify g'rwire tie'b +++ pure [Gate Add tie'a tie'b g'owire]
   | otherwise = pure [g]
   where
     amplify in' out = pure [Gate Mul in' amplifier out]
     from'add Wire {..}
       | member w'key omap =
-          let (gate, _) = omap ~> w'key in g'op gate == Add
+        let (gate, _) = omap ~> w'key
+         in g'op gate == Add
       | otherwise = False
-{-# INLINE amplify'gate #-}
 
+{-# INLINE amplify'gate #-}
 -- | Add a principal amplifier gate at the end of circiuit
 add'prin'amp :: (Num a) => Gate a -> IO [Gate a]
 add'prin'amp g@Gate {..} = do
   tie <- rand'wire
   pure [Gate Mul g'rwire amplifier tie] +++ pure [g {g'rwire = tie}]
-{-# INLINE add'prin'amp #-}
 
+{-# INLINE add'prin'amp #-}
 -- | Construct a graph-map, Gmap from Omap
 gmap'from'omap :: (Eq a) => Omap a -> Gmap a
 gmap'from'omap omap = foldl' update mempty gates
@@ -334,16 +322,15 @@ gmap'from'omap omap = foldl' update mempty gates
     go'wire gate gmap wire
       | out'wirep wire = gmap <<~ (w'key wire, gate)
       | otherwise = gmap
-    update gmap gate@Gate {..} =
-      foldl' (go'wire gate) gmap [g'lwire, g'rwire]
-{-# INLINEABLE gmap'from'omap #-}
+    update gmap gate@Gate {..} = foldl' (go'wire gate) gmap [g'lwire, g'rwire]
 
+{-# INLINEABLE gmap'from'omap #-}
 -- | Find a list of entry gates
 find'entries :: Omap a -> [Gate a]
 find'entries omap =
   [g | (g, _) <- elems omap, g'op g /= End, xor' entry'wirep g]
-{-# INLINEABLE find'entries #-}
 
+{-# INLINEABLE find'entries #-}
 -- | Find a list of amplifier gates
 find'amps :: Omap a -> [Gate a]
 find'amps omap = foldl' go [] (assocs omap)
@@ -351,8 +338,8 @@ find'amps omap = foldl' go [] (assocs omap)
     go gates (_, (gate, _))
       | xor' amp'wirep gate = gate : gates
       | otherwise = gates
-{-# INLINEABLE find'amps #-}
 
+{-# INLINEABLE find'amps #-}
 -- | Find previous amplifier gates directly involved with the given gate
 prev'amps :: (Eq a) => Omap a -> Gate a -> [Gate a]
 prev'amps omap g = snd $ find (g'rwire g) (find (g'lwire g) (S.empty, []))
@@ -360,40 +347,39 @@ prev'amps omap g = snd $ find (g'rwire g) (find (g'lwire g) (S.empty, []))
     find wire@Wire {..} (visited, amps)
       | S.member wire visited = (visited, amps)
       | member w'key omap =
-          let (gate@Gate {..}, _) = omap ~> w'key
-           in if amp'wirep g'rwire
-                then (S.insert wire visited, gate : amps)
-                else find g'rwire (find g'lwire (visited, amps))
+        let (gate@Gate {..}, _) = omap ~> w'key
+         in if amp'wirep g'rwire
+              then (S.insert wire visited, gate : amps)
+              else find g'rwire (find g'lwire (visited, amps))
       | otherwise = (S.insert wire visited, amps)
-{-# INLINEABLE prev'amps #-}
 
+{-# INLINEABLE prev'amps #-}
 -- | Find all next amplifier gates directly involved with the given gate
 next'amps :: (Eq a) => Gmap a -> Gate a -> [Gate a]
 next'amps gmap g = snd $ find g (S.empty, [])
   where
-    find gate@Gate {..} (visited, amps)
+    find Gate {..} (visited, amps)
       | S.member g'owire visited = (visited, amps)
       | member (w'key g'owire) gmap =
-          let gates = gmap ~>> w'key g'owire
-           in foldl' (flip go) (visited, amps) gates
+        let gates = gmap ~>> w'key g'owire
+         in foldl' (flip go) (visited, amps) gates
       | otherwise =
-          die $
-            "Error, found no amp gate following: " ++ w'key g'owire
+        die $ "Error, found no amp gate following: " ++ w'key g'owire
     go gate@Gate {..} (visited, amps)
       | amp'wirep g'rwire = (S.insert g'owire visited, gate : amps)
       | otherwise = find gate (visited, amps)
-{-# INLINEABLE next'amps #-}
 
+{-# INLINEABLE next'amps #-}
 -- | Find next amplifier gates directly involved with the given gate
 get'amp :: Gmap a -> Gate a -> Gate a
 get'amp gmap g@Gate {g'owire = Wire {w'key = out}, ..}
   | amp'wirep g'rwire = g
   | otherwise =
-      if member out gmap
-        then get'amp gmap (head $ gmap ~>> out)
-        else die $ "Error, not found any amp gate following: " ++ out
-{-# INLINEABLE get'amp #-}
+    if member out gmap
+      then get'amp gmap (head $ gmap ~>> out)
+      else die $ "Error, not found any amp gate following: " ++ out
 
+{-# INLINEABLE get'amp #-}
 -- | Find the shifter gate involved in a given entry gate
 get'shifter :: (Eq a) => Omap a -> Gmap a -> Gate a -> Gate a
 get'shifter omap gmap g@Gate {..} =
@@ -406,32 +392,33 @@ get'shifter omap gmap g@Gate {..} =
           (shifter'out, _) = either'by (/= g'owire) unshifter
        in fst $ omap ~> w'key shifter'out
     a -> die $ "Error, found unexpected gate op: " ++ show a
-{-# INLINE get'shifter #-}
 
+{-# INLINE get'shifter #-}
 find'end'amp :: Omap a -> Gate a
 find'end'amp omap
   | length amps == 1 = head amps
   | otherwise = die "Error, not found an end amplifier"
   where
     amps = filter (prin'amp'p omap) (find'amps omap)
-{-# INLINE find'end'amp #-}
 
+{-# INLINE find'end'amp #-}
 -- | Check if the given amp is one of principal amps
 prin'amp'p :: Omap a -> Gate a -> Bool
 prin'amp'p omap g = w'key (g'owire g) == amp'key
   where
     (Gate {g'rwire = Wire {w'key = amp'key}}, _) = omap ~> end'key
-{-# INLINE prin'amp'p #-}
 
+{-# INLINE prin'amp'p #-}
 -- | Check if the given amp is one of entry amps
 entry'amp'p :: Omap a -> Gate a -> Bool
 entry'amp'p omap g
   | xor' amp'wirep g = test (g'lwire g)
   | otherwise = die $ "Error, not amplifier wire: " ++ w'key (g'rwire g)
   where
-    test wire@Wire {..}
+    test Wire {..}
       | member w'key omap =
-          let (Gate {..}, _) = omap ~> w'key
-           in not (amp'wirep g'rwire) && (test g'lwire && test g'rwire)
+        let (Gate {..}, _) = omap ~> w'key
+         in not (amp'wirep g'rwire) && (test g'lwire && test g'rwire)
       | otherwise = True
+
 {-# INLINE entry'amp'p #-}

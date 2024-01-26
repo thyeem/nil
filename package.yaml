@@ -2,9 +2,9 @@ name: nil
 version: 0.1.0.0
 license: MIT
 author: Francis Lim
-maintainer: thyeem@gmail.com
+maintainer: Francis Lim <thyeem@gmail.com>
 copyright: 2022-2023 Francis
-synopsis: Zero-Knowledge Suite in parallelism
+synopsis: zkp(zero-knowledge proof) suite in parallelism
 category: Crypto, Cryptography
 description: .
 
@@ -24,7 +24,6 @@ dependencies:
 - deepseq
 - entropy
 - filepath
-- hedis
 - parallel
 - pretty-simple
 - process
@@ -34,10 +33,13 @@ dependencies:
 - text
 
 ghc-options:
-# - -Wall
+- -Wall
 # - -Werror
 - -Wno-name-shadowing
+- -Wno-unused-top-binds
 - -Wno-orphans
+- -Wno-incomplete-uni-patterns
+- -optP-Wno-nonportable-include-path
 
 library:
   source-dirs: src
@@ -67,31 +69,3 @@ executables:
     - store
     - optparse-applicative
     - nil
-    # when:
-    # - condition: false
-      # other-modules: Paths_nil
-
-tests:
-  unit:
-    main: Spec.hs
-    source-dirs: test
-    ghc-options:
-    - -threaded
-    dependencies:
-    - base
-    - hspec
-    - hspec-discover
-    - QuickCheck
-    - nil
-    # verbatim: |
-    # build-tool-depends:
-      # hspec-discover:hspec-discover
-
-  doctest:
-    main: doctests.hs
-    source-dirs: test
-    ghc-options:
-    - -threaded
-    dependencies:
-    - base
-    - doctest

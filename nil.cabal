@@ -6,11 +6,11 @@ cabal-version: 1.12
 
 name:           nil
 version:        0.1.0.0
-synopsis:       Zero-Knowledge Suite in parallelism
+synopsis:       zkp(zero-knowledge proof) suite in parallelism
 description:    .
 category:       Crypto, Cryptography
 author:         Francis Lim
-maintainer:     thyeem@gmail.com
+maintainer:     Francis Lim <thyeem@gmail.com>
 copyright:      2022-2023 Francis
 license:        MIT
 license-file:   LICENSE
@@ -45,7 +45,7 @@ library
       Paths_nil
   hs-source-dirs:
       src
-  ghc-options: -Wno-name-shadowing -Wno-orphans
+  ghc-options: -Wall -Wno-name-shadowing -Wno-unused-top-binds -Wno-orphans -Wno-incomplete-uni-patterns -optP-Wno-nonportable-include-path
   build-depends:
       QuickCheck
     , aeson
@@ -60,7 +60,6 @@ library
     , deepseq
     , entropy
     , filepath
-    , hedis
     , parallel
     , pretty-simple
     , process
@@ -76,7 +75,7 @@ executable nil
       Paths_nil
   hs-source-dirs:
       app
-  ghc-options: -Wno-name-shadowing -Wno-orphans -threaded -rtsopts -with-rtsopts=-N -dynamic -feager-blackholing -fexpose-all-unfoldings -O2 -g0
+  ghc-options: -Wall -Wno-name-shadowing -Wno-unused-top-binds -Wno-orphans -Wno-incomplete-uni-patterns -optP-Wno-nonportable-include-path -threaded -rtsopts -with-rtsopts=-N -dynamic -feager-blackholing -fexpose-all-unfoldings -O2 -g0
   build-depends:
       QuickCheck
     , aeson
@@ -94,78 +93,8 @@ executable nil
     , extra
     , filepath
     , gitrev
-    , hedis
     , nil
     , optparse-applicative
-    , parallel
-    , pretty-simple
-    , process
-    , random
-    , store
-    , text
-  default-language: Haskell2010
-
-test-suite doctest
-  type: exitcode-stdio-1.0
-  main-is: doctests.hs
-  other-modules:
-      NilSpec
-      Spec
-      Paths_nil
-  hs-source-dirs:
-      test
-  ghc-options: -Wno-name-shadowing -Wno-orphans -threaded
-  build-depends:
-      QuickCheck
-    , aeson
-    , base
-    , base16-bytestring
-    , base64-bytestring
-    , blake2
-    , bytestring
-    , containers
-    , cryptohash-sha256
-    , cryptohash-sha512
-    , deepseq
-    , doctest
-    , entropy
-    , filepath
-    , hedis
-    , parallel
-    , pretty-simple
-    , process
-    , random
-    , store
-    , text
-  default-language: Haskell2010
-
-test-suite unit
-  type: exitcode-stdio-1.0
-  main-is: Spec.hs
-  other-modules:
-      NilSpec
-      Paths_nil
-  hs-source-dirs:
-      test
-  ghc-options: -Wno-name-shadowing -Wno-orphans -threaded
-  build-depends:
-      QuickCheck
-    , aeson
-    , base
-    , base16-bytestring
-    , base64-bytestring
-    , blake2
-    , bytestring
-    , containers
-    , cryptohash-sha256
-    , cryptohash-sha512
-    , deepseq
-    , entropy
-    , filepath
-    , hedis
-    , hspec
-    , hspec-discover
-    , nil
     , parallel
     , pretty-simple
     , process

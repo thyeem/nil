@@ -12,20 +12,16 @@ Thumbs.db
 *.sw?
 
 # haskell
+*.hi
+*.o
 .stack-work/
+.stack-work/
+.hspec-failures
 dist-newstyle/
 dist/
 newdist/
-*.hi
-*.o
-cabal.project.local
-.hspec-failures
-
-# haskell-stack
 dist-newstyle/
-.stack-work/
-stack.yaml
-stack.yaml.lock
+cabal.project.local
 
 # jupyter
 *.ipynb_checkpoints

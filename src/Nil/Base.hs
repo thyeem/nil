@@ -1,10 +1,12 @@
 module Nil.Base where
 
-import Control.Monad (zipWithM)
-import Data.Bits (Bits (..))
-import Data.List (find)
-import Data.Maybe (fromMaybe)
-import Nil.Utils (die)
+import           Control.Monad ( zipWithM )
+
+import           Data.Bits     ( Bits (..) )
+import           Data.List     ( find )
+import           Data.Maybe    ( fromMaybe )
+
+import           Nil.Utils     ( die )
 
 -- | Reciprocal in Z/pZ
 -- * By Fermat's little theorem: a^(p-1) = 1 (mod p),
@@ -15,8 +17,8 @@ import Nil.Utils (die)
 (~%) :: (Integral a) => a -> a -> a
 -- a ~% p = modpow a (p - 2) p
 a ~% p = fst $ egcd a p
-{-# INLINE (~%) #-}
 
+{-# INLINE (~%) #-}
 infixl 9 ~%
 
 -- | Extended Euclidean algorithm based on Bezout's identity
@@ -33,11 +35,8 @@ egcd a b = (y, x - q * y)
 -- =: [(eq.1 residue, eq.1 modulo), (eq.2 residue, eq.2 modulo),..]
 chineseRemainder :: (Integral a) => [(a, a)] -> Maybe a
 chineseRemainder congruences =
-  (`mod` _N)
-    . sum
-    . hadamard _Ni
-    . hadamard residues
-    <$> zipWithM getMi _Ni moduli
+  (`mod` _N) . sum . hadamard _Ni . hadamard residues <$>
+  zipWithM getMi _Ni moduli
   where
     (residues, moduli) = unzip congruences
     _N = product moduli
@@ -57,13 +56,16 @@ modpow b e m
   | e == 0 = 1
   | otherwise = t * modpow ((b * b) `mod` m) (shiftR e 1) m `mod` m
   where
-    t = if testBit e 0 then b `mod` m else 1
+    t =
+      if testBit e 0
+        then b `mod` m
+        else 1
 
 -- | Prime numbers (unbounded, endless sieving from 2)
 primes :: (Integral a) => [a]
 primes = 2 : sieve primes [3 ..]
   where
-    sieve (p : ps) xs = q <> sieve ps [x | x <- t, rem x p > 0]
+    sieve (p:ps) xs = q <> sieve ps [x | x <- t, rem x p > 0]
       where
         (q, t) = span (< p * p) xs
     sieve _ _ = die "unreachable. broken function: primes"
@@ -74,12 +76,13 @@ primefactors n
   | n > 1 = go n primes
   | otherwise = die $ "not positive integer greater than 2: " ++ show n
   where
-    go n' primes' = case primes' of
-      p : ps
-        | p * p > n' -> [n']
-        | rem n' p == 0 -> p : go (quot n' p) primes'
-        | otherwise -> go n' ps
-      _ -> die "unreachable. broken function: primefactors"
+    go n' primes' =
+      case primes' of
+        p:ps
+          | p * p > n' -> [n']
+          | rem n' p == 0 -> p : go (quot n' p) primes'
+          | otherwise -> go n' ps
+        _ -> die "unreachable. broken function: primefactors"
 
 -- | Primality test based on prime factorization (reliable, but slow)
 primep :: (Integral a, Show a) => a -> Bool
@@ -139,29 +142,25 @@ findz p = find (`aNp` p) [1 .. p - 1]
 --     M <- i, c <- b^2, t <- t*b^2, R <- R*b
 sqrt'zpz :: (Bits a, Integral a, Show a) => a -> a -> Maybe a
 sqrt'zpz n p
-  | n == 0 =
-      Just 0
-  | aNp n p =
-      Nothing
+  | n == 0 = Just 0
+  | aNp n p = Nothing
   | otherwise =
-      let (_Q, _S) = factorQ2S p
-       in case findz p of
-            Just z ->
-              loop
-                _S
-                (modpow z _Q p)
-                (modpow n _Q p)
-                (modpow n ((_Q + 1) `div` 2) p)
-            _ -> die . unwords $ ["not found sqrt of ", show n, "over", show p]
+    let (_Q, _S) = factorQ2S p
+     in case findz p of
+          Just z ->
+            loop
+              _S
+              (modpow z _Q p)
+              (modpow n _Q p)
+              (modpow n ((_Q + 1) `div` 2) p)
+          _ -> die . unwords $ ["not found sqrt of ", show n, "over", show p]
   where
     loop _M c t _R
-      | t == 0 =
-          Just 0
-      | t == 1 =
-          Just _R
+      | t == 0 = Just 0
+      | t == 1 = Just _R
       | otherwise =
-          let i =
-                die ("cannot find proper i from t: " ++ show t)
-                  `fromMaybe` find (\x -> modpow t (2 ^ x) p == 1) [1 .. _M - 1]
-              b = modpow c (modpow 2 (_M - i - 1) p) p
-           in loop i ((b * b) `mod` p) ((t * b * b) `mod` p) ((_R * b) `mod` p)
+        let i =
+              die ("cannot find proper i from t: " ++ show t) `fromMaybe`
+              find (\x -> modpow t (2 ^ x) p == 1) [1 .. _M - 1]
+            b = modpow c (modpow 2 (_M - i - 1) p) p
+         in loop i ((b * b) `mod` p) ((t * b * b) `mod` p) ((_R * b) `mod` p)

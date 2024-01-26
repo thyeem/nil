@@ -2,37 +2,43 @@
 
 module Main where
 
-import Cli (Command (..), Opts (..), opts'parser)
-import Control.Monad (unless, when)
-import Control.Monad.Extra (unlessM)
-import qualified Data.ByteString as B
-import Data.Either (fromRight, isRight)
-import Data.List (intercalate, sort)
-import Data.Map (assocs, filterWithKey)
-import Data.Proxy
-import Data.Store (PeekException, decode, encode)
-import Nil
-import Options.Applicative (execParser)
-import System.Directory (doesFileExist)
-import System.FilePath.Posix (takeDirectory)
+import           Cli                   ( Command (..), Opts (..), opts'parser )
+
+import           Control.Monad         ( unless, when )
+import           Control.Monad.Extra   ( unlessM )
+
+import qualified Data.ByteString       as B
+import           Data.Either           ( fromRight, isRight )
+import           Data.List             ( intercalate, sort )
+import           Data.Map              ( assocs, filterWithKey )
+import           Data.Proxy
+import           Data.Store            ( encode )
+
+import           Nil
+
+import           Options.Applicative   ( customExecParser, prefs,
+                                         showHelpOnError )
+
+import           System.Directory      ( doesFileExist )
+import           System.FilePath.Posix ( takeDirectory )
 
 -- | Entry point of this program
 main :: IO ()
-main = execParser opts'parser >>= project
+main = customExecParser (prefs showHelpOnError) opts'parser >>= project
 
 -- | main program
 project :: Opts -> IO ()
 project opts@Opts {..} = do
   case o'command of
-    Setup {} -> setup opts
-    Prove {} -> prove opts
+    Setup {}  -> setup opts
+    Prove {}  -> prove opts
     Verify {} -> verify opts
-    Init {} -> init' opts
-    Sign {} -> sign opts
-    Check {} -> check opts
-    View {} -> view opts
-    Test {} -> test opts
-    Demo {} -> demo opts
+    Init {}   -> init' opts
+    Sign {}   -> sign opts
+    Check {}  -> check opts
+    View {}   -> view opts
+    Test {}   -> test opts
+    Demo {}   -> demo opts
 
 setup :: Opts -> IO ()
 setup Opts {..} = do
@@ -50,20 +56,19 @@ setup Opts {..} = do
   B.writeFile (path ++ "/" ++ file'circ) . encode $ circuit
   B.writeFile (path ++ "/" ++ file'ekey) . encode $ ekey
   B.writeFile (path ++ "/" ++ file'vkey) . encode $ vkey
-
   -- setup result (3 files: circuit, evaluation key, verification key),
   -- and their SHA-256 hashes as fingerprints
   unless o'quite $ do
     info'io
       12
       ["filepath", "Circuit", "(hash)", "E-key", "(hash)", "V-key", "(hash)"]
-      [ path,
-        file'circ,
-        circ'id,
-        file'ekey,
-        hex'from'bytes . sha256 . encode $ ekey,
-        file'vkey,
-        hex'from'bytes . sha256 . encode $ vkey
+      [ path
+      , file'circ
+      , circ'id
+      , file'ekey
+      , hex'from'bytes . sha256 . encode $ ekey
+      , file'vkey
+      , hex'from'bytes . sha256 . encode $ vkey
       ]
   -- export graph
   when graph $ do
@@ -89,10 +94,7 @@ prove Opts {..} = do
       file'proof = pfID ++ ".pf"
   B.writeFile (path ++ "/" ++ file'proof) . encode $ proof
   unless o'quite $
-    info'io
-      12
-      ["Statement", "filepath", "Proof"]
-      [show claim, path, file'proof]
+    info'io 12 ["Statement", "filepath", "Proof"] [show claim, path, file'proof]
   ok (path ++ "/" ++ file'proof)
 
 verify :: Opts -> IO ()
@@ -104,10 +106,7 @@ verify Opts {..} = do
   let target = w'val $ instance_ ~> return'key
       verified = zkverify proof_ vkey_ (vec'fromWmap instance_)
   unless o'quite $
-    info'io
-      12
-      ["Statement", "Verified"]
-      [show target, show verified]
+    info'io 12 ["Statement", "Verified"] [show target, show verified]
   ok (show verified)
 
 init' :: Opts -> IO ()
@@ -116,17 +115,13 @@ init' Opts {..} = do
   guard'file language
   circuit <- compile'language <$> readFile language
   sig <-
-    nil'init bn254'g1 bn254'g2 bn254'gt circuit ::
-      IO (Nilsig BN254 BN254'G2 Fr G1)
+    nil'init bn254'g1 bn254'g2 bn254'gt circuit :: IO (Nilsig BN254 BN254'G2 Fr G1)
   let path = takeDirectory language
       sig'id = hex'from'bytes . sha256 . encode $ sig
       file'sig = sig'id ++ ".sig"
   B.writeFile (path ++ "/" ++ file'sig) . encode $ sig
   unless o'quite $
-    info'io
-      12
-      ["filepath", "Signature", "(hash)"]
-      [path, file'sig, sig'id]
+    info'io 12 ["filepath", "Signature", "(hash)"] [path, file'sig, sig'id]
   -- export graph
   when graph $ do
     let file'dag = sig'id ++ ".pdf"
@@ -148,10 +143,7 @@ sign Opts {..} = do
       file'sig = sig'id ++ ".sig"
   B.writeFile (path ++ "/" ++ file'sig) . encode $ signed
   unless o'quite $
-    info'io
-      12
-      ["filepath", "Signature", "(hash)"]
-      [path, file'sig, sig'id]
+    info'io 12 ["filepath", "Signature", "(hash)"] [path, file'sig, sig'id]
   -- export graph
   when graph $ do
     let file'dag = sig'id ++ ".pdf"
@@ -163,7 +155,7 @@ sign Opts {..} = do
 
 check :: Opts -> IO ()
 check Opts {..} = do
-  let Check hash sig ret = o'command
+  let Check _ sig ret = o'command
   guard'file sig
   sig_ <- decode'file (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) sig
   ret_ <- read'input ret :: IO (Wmap Fr)
@@ -178,23 +170,22 @@ check Opts {..} = do
   ok (show verified)
 
 view :: Opts -> IO ()
-view opts@Opts {..} =
-  do
-    let View hash nilkey graph priv pub file = o'command
-    guard'file file
-    bytes <- B.readFile file
-    let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
-        ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
-        vkey = decode'bytes (Proxy :: Proxy VerificationKey) bytes
-        proof = decode'bytes (Proxy :: Proxy Proof) bytes
-        nilsig = decode'bytes (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) bytes
-        unwrap = fromRight (die "unreachable: view")
-    when (isRight circuit) (view'circuit opts (unwrap circuit))
-    when (isRight nilsig) (view'sig opts (unwrap nilsig))
-    when (isRight ekey) $ pp (unwrap ekey) >> exit
-    when (isRight vkey) $ pp (unwrap vkey) >> exit
-    when (isRight proof) $ pp (unwrap proof) >> exit
-    stdout . str'from'bytes $ bytes
+view opts@Opts {..} = do
+  let View _ _ _ _ _ file = o'command
+  guard'file file
+  bytes <- B.readFile file
+  let circuit = decode'bytes (Proxy :: Proxy (Circuit Fr)) bytes
+      ekey = decode'bytes (Proxy :: Proxy EvaluationKey) bytes
+      vkey = decode'bytes (Proxy :: Proxy VerificationKey) bytes
+      proof = decode'bytes (Proxy :: Proxy Proof) bytes
+      nilsig = decode'bytes (Proxy :: Proxy (Nilsig BN254 BN254'G2 Fr G1)) bytes
+      unwrap = fromRight (die "unreachable: view")
+  when (isRight circuit) (view'circuit opts (unwrap circuit))
+  when (isRight nilsig) (view'sig opts (unwrap nilsig))
+  when (isRight ekey) $ pp (unwrap ekey) >> exit
+  when (isRight vkey) $ pp (unwrap vkey) >> exit
+  when (isRight proof) $ pp (unwrap proof) >> exit
+  stdout . str'from'bytes $ bytes
 
 view'circuit :: Opts -> Circuit Fr -> IO ()
 view'circuit Opts {..} circ = do
@@ -217,14 +208,10 @@ view'sig Opts {..} sig = do
     let dag = takeDirectory file ++ "/" ++ sig'id ++ ".pdf"
     export'graph dag (write'dot dot'header $ n'circuit sig)
     unless o'quite (ok dag) >> exit
-  when hash $
-    stdout (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
-  when nilkey $
-    pp (n'key sig) >> exit
-  when priv $
-    mapM_ stdout (dumper . assocs $ which'signed sig "priv") >> exit
-  when pub $
-    mapM_ stdout (dumper . assocs $ which'signed sig "pub") >> exit
+  when hash $ stdout (hex'from'bytes . hash'sig bn254'gt $ sig) >> exit
+  when nilkey $ pp (n'key sig) >> exit
+  when priv $ mapM_ stdout (dumper . assocs $ which'signed sig "priv") >> exit
+  when pub $ mapM_ stdout (dumper . assocs $ which'signed sig "pub") >> exit
   pp sig >> exit
 
 test :: Opts -> IO ()
@@ -238,10 +225,8 @@ test Opts {..} = do
   let circuit = compile'language lang_
       keys = filter (/= return'key) (c'privs circuit ++ c'pubs circuit)
   when (mode `notElem` modes) (err $ "Error, no such mode: " ++ mode)
-  when eval $ do
-    pp (statement bn254'g1 dat_ circuit) >> exit
-  when (mode == "mpc") $ do
-    nil'test True lang_ dat_ >> exit
+  when eval $ do pp (statement bn254'g1 dat_ circuit) >> exit
+  when (mode == "mpc") $ do nil'test True lang_ dat_ >> exit
   when (mode == "zkp") $ do
     let wit = filterWithKey (\k _ -> k `elem` keys) dat_
         inst = filterWithKey (\k _ -> k `elem` c'pubs circuit) dat_
@@ -255,8 +240,8 @@ demo Opts {..} = do
     info'io
       12
       modes
-      [ "multi-party computation demo using nil-sign",
-        "zero-knowledge proof demo using pinocchio protocol"
+      [ "multi-party computation demo using nil-sign"
+      , "zero-knowledge proof demo using pinocchio protocol"
       ]
     err mempty
   when (mode `notElem` modes) (err $ "Error, no such demo: " ++ mode)
@@ -267,49 +252,55 @@ demo'zkp :: Bool -> IO ()
 demo'zkp verbose =
   zktest
     verbose
-    ( intercalate
-        "\n\t"
-        [ "language (priv e, priv r, priv s, pub z)",
-          "let k = (z + r * e) / s",
-          "let P = [e]",
-          "let R = [k]",
-          "let o = if (:R - r) == 0 then :P else :R",
-          "return o"
-        ]
-    )
-    ( wmap'fromList
-        [ ("e", 8464813805670834410435113564993955236359239915934467825032129101731355555480),
-          ("r", 13405614924655214385005113554925375156635891943694728320775177413191146574283),
-          ("s", 13078933289364958062289426192340813952257377699664878821853496586753686181509),
-          ("z", 4025919241471660438673811488519877818316526842848831811191175453074037299584)
-        ]
-    )
-    ( wmap'fromList
-        [ ("return", 20546328083791890245710917085664594543309426573230401055874323960053340664311),
-          ("z", 4025919241471660438673811488519877818316526842848831811191175453074037299584)
-        ]
-    )
-    >>= print
+    (intercalate
+       "\n\t"
+       [ "language (priv e, priv r, priv s, pub z)"
+       , "let k = (z + r * e) / s"
+       , "let P = [e]"
+       , "let R = [k]"
+       , "let o = if (:R - r) == 0 then :P else :R"
+       , "return o"
+       ])
+    (wmap'fromList
+       [ ( "e"
+         , 8464813805670834410435113564993955236359239915934467825032129101731355555480)
+       , ( "r"
+         , 13405614924655214385005113554925375156635891943694728320775177413191146574283)
+       , ( "s"
+         , 13078933289364958062289426192340813952257377699664878821853496586753686181509)
+       , ( "z"
+         , 4025919241471660438673811488519877818316526842848831811191175453074037299584)
+       ])
+    (wmap'fromList
+       [ ( "return"
+         , 20546328083791890245710917085664594543309426573230401055874323960053340664311)
+       , ( "z"
+         , 4025919241471660438673811488519877818316526842848831811191175453074037299584)
+       ]) >>=
+  print
 
 demo'mpc :: Bool -> IO ()
 demo'mpc verbose =
   nil'test
     verbose
-    ( intercalate
-        "\n\t"
-        [ "language (priv e, priv r, priv s, pub z)",
-          "return ((e+r*s)^4 + s*z)^3 / z*r*s"
-        ]
-    )
-    ( wmap'fromList
-        [ ("e", 8464813805670834410435113564993955236359239915934467825032129101731355555480),
-          ("r", 13405614924655214385005113554925375156635891943694728320775177413191146574283),
-          ("s", 13078933289364958062289426192340813952257377699664878821853496586753686181509),
-          ("z", 4025919241471660438673811488519877818316526842848831811191175453074037299584),
-          ("return", 9736209953418122309806155361367034953823483591771807982224153372278884065086)
-        ]
-    )
-    >>= print
+    (intercalate
+       "\n\t"
+       [ "language (priv e, priv r, priv s, pub z)"
+       , "return ((e+r*s)^4 + s*z)^3 / z*r*s"
+       ])
+    (wmap'fromList
+       [ ( "e"
+         , 8464813805670834410435113564993955236359239915934467825032129101731355555480)
+       , ( "r"
+         , 13405614924655214385005113554925375156635891943694728320775177413191146574283)
+       , ( "s"
+         , 13078933289364958062289426192340813952257377699664878821853496586753686181509)
+       , ( "z"
+         , 4025919241471660438673811488519877818316526842848831811191175453074037299584)
+       , ( "return"
+         , 9736209953418122309806155361367034953823483591771807982224153372278884065086)
+       ]) >>=
+  print
 
 guard'file :: FilePath -> IO ()
 guard'file file =

@@ -1,57 +1,60 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RecordWildCards #-}
-
+{-# LANGUAGE RecordWildCards       #-}
 {-# OPTIONS -Wno-unused-top-binds #-}
 
 -- | Defines @Weierstrass Elliptic@ 'Curve' and 'Point' over @/GF(p)/@
 module Nil.Curve
-  ( Point (..),
-    Curve (..),
-    c'g,
-    ap,
-    ap',
-    jp,
-    jp',
-    toA,
-    toJ,
-    p'x,
-    p'y,
-    p'curve,
-    oncurve,
-    atinf,
-    y'from'x,
-    findp,
-    (~*),
-    (<~*>),
-    addp,
-    dblp,
-    invp,
-    mulp,
-    subp,
-    mulg,
-    apbq'sum,
-    randp,
-    frobp,
-  )
-where
+  ( Point(..)
+  , Curve(..)
+  , c'g
+  , ap
+  , ap'
+  , jp
+  , jp'
+  , toA
+  , toJ
+  , p'x
+  , p'y
+  , p'curve
+  , oncurve
+  , atinf
+  , y'from'x
+  , findp
+  , (~*)
+  , (<~*>)
+  , addp
+  , dblp
+  , invp
+  , mulp
+  , subp
+  , mulg
+  , apbq'sum
+  , randp
+  , frobp
+  ) where
 
-import Control.DeepSeq (NFData)
-import Data.List (nub)
-import GHC.Generics (Generic)
-import Nil.Base (sqrt'zpz)
-import Nil.Field (Field (..))
-import Nil.Utils (Pretty (..), die, info, pfold, pzip'with, (<%>), (|+|))
-import System.Random (randomRIO)
+import           Control.DeepSeq ( NFData )
+
+import           Data.List       ( nub )
+
+import           GHC.Generics    ( Generic )
+
+import           Nil.Base        ( sqrt'zpz )
+import           Nil.Field       ( Field (..) )
+import           Nil.Utils       ( Pretty (..), die, info, pfold, pzip'with,
+                                   (<%>), (|+|) )
+
+import           System.Random   ( randomRIO )
 
 -- | Elliptic Curve over @/GF(p)/@ in short Weierstrass form: @y^2 = x^3 + a*x + b@
--- @
+--
 -- +--------+-------------------------------------------------------------------+
 -- | @c'p@  | Characteristic of curve                                           |
 -- +--------+-------------------------------------------------------------------+
@@ -67,21 +70,22 @@ import System.Random (randomRIO)
 -- +--------+-------------------------------------------------------------------+
 -- | @c'h@  | Curve cofactor = @|/E(Fp)/| / n@, size of subgroup of @/E(Fp)/@   |
 -- +--------+-------------------------------------------------------------------+
--- @
-data Curve i f = Curve
-  { c'name :: String,
-    c'p :: Integer,
-    c'a :: f,
-    c'b :: f,
-    c'gx :: f,
-    c'gy :: f,
-    c'n :: Integer,
-    c'h :: Integer
-  }
+--
+data Curve i f =
+  Curve
+    { c'name :: String
+    , c'p    :: Integer
+    , c'a    :: f
+    , c'b    :: f
+    , c'gx   :: f
+    , c'gy   :: f
+    , c'n    :: Integer
+    , c'h    :: Integer
+    }
   deriving (Eq, Generic, NFData)
 
 -- | Points on Elliptic Curve
--- @
+--
 -- +-----+---------------------------------------------------------------------------+
 -- | @A@ | Constructor representing Affine point, @(x, y)@                           |
 -- +-----+---------------------------------------------------------------------------+
@@ -89,8 +93,9 @@ data Curve i f = Curve
 -- +-----+---------------------------------------------------------------------------+
 -- | @O@ | Point at Infinity                                                         |
 -- +-----+---------------------------------------------------------------------------+
--- @
+--
 -- @O@ in Jacobian coordinates: @(X,Y,Z) = (t^2,t^3,0) = (1,1,0)@ when @t = 1@
+--
 data Point i f
   = A (Curve i f) f f
   | J (Curve i f) f f f
@@ -102,15 +107,14 @@ instance (Field f) => Eq (Point c f) where
   (==) = f
     where
       f (A _ x1 y1) (A _ x2 y2) = x1 == x2 && y1 == y2
-      f p O = atinf p
-      f O p = atinf p
-      f p1 p2 = f (toA p1) (toA p2)
+      f p O                     = atinf p
+      f O p                     = atinf p
+      f p1 p2                   = f (toA p1) (toA p2)
   {-# INLINE (==) #-}
 
 -- Equality test for Jacobian point
 -- f (J _ x1 y1 z1) (J _ x2 y2 z2) =
 --   x1 * z2 ^ 2 == x2 * z1 ^ 2 && y1 * z2 ^ 3 == y2 * z1 ^ 3
-
 instance (Field f) => Semigroup (Point c f) where
   (<>) = (+)
 
@@ -120,13 +124,10 @@ instance (Field f) => Monoid (Point c f) where
 instance (Field f) => Num (Point c f) where
   (+) !p !q = addp p q
   {-# INLINE (+) #-}
-
   (-) !p !q = subp p q
   {-# INLINE (-) #-}
-
   negate = invp
   {-# INLINE negate #-}
-
   (*) = die "Error, undefined (*) between two elliptic points"
   fromInteger = undefined
   signum = undefined
@@ -134,7 +135,9 @@ instance (Field f) => Num (Point c f) where
 
 -- | Construct an @Affine@ point
 ap :: (Field f) => Curve i f -> f -> f -> Point i f
-ap curve x y = A curve (e * x) (e * y) where e = one x
+ap curve x y = A curve (e * x) (e * y)
+  where
+    e = one x
 
 -- | Construct an @Affine@ point with a on-curve checkup
 ap' :: (Field f) => Curve i f -> f -> f -> Point i f
@@ -163,100 +166,107 @@ jp' curve x y = checkup . jp curve x y
 
 -- | Convert @Jacobian@ point into @Affine@ point
 toA :: (Field f) => Point i f -> Point i f
-toA p = case p of
-  A {} -> p
-  O -> O
-  J curve x y z
-    | atinf p -> O
-    | otherwise -> A curve (x / z ^ (2 :: Int)) (y / z ^ (3 :: Int))
-{-# INLINE toA #-}
+toA p =
+  case p of
+    A {} -> p
+    O -> O
+    J curve x y z
+      | atinf p -> O
+      | otherwise -> A curve (x / z ^ (2 :: Int)) (y / z ^ (3 :: Int))
 
+{-# INLINE toA #-}
 -- | Convert @Affine@ point into @Jacobian@ point
 toJ :: (Field f) => Point i f -> Point i f
-toJ p = case p of
-  A curve x y -> jp curve x y (one x)
-  _ -> p
-{-# INLINE toJ #-}
+toJ p =
+  case p of
+    A curve x y -> jp curve x y (one x)
+    _           -> p
 
+{-# INLINE toJ #-}
 -- | Get the defined base point or the generator from a given elliptic curve
 c'g :: (Field f) => Curve i f -> Point i f
 c'g curve = A curve (c'gx curve) (c'gy curve)
-{-# INLINE c'g #-}
 
+{-# INLINE c'g #-}
 -- | Check if a given point is on the elliptic curve defined
 --
 -- True if @y^2 = x^3 + a*x + b@ holds over the finite field
 oncurve :: (Field f) => Point i f -> Bool
-oncurve p = case p of
-  O -> True
-  (A curve x y) -> y * y == (x * x + c'a curve) * x + c'b curve
-  (J curve x y z) ->
-    (y * y)
-      == ((x * x + c'a curve * z ^ (4 :: Int)) * x + c'b curve * z ^ (6 :: Int))
-{-# INLINEABLE oncurve #-}
+oncurve p =
+  case p of
+    O -> True
+    (A curve x y) -> y * y == (x * x + c'a curve) * x + c'b curve
+    (J curve x y z) ->
+      (y * y) ==
+      ((x * x + c'a curve * z ^ (4 :: Int)) * x + c'b curve * z ^ (6 :: Int))
 
+{-# INLINEABLE oncurve #-}
 -- | Check if a given point is @__Point at Infinity__@ or not
 atinf :: (Field f) => Point i f -> Bool
-atinf p = case p of
-  O -> True
-  J _ x y z
-    | z == zero z && (x ^ (3 :: Int)) == (y ^ (2 :: Int)) -> True
-    | otherwise -> False
-  _ -> False
-{-# INLINEABLE atinf #-}
+atinf p =
+  case p of
+    O -> True
+    J _ x y z
+      | z == zero z && (x ^ (3 :: Int)) == (y ^ (2 :: Int)) -> True
+      | otherwise -> False
+    _ -> False
 
+{-# INLINEABLE atinf #-}
 -- | Get @Affine@ @x@-coordinate from an elliptic curve point
 p'x :: (Field f) => Point i f -> Maybe f
-p'x = \case
-  O -> Nothing
-  A _ x _ -> Just x
-  p -> p'x . toA $ p
-{-# INLINE p'x #-}
+p'x =
+  \case
+    O       -> Nothing
+    A _ x _ -> Just x
+    p       -> p'x . toA $ p
 
+{-# INLINE p'x #-}
 -- | Get @Affine@ @x@-coordinate from an elliptic curve point
 p'y :: (Field f) => Point i f -> Maybe f
-p'y = \case
-  O -> Nothing
-  A _ _ y -> Just y
-  p -> p'y . toA $ p
+p'y =
+  \case
+    O       -> Nothing
+    A _ _ y -> Just y
+    p       -> p'y . toA $ p
+
 {-# INLINE p'y #-}
-
 p'curve :: Point i f -> Curve i f
-p'curve = \case
-  O -> die "Error, cannot specify a curve from O"
-  A c _ _ -> c
-  J c _ _ _ -> c
-{-# INLINE p'curve #-}
+p'curve =
+  \case
+    O         -> die "Error, cannot specify a curve from O"
+    A c _ _   -> c
+    J c _ _ _ -> c
 
+{-# INLINE p'curve #-}
 -- | Point scalar multiplication infix operator
 (~*) :: (Field f, Integral a) => Point i f -> a -> Point i f
 (~*) = mulp
-{-# INLINE (~*) #-}
 
+{-# INLINE (~*) #-}
 -- | Inner product or weighted sum with the given point and weight vectors
 -- For arbitrary points P, Q, and R on curve E(Fq),
 -- [P,Q,R] <:> [3,5,7] = (P *: 3) + (Q *: 5) + (R *: 7)
 (<~*>) :: (Field f, Integral a, NFData a) => [Point i f] -> [a] -> Point i f
 (<~*>) = (pfold (+) .) . pzip'with (~*)
-{-# INLINE (<~*>) #-}
 
+{-# INLINE (<~*>) #-}
 -- | Point addition
 addp :: (Field f) => Point i f -> Point i f -> Point i f
 addp a b = addjp (toJ a) (toJ b)
-{-# INLINE addp #-}
 
+{-# INLINE addp #-}
 -- | Point doubling
 dblp :: (Field f) => Point i f -> Point i f
 dblp p = dbljp (toJ p)
-{-# INLINE dblp #-}
 
+{-# INLINE dblp #-}
 -- | Flip point on x-axis
 invp :: (Field f) => Point i f -> Point i f
 invp (J curve x y z) = jp curve x (-y) z
-invp (A curve x y) = ap curve x (-y)
-invp O = O
-{-# INLINE invp #-}
+invp (A curve x y)   = ap curve x (-y)
+invp O               = O
 
+{-# INLINE invp #-}
 -- | Point scalar multiplication using 'double and add algorithm'
 mulp :: (Field f, Integral a) => Point i f -> a -> Point i f
 mulp p = go (toJ p)
@@ -270,21 +280,24 @@ mulp p = go (toJ p)
       | otherwise = p' |+| dbljp g
       where
         g = p' `mulp` (n `div` 2)
-{-# INLINE mulp #-}
 
+{-# INLINE mulp #-}
 -- | Point substraction
 subp :: (Field f) => Point i f -> Point i f -> Point i f
 subp p q = p |+| invp q
-{-# INLINE subp #-}
 
+{-# INLINE subp #-}
 -- | Point scalar mutiplication with curve generator point
 mulg :: (Field f, Integral a) => Curve i f -> a -> Point i f
-mulg curve n = g ~* n where g = c'g curve
-{-# INLINE mulg #-}
+mulg curve n = g ~* n
+  where
+    g = c'g curve
 
+{-# INLINE mulg #-}
 -- | Point multiplication using Strauss-Shamir method or Shamir's trick
 -- For those given (a,P) and (b,Q), efficiently evaluate (a *: P) +: (b *: Q)
-apbq'sum :: (Field f, Integral a) => (Point i f, a) -> (Point i f, a) -> Point i f
+apbq'sum ::
+     (Field f, Integral a) => (Point i f, a) -> (Point i f, a) -> Point i f
 apbq'sum (p, a) (q, b) = go (toJ p, a) (toJ q, b)
   where
     go (O, _) (O, _) = O
@@ -294,29 +307,31 @@ apbq'sum (p, a) (q, b) = go (toJ p, a) (toJ q, b)
       where
         r = p + q
         g 0 0 = O
-        g n m = case (odd n, odd m) of
-          (True, True) -> z + r
-          (True, False) -> z + p
-          (False, True) -> z + q
-          (False, False) -> z
+        g n m =
+          case (odd n, odd m) of
+            (True, True)   -> z + r
+            (True, False)  -> z + p
+            (False, True)  -> z + q
+            (False, False) -> z
           where
             z = dbljp $ g (n `div` 2) (m `div` 2)
-{-# INLINEABLE apbq'sum #-}
 
+{-# INLINEABLE apbq'sum #-}
 -- | i-th power of Frobenius endomorphism for points on elliptic curve
 -- pi_q: E(Fq) -> E(Fq)
 -- pi(x, y) -> (x^(q^i), y^(q^i))
 frobp :: (Field f, Integral a) => Point i f -> a -> Point i f
-frobp p i = case toJ p of
-  O -> O
-  J curve x y z ->
-    let frobx = frob x (toInteger i)
-        froby = frob y (toInteger i)
-        frobz = frob z (toInteger i)
-     in jp curve frobx froby frobz
-  _ -> die "Error, no such endomorphism"
-{-# INLINEABLE frobp #-}
+frobp p i =
+  case toJ p of
+    O -> O
+    J curve x y z ->
+      let frobx = frob x (toInteger i)
+          froby = frob y (toInteger i)
+          frobz = frob z (toInteger i)
+       in jp curve frobx froby frobz
+    _ -> die "Error, no such endomorphism"
 
+{-# INLINEABLE frobp #-}
 -- | Pick a random point from a given curve
 randp :: (Field f) => Curve i f -> IO (Point i f)
 randp curve = do
@@ -336,8 +351,8 @@ addap p1@(A curve x1 y1) p2@(A _ x2 y2)
     x3 = l * l - x1 - x2
     y3 = l * (x1 - x3) - y1
 addap _ _ = die "Error, invalid points used"
-{-# INLINEABLE addap #-}
 
+{-# INLINEABLE addap #-}
 -- | Point doubling (Affine Point)
 dblap :: (Field f) => Point i f -> Point i f
 dblap O = O
@@ -353,8 +368,8 @@ dblap (A curve x y)
     x' = l * l - x - x
     y' = l * (x - x') - y
 dblap _ = die "Error, invalid points used"
-{-# INLINEABLE dblap #-}
 
+{-# INLINEABLE dblap #-}
 -- | Point addition (Jacobian Point)
 -- The "add-2007-bl" Addition Explicit Formula: 2007 Bernstein–Lange
 -- Cost: 11M + 5S + 9add + 4*2
@@ -382,8 +397,8 @@ addjp p1@(J curve x1 y1 z1) p2@(J _ x2 y2 z2)
     e = one x1
     e2 = e + e
 addjp _ _ = die "Error, invalid points used"
-{-# INLINEABLE addjp #-}
 
+{-# INLINEABLE addjp #-}
 -- | Point doubling (Jacobian Point)
 -- The "dbl-2007-bl" Doubling Explicit Formula: 2007 Bernstein–Lange
 -- Cost: 1M + 8S + 1*a + 10add + 2*2 + 1*3 + 1*8
@@ -408,73 +423,70 @@ dbljp (J curve x1 y1 z1) = jp curve x3 y3 z3
     e4 = e2 + e2
     e8 = e4 + e4
 dbljp _ = die "Error, invalid points used"
-{-# INLINEABLE dbljp #-}
 
+{-# INLINEABLE dbljp #-}
 -- | Get @y@ coordinate of a @Affine@ point on curve from @x@
 -- Used Tonelli-Shanks method to calculate @Sqrt@ over @/GF(p)/@
 y'from'x :: (Integral f, Field f) => Curve i f -> f -> Maybe (f, f)
-y'from'x curve x = case a of
-  Just s -> Just . odd'even . fromIntegral $ s
-  Nothing -> Nothing
+y'from'x curve x =
+  case a of
+    Just s  -> Just . odd'even . fromIntegral $ s
+    Nothing -> Nothing
   where
-    odd'even o = if odd o then (o, negate o) else (negate o, o)
+    odd'even o =
+      if odd o
+        then (o, negate o)
+        else (negate o, o)
     a = sqrt'zpz (toInteger $ (x * x + c'a curve) * x + c'b curve) (char x)
-{-# INLINE y'from'x #-}
 
+{-# INLINE y'from'x #-}
 -- | Find all points on a given curve using brute-force method
-findp ::
-  (Integral f, Bounded f, Field f) =>
-  Curve i f ->
-  [Point i f]
+findp :: (Integral f, Bounded f, Field f) => Curve i f -> [Point i f]
 findp curve =
-  O
-    : ( nub
-          . concat
-          $ [ split (x, y, y')
-              | (x, Just (y, y')) <-
-                  (\x -> (x, y'from'x curve x)) <%> [minBound .. maxBound]
-            ]
-      )
+  O :
+  (nub . concat $
+   [ split (x, y, y')
+   | (x, Just (y, y')) <-
+       (\x -> (x, y'from'x curve x)) <%> [minBound .. maxBound]
+   ])
   where
     split (x, y, y')
       | y == zero y = [A curve x y]
       | otherwise = [A curve x y, A curve x y']
-{-# INLINEABLE findp #-}
 
+{-# INLINEABLE findp #-}
 instance (Show f) => Show (Curve i f) where
   show = c'name
 
 instance (Show f, Field f) => Show (Point i f) where
-  show = \case
-    O -> "O"
-    A _ x y -> unlines [show x, show y]
-    a -> show . toA $ a
+  show =
+    \case
+      O       -> "O"
+      A _ x y -> unlines [show x, show y]
+      a       -> show . toA $ a
 
 instance (Show f, Pretty f) => Pretty (Curve i f) where
   pretty Curve {..} =
     info
       12
       ["name", "char", "order", "cofactor", "a", "b", "Gx", "Gy"]
-      [ c'name,
-        pretty c'p,
-        pretty c'n,
-        pretty c'h,
-        pretty c'a,
-        pretty c'b,
-        pretty c'gx,
-        pretty c'gy
+      [ c'name
+      , pretty c'p
+      , pretty c'n
+      , pretty c'h
+      , pretty c'a
+      , pretty c'b
+      , pretty c'gx
+      , pretty c'gy
       ]
 
 instance (Show f, Pretty f, Field f) => Pretty (Point c f) where
-  pretty = \case
-    O -> "Point at Infinity"
-    A c x y ->
-      info
-        12
-        ["curve", "x", "y"]
-        [c'name c, pretty x, pretty y]
-    J c x y z ->
-      info
-        12
-        ["curve", "X", "Y", "Z"]
-        [c'name c, pretty x, pretty y, pretty z]
+  pretty =
+    \case
+      O -> "Point at Infinity"
+      A c x y -> info 12 ["curve", "x", "y"] [c'name c, pretty x, pretty y]
+      J c x y z ->
+        info
+          12
+          ["curve", "X", "Y", "Z"]
+          [c'name c, pretty x, pretty y, pretty z]

@@ -1,19 +1,19 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
 {-# OPTIONS -Wno-unused-top-binds #-}
-{-# LANGUAGE LambdaCase #-}
 
 module Nil.Pairing
-  ( miller'loop,
-    from'fq2,
-    pairing,
-    from'fq,
-  )
-where
+  ( miller'loop
+  , from'fq2
+  , pairing
+  , from'fq
+  ) where
 
-import Data.List (foldl')
-import Nil.Curve (Curve (..), Point (..), frobp, jp, toJ, (~*))
-import Nil.Field (Extensionfield (..), Field (..), Irreduciblepoly (..), ef, unip)
-import Nil.Utils (bits'from'int, die, tbop, (|+|))
+import           Data.List ( foldl' )
+
+import           Nil.Curve ( Curve (..), Point (..), frobp, jp, toJ, (~*) )
+import           Nil.Field ( Extensionfield (..), Field (..), ef, unip )
+import           Nil.Utils ( bits'from'int, die, tbop, (|+|) )
 
 {-
  BN curve can be parametrized as following:
@@ -39,7 +39,6 @@ import Nil.Utils (bits'from'int, die, tbop, (|+|))
                     l_[(6t+2)Q, pi_q(Q)](P) .
                     l_[(6t+2)Q + pi_q(Q), -pi_q^2(Q)](P) ) ^ (q^12 - 1)/r
 -}
-
 -- | 6t + 2
 loop'count :: Integer
 loop'count = 29793968203157093288
@@ -48,11 +47,11 @@ loop'count = 29793968203157093288
 -- https://eprint.iacr.org/2010/354.pdf
 -- https://eprint.iacr.org/2016/130.pdf
 miller'loop ::
-  (Field f) =>
-  Curve i (Extensionfield f i) ->
-  Point i (Extensionfield f i) ->
-  Point i (Extensionfield f i) ->
-  Extensionfield f i
+     (Field f)
+  => Curve i (Extensionfield f i)
+  -> Point i (Extensionfield f i)
+  -> Point i (Extensionfield f i)
+  -> Extensionfield f i
 miller'loop curve p q
   | p == O || q == O = one'
   | otherwise = final'exp curve . uncurry (/) . finalQ2 . finalQ1 $ loop
@@ -69,31 +68,32 @@ miller'loop curve p q
       | b == 1 = (f `emul` linefunc t q p, t |+| q)
       | otherwise = (f, t)
     emul = tbop (*)
-{-# INLINEABLE miller'loop #-}
 
+{-# INLINEABLE miller'loop #-}
 -- | A function f representing the line through P and Q
 -- Returns values from the function evaluation at point T: f(T)
 -- Separately update the numerator and the denominator of f(T),
 -- to avoid frequent reciprocal operations.
 linefunc ::
-  (Eq f, Fractional f, Field f) =>
-  Point i f ->
-  Point i f ->
-  Point i f ->
-  (f, f)
+     (Eq f, Fractional f, Field f)
+  => Point i f
+  -> Point i f
+  -> Point i f
+  -> (f, f)
 linefunc p q t = linefuncJ (toJ p) (toJ q) (toJ t)
-{-# INLINEABLE linefunc #-}
 
+{-# INLINEABLE linefunc #-}
 -- | LineFunction based on Affine coordinates
 linefuncA ::
-  (Eq f, Fractional f, Field f) =>
-  Point i f ->
-  Point i f ->
-  Point i f ->
-  (f, f)
+     (Eq f, Fractional f, Field f)
+  => Point i f
+  -> Point i f
+  -> Point i f
+  -> (f, f)
 linefuncA = go
   where
-    go x y z | x == O || y == O || z == O = die "Not defined at O"
+    go x y z
+      | x == O || y == O || z == O = die "Not defined at O"
     go (A _ x1 y1) (A _ x2 y2) (A _ xt yt)
       | x1 /= x2 = (lu * (xt - x1) - lb * (yt - y1), lb)
       | y1 == y2 = (lu' * (xt - x1) - lb' * (yt - y1), lb')
@@ -107,23 +107,23 @@ linefuncA = go
         e2 = e + e
         e3 = e2 + e
     go _ _ _ = die "Invalid points used: "
-{-# INLINEABLE linefuncA #-}
 
+{-# INLINEABLE linefuncA #-}
 -- | LineFunction based on Jacobian coordinates
 linefuncJ ::
-  (Eq f, Fractional f, Field f) =>
-  Point i f ->
-  Point i f ->
-  Point i f ->
-  (f, f)
+     (Eq f, Fractional f, Field f)
+  => Point i f
+  -> Point i f
+  -> Point i f
+  -> (f, f)
 linefuncJ = go
   where
-    go x y z | x == O || y == O || z == O = die "Not defined at O"
+    go x y z
+      | x == O || y == O || z == O = die "Not defined at O"
     go (J _ x1 y1 z1) (J _ x2 y2 z2) (J _ xt yt zt)
       | (x1 * z2 ^ (2 :: Int)) /= (x2 * z1 ^ (2 :: Int)) =
-          (lu * a * b - lb * d, lb * g)
-      | otherwise =
-          (lu' * a * b - lb' * d, lb' * g)
+        (lu * a * b - lb * d, lb * g)
+      | otherwise = (lu' * a * b - lb' * d, lb' * g)
       where
         lu = z1 ^ (3 :: Int) * y2 - z2 ^ (3 :: Int) * y1
         lb = z1 * z2 * (z1 ^ (2 :: Int) * x2 - z2 ^ (2 :: Int) * x1)
@@ -137,61 +137,64 @@ linefuncJ = go
         e2 = e + e
         e3 = e2 + e
     go _ _ _ = die "Invalid points used: "
-{-# INLINEABLE linefuncJ #-}
 
+{-# INLINEABLE linefuncJ #-}
 -- | Final exponentiation
 final'exp ::
-  (Field f) =>
-  Curve i (Extensionfield f i) ->
-  Extensionfield f i ->
-  Extensionfield f i
+     (Field f)
+  => Curve i (Extensionfield f i)
+  -> Extensionfield f i
+  -> Extensionfield f i
 final'exp curve f = f ^ expo
   where
     expo = (c'p curve ^ (12 :: Int) - 1) `div` c'n curve
-{-# INLINE final'exp #-}
 
+{-# INLINE final'exp #-}
 -- | Reduced Tate pairing using optimal Ate pairing
 -- P in G1 x Q in G2 -> e(P, Q)
 pairing ::
-  (Field f) =>
-  Curve i (Extensionfield f i) ->
-  Point j f ->
-  Point k (Extensionfield f k) ->
-  Extensionfield f i
+     (Field f)
+  => Curve i (Extensionfield f i)
+  -> Point j f
+  -> Point k (Extensionfield f k)
+  -> Extensionfield f i
 pairing curve p q = miller'loop curve (from'fq curve p) (from'fq2 curve q)
-{-# INLINE pairing #-}
 
+{-# INLINE pairing #-}
 -- | Construct a point on GT from a point on G1
 from'fq ::
-  (Field f) =>
-  Curve i (Extensionfield f i) ->
-  Point j f ->
-  Point i (Extensionfield f i)
-from'fq curve = \case
-  J _ x y z -> jp curve (lift [x]) (lift [y]) (lift [z])
-  O -> O
-  a -> from'fq curve (toJ a)
+     (Field f)
+  => Curve i (Extensionfield f i)
+  -> Point j f
+  -> Point i (Extensionfield f i)
+from'fq curve =
+  \case
+    J _ x y z -> jp curve (lift [x]) (lift [y]) (lift [z])
+    O         -> O
+    a         -> from'fq curve (toJ a)
   where
     lift = ef (unip . c'a $ curve)
-{-# INLINE from'fq #-}
 
+{-# INLINE from'fq #-}
 -- | Map G2, E(Fq^2) point to its sextic twist GT, E(Fq^12) point
 from'fq2 ::
-  (Field f) =>
-  Curve i (Extensionfield f i) ->
-  Point j (Extensionfield f j) ->
-  Point i (Extensionfield f i)
-from'fq2 curve = \case
-  O -> O
-  a@A {} -> from'fq2 curve (toJ a)
-  J _ (E _ x) (E _ y) (E _ z) ->
-    let [x0, x1] = x + [0, 0]
-        [y0, y1] = y + [0, 0]
-        [z0, z1] = z + [0, 0]
-        xt = [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * [0, 0, 1]
-        yt = [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * [0, 0, 0, 1]
-        zt = [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
-     in jp curve (lift xt) (lift yt) (lift zt)
+     (Field f)
+  => Curve i (Extensionfield f i)
+  -> Point j (Extensionfield f j)
+  -> Point i (Extensionfield f i)
+from'fq2 curve =
+  \case
+    O -> O
+    a@A {} -> from'fq2 curve (toJ a)
+    J _ (E _ x) (E _ y) (E _ z) ->
+      let [x0, x1] = x + [0, 0]
+          [y0, y1] = y + [0, 0]
+          [z0, z1] = z + [0, 0]
+          xt = [x0 - 9 * x1, 0, 0, 0, 0, 0, x1] * [0, 0, 1]
+          yt = [y0 - 9 * y1, 0, 0, 0, 0, 0, y1] * [0, 0, 0, 1]
+          zt = [z0 - 9 * z1, 0, 0, 0, 0, 0, z1]
+       in jp curve (lift xt) (lift yt) (lift zt)
   where
     lift = ef (unip . c'a $ curve)
+
 {-# INLINE from'fq2 #-}

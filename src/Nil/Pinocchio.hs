@@ -1,16 +1,16 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# HLINT ignore "Eta reduce" #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
+{-# HLINT ignore "Eta reduce" #-}
 module Nil.Pinocchio where
 
 -- ( EvaluationKey(..)
@@ -26,50 +26,36 @@ module Nil.Pinocchio where
 -- , zktest
 -- , decode'file
 -- ) where
+import           Control.DeepSeq      ( NFData )
+import           Control.Monad        ( when )
+import           Control.Parallel     ( par, pseq )
 
-import Control.DeepSeq (NFData)
-import Control.Monad (when)
-import Control.Parallel (par, pseq)
-import qualified Data.Aeson as J
-import Data.Bifunctor (second)
-import qualified Data.ByteString as B
+import qualified Data.Aeson           as J
+import           Data.Bifunctor       ( second )
+import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as L
-import Data.Either (fromRight)
-import Data.Functor ((<&>))
-import Data.Map (Map, toList)
-import Data.Proxy
-import Data.Store (PeekException (..), Store, decode)
-import GHC.Generics (Generic)
-import Nil.Circuit
-import Nil.Curve (Curve, Point, c'g, toA, (<~*>), (~*))
-import Nil.Ecdata (BN254, BN254'G2, BN254'GT, Fr, G1, G2, bn254'g1, bn254'gt, g1, g2)
-import Nil.Eval (statement, vec'fromWmap, wire'vals, wmap'fromList)
-import Nil.Lexer (tokenize)
-import Nil.Pairing (pairing)
-import Nil.Parser (parse)
-import Nil.Poly ((|=))
-import Nil.Qap (QAP (..), qap'from'circuit, qap'quot)
-import Nil.Utils
-  ( Pretty (..),
-    bytes'from'str,
-    die,
-    info'io,
-    int'from'bytes,
-    int'from'str,
-    ranf,
-    slice,
-    stderr,
-    (<%>),
-    (|&|),
-    (|*|),
-    (|+|),
-    (|/|),
-    (|=|),
-  )
-import Text.Read (readMaybe)
+import           Data.Map             ( Map, toList )
+import           Data.Store           ( PeekException (..), Store, decode )
+
+import           GHC.Generics         ( Generic )
+
+import           Nil.Circuit
+import           Nil.Curve            ( Curve, Point, toA, (<~*>), (~*) )
+import           Nil.Ecdata           ( BN254, BN254'G2, Fr, G1, G2, bn254'g1,
+                                        bn254'gt, g1, g2 )
+import           Nil.Eval             ( statement, vec'fromWmap, wire'vals,
+                                        wmap'fromList )
+import           Nil.Pairing          ( pairing )
+import           Nil.Poly             ( (|=) )
+import           Nil.Qap              ( QAP (..), qap'from'circuit, qap'quot )
+import           Nil.Utils            ( Pretty (..), die, info'io, int'from'str,
+                                        ranf, slice, stderr, (<%>), (|&|),
+                                        (|*|), (|+|), (|/|), (|=|) )
+
+import           Text.Read            ( readMaybe )
 
 -- | zk-SNARKs based on Pinocchio protocol (https://eprint.iacr.org/2013/279.pdf)
--- @
+--
 -- +-----------+----------------------------------------------------+--------+
 -- | CRS       | Common Reference String:                           | randos |
 -- |           | { s, alpha, beta-v beta-w, beta-y, gamma }         |        |
@@ -122,54 +108,56 @@ import Text.Read (readMaybe)
 -- +-----------+----------------------------------------------------+--------+
 -- | E(s^i)    | E(0) + E(s) + .. + E(s^d)                          | point  |
 -- +-----------+----------------------------------------------------+--------+
--- @
-
+--
 -- | Evaluation Key or Proving key
-data EvaluationKey = EKey
-  { eEvj :: [Point BN254 G1], -- [ E(Vj(s)) ]
-    eEwk :: [Point BN254 G1], -- [ E(Wk(s)) ]
-    eE'wk :: [Point BN254'G2 G2], -- [ E'(Wk(s)) ]
-    eEyk :: [Point BN254 G1], -- [ E(Yk(s)) ]
-    eEavj :: [Point BN254 G1], -- [ E(a * Vj(s)) ]
-    eEawk :: [Point BN254 G1], -- [ E(a * Wk(s)) ]
-    eEayk :: [Point BN254 G1], -- [ E(a * Yk(s)) ]
-    eEbvvj :: [Point BN254 G1], -- [ E(bv * Vj(s)) ]
-    eEbwwk :: [Point BN254 G1], -- [ E(bw * Wk(s)) ]
-    eEbyyk :: [Point BN254 G1], -- [ E(by * Yk(s)) ]
-    eEsi :: [Point BN254 G1], -- [ E(s^i) ]
-    eEasi :: [Point BN254 G1] -- [ E(a * s^i) ]
-  }
+data EvaluationKey =
+  EKey
+    { eEvj   :: [Point BN254 G1] -- [ E(Vj(s)) ]
+    , eEwk   :: [Point BN254 G1] -- [ E(Wk(s)) ]
+    , eE'wk  :: [Point BN254'G2 G2] -- [ E'(Wk(s)) ]
+    , eEyk   :: [Point BN254 G1] -- [ E(Yk(s)) ]
+    , eEavj  :: [Point BN254 G1] -- [ E(a * Vj(s)) ]
+    , eEawk  :: [Point BN254 G1] -- [ E(a * Wk(s)) ]
+    , eEayk  :: [Point BN254 G1] -- [ E(a * Yk(s)) ]
+    , eEbvvj :: [Point BN254 G1] -- [ E(bv * Vj(s)) ]
+    , eEbwwk :: [Point BN254 G1] -- [ E(bw * Wk(s)) ]
+    , eEbyyk :: [Point BN254 G1] -- [ E(by * Yk(s)) ]
+    , eEsi   :: [Point BN254 G1] -- [ E(s^i) ]
+    , eEasi  :: [Point BN254 G1] -- [ E(a * s^i) ]
+    }
   deriving (Eq, Show, Generic, NFData)
 
 -- | Verification Key
-data VerificationKey = VKey
-  { vE1 :: Point BN254'G2 G2, -- E(1)
-    vEa :: Point BN254'G2 G2, -- E(a)
-    vEr :: Point BN254'G2 G2, -- E(r)
-    vErbv :: Point BN254'G2 G2, -- E(r * bv)
-    vErbw :: Point BN254'G2 G2, -- E(r * bw)
-    vErby :: Point BN254'G2 G2, -- E(r * by)
-    vEt :: Point BN254'G2 G2, -- E(t(s))
-    vEv0 :: Point BN254 G1, -- E(V0(s))
-    vEw0 :: Point BN254'G2 G2, -- E(W0(s))
-    vEy0 :: Point BN254 G1, -- E(Y0(s))
-    vEvio :: [Point BN254 G1] -- [ E(Vio(s)) ]
-  }
+data VerificationKey =
+  VKey
+    { vE1   :: Point BN254'G2 G2 -- E(1)
+    , vEa   :: Point BN254'G2 G2 -- E(a)
+    , vEr   :: Point BN254'G2 G2 -- E(r)
+    , vErbv :: Point BN254'G2 G2 -- E(r * bv)
+    , vErbw :: Point BN254'G2 G2 -- E(r * bw)
+    , vErby :: Point BN254'G2 G2 -- E(r * by)
+    , vEt   :: Point BN254'G2 G2 -- E(t(s))
+    , vEv0  :: Point BN254 G1 -- E(V0(s))
+    , vEw0  :: Point BN254'G2 G2 -- E(W0(s))
+    , vEy0  :: Point BN254 G1 -- E(Y0(s))
+    , vEvio :: [Point BN254 G1] -- [ E(Vio(s)) ]
+    }
   deriving (Eq, Show, Generic, NFData)
 
 -- | Proof
-data Proof = Proof
-  { pEvJ :: Point BN254 G1, -- E(Vj(s))
-    pEw :: Point BN254 G1, -- E(W(s))
-    pE'w :: Point BN254'G2 G2, -- E'(W(s))
-    pEy :: Point BN254 G1, -- E(Y(s))
-    pEh :: Point BN254 G1, -- E(h(s))
-    pEavJ :: Point BN254 G1, -- E(a * Vj(s))
-    pEaw :: Point BN254 G1, -- E(a * W(s))
-    pEay :: Point BN254 G1, -- E(a * Y(s))
-    pEah :: Point BN254 G1, -- E(a * h(s))
-    pEbvwy :: Point BN254 G1 -- E(bv * V(s) + bw * W(s) + by * Y(s))
-  }
+data Proof =
+  Proof
+    { pEvJ   :: Point BN254 G1 -- E(Vj(s))
+    , pEw    :: Point BN254 G1 -- E(W(s))
+    , pE'w   :: Point BN254'G2 G2 -- E'(W(s))
+    , pEy    :: Point BN254 G1 -- E(Y(s))
+    , pEh    :: Point BN254 G1 -- E(h(s))
+    , pEavJ  :: Point BN254 G1 -- E(a * Vj(s))
+    , pEaw   :: Point BN254 G1 -- E(a * W(s))
+    , pEay   :: Point BN254 G1 -- E(a * Y(s))
+    , pEah   :: Point BN254 G1 -- E(a * h(s))
+    , pEbvwy :: Point BN254 G1 -- E(bv * V(s) + bw * W(s) + by * Y(s))
+    }
   deriving (Eq, Show, Generic, NFData)
 
 -- | Set of random numbers used during setup phase
@@ -194,8 +182,8 @@ toxicwaste = do
   by <- ranf
   r <- ranf
   pure (s, a, bv, bw, by, r)
-{-# INLINE toxicwaste #-}
 
+{-# INLINE toxicwaste #-}
 -- | Default elliptic curve of this protocol
 def'curve :: Curve BN254 G1
 def'curve = bn254'g1
@@ -205,59 +193,33 @@ zksetup :: QAP Fr -> ToxicWastes -> (EvaluationKey, VerificationKey)
 zksetup QAP {..} (s, a, bv, bw, by, r) = ekey `par` vkey `pseq` (ekey, vkey)
   where
     ekey =
-      eEvj `par`
-        eEwk `par`
-          eE'wk `par`
-            eEyk `par`
-              eEavj `par`
-                eEawk `par`
-                  eEayk `par`
-                    eEbvvj `par`
-                      eEbwwk `par`
-                        eEbyyk `par`
-                          eEsi `par`
-                            eEasi `pseq`
-                              EKey
-                                { eEvj,
-                                  eEwk,
-                                  eE'wk,
-                                  eEyk,
-                                  eEavj,
-                                  eEawk,
-                                  eEayk,
-                                  eEbvvj,
-                                  eEbwwk,
-                                  eEbyyk,
-                                  eEsi,
-                                  eEasi
-                                }
-
+      eEvj `par` eEwk `par` eE'wk `par` eEyk `par` eEavj `par` eEawk `par` eEayk `par`
+      eEbvvj `par`
+      eEbwwk `par`
+      eEbyyk `par`
+      eEsi `par`
+      eEasi `pseq`
+      EKey
+        { eEvj
+        , eEwk
+        , eE'wk
+        , eEyk
+        , eEavj
+        , eEawk
+        , eEayk
+        , eEbvvj
+        , eEbwwk
+        , eEbyyk
+        , eEsi
+        , eEasi
+        }
     vkey =
-      vE1 `par`
-        vEa `par`
-          vEr `par`
-            vErbv `par`
-              vErbw `par`
-                vErby `par`
-                  vEt `par`
-                    vEv0 `par`
-                      vEw0 `par`
-                        vEy0 `par`
-                          vEvio `pseq`
-                            VKey
-                              { vE1,
-                                vEa,
-                                vEr,
-                                vErbv,
-                                vErbw,
-                                vErby,
-                                vEt,
-                                vEv0,
-                                vEw0,
-                                vEy0,
-                                vEvio
-                              }
-
+      vE1 `par` vEa `par` vEr `par` vErbv `par` vErbw `par` vErby `par` vEt `par`
+      vEv0 `par`
+      vEw0 `par`
+      vEy0 `par`
+      vEvio `pseq`
+      VKey {vE1, vEa, vEr, vErbv, vErbw, vErby, vEt, vEv0, vEw0, vEy0, vEvio}
     eEvj = lift'G1 <%> vj -- [ E(Vj(s)) ]
     eEwk = lift'G1 <%> wk -- [ E(Wk(s)) ]
     eE'wk = lift'G2 <%> wk -- [ E'(Wk(s)) ]
@@ -295,36 +257,18 @@ zksetup QAP {..} (s, a, bv, bw, by, r) = ekey `par` vkey `pseq` (ekey, vkey)
     n = qap'num'inst -- # of instance
     m = length qap'V -- 1 + n + (# of witness) + d
     d = length (head qap'V) -- # of gates
-{-# INLINEABLE zksetup #-}
 
+{-# INLINEABLE zksetup #-}
 -- | Generate zkproof
 zkprove :: QAP Fr -> EvaluationKey -> [Fr] -> Proof
 zkprove qap@QAP {..} EKey {..} witness = proof
   where
     proof =
-      pEvJ `par`
-        pEw `par`
-          pE'w `par`
-            pEy `par`
-              pEh `par`
-                pEavJ `par`
-                  pEaw `par`
-                    pEay `par`
-                      pEah `par`
-                        pEbvwy `pseq`
-                          Proof
-                            { pEvJ,
-                              pEw,
-                              pE'w,
-                              pEy,
-                              pEh,
-                              pEavJ,
-                              pEaw,
-                              pEay,
-                              pEah,
-                              pEbvwy
-                            }
-
+      pEvJ `par` pEw `par` pE'w `par` pEy `par` pEh `par` pEavJ `par` pEaw `par`
+      pEay `par`
+      pEah `par`
+      pEbvwy `pseq`
+      Proof {pEvJ, pEw, pE'w, pEy, pEh, pEavJ, pEaw, pEay, pEah, pEbvwy}
     pEvJ = toA $ eEvj <~*> witJ -- E(Vj(s))
     pEw = toA $ eEwk <~*> witK -- E(W(s))
     pE'w = toA $ eE'wk <~*> witK -- E'(W(s))
@@ -335,59 +279,52 @@ zkprove qap@QAP {..} EKey {..} witness = proof
     pEay = toA $ eEayk <~*> witK -- E(a * Y(s))
     pEah = toA $ eEasi <~*> h -- E(a * h(s))
     pEbvwy =
-      toA $
-        (eEbvvj <~*> witJ)
-          |+| (eEbwwk <~*> witK)
-          |+| (eEbyyk <~*> witK) -- E(bv * Vj(s) + bw * W(s) + by * Y(s))
+      toA $ (eEbvvj <~*> witJ) |+| (eEbwwk <~*> witK) |+|
+      (eEbyyk <~*> witK) -- E(bv * Vj(s) + bw * W(s) + by * Y(s))
     h = qap'quot qap witness -- h(x)
     n = qap'num'inst -- number of instances
     m = length qap'V -- 1 + n + (# of witness) + d
     witJ = witness `slice` (n + 1, m - 1) -- witness[n+1:]
     witK = witness `slice` (1, m - 1) -- witness[1:]
-{-# INLINEABLE zkprove #-}
 
+{-# INLINEABLE zkprove #-}
 -- | Verify the given zkproof
 zkverify :: Proof -> VerificationKey -> [Fr] -> Bool
 zkverify Proof {..} VKey {..} instances = checkA |&| checkB |&| checkD
-  where
     -- checkA: check alpha-term proof (8-pairings)
     -- e( E(Vj(s)), E(a) ) == e( E(a * Vj(s)), E(1) )
     -- e( E(W(s)),  E(a) ) == e( E(a * W(s)),  E(1) )
     -- e( E(Y(s)),  E(a) ) == e( E(a * Y(s)),  E(1) )
     -- e( E(h(s)),  E(a) ) == e( E(a * h(s)),  E(1) )
+  where
     checkA =
-      (e pEvJ vEa |=| e pEavJ vE1)
-        |&| (e pEw vEa |=| e pEaw vE1)
-        |&| (e pEy vEa |=| e pEay vE1)
-        |&| (e pEh vEa |=| e pEah vE1)
-
+      (e pEvJ vEa |=| e pEavJ vE1) |&| (e pEw vEa |=| e pEaw vE1) |&|
+      (e pEy vEa |=| e pEay vE1) |&|
+      (e pEh vEa |=| e pEah vE1)
     -- checkB: check beta-term proof (4-pairings)
     -- e( E(bv * Vj(s) + bw * W(s) + by * Y(s)), E(r) )
     -- == [ e( E(Vj(s)), E(r * bv) )
     --    * e( E(W(s)),  E(r * bw) )
     --    * e( E(Y(s)),  E(r * by) ) ]
-    checkB =
-      e pEbvwy vEr |=| (e pEvJ vErbv |*| e pEw vErbw |*| e pEy vErby)
-
+    checkB = e pEbvwy vEr |=| (e pEvJ vErbv |*| e pEw vErbw |*| e pEy vErby)
     -- checkD: check QAP divisibility (3-pairings)
     -- e( E(V(s)), E(W(s)) ) / e( E(Y(s)), G ) == e( E(h(s)), E(t(s)) )
     checkD = (e sumV sumW |/| e sumY vE1) |=| e pEh vEt
-
     uEvio = vEvio <~*> instances -- E(Vio(s))
     sumV = vEv0 |+| uEvio |+| pEvJ -- E(V(s))
     sumW = vEw0 |+| pE'w -- E(W(s))
     sumY = vEy0 |+| pEy -- E(Y(s))
     e = pairing bn254'gt
-{-# INLINEABLE zkverify #-}
 
+{-# INLINEABLE zkverify #-}
 -- | Examine the prepared zero-knowledge suite
 zktest :: Bool -> String -> Wmap Fr -> Wmap Fr -> IO Bool
-zktest verbose language witnesses instances = do
+zktest verbose language witnesses instances
   -- Language
+ = do
   when verbose $ do
     stderr mempty
     stderr language
-
   -- circuit / Qap
   let circuit = compile'language language
       qap = qap'from'circuit circuit
@@ -396,14 +333,12 @@ zktest verbose language witnesses instances = do
     stderr (pretty circuit)
     stderr mempty
     stderr (pretty qap)
-
   -- zk-setup
   when verbose $ do
     stderr mempty
     stderr "Creating Evaluation/Verification keys: zk-setup..."
   randos <- toxicwaste
   let (ekey, vkey) = zksetup qap randos
-
   -- zk-prove
   when verbose $ do
     stderr mempty
@@ -412,7 +347,6 @@ zktest verbose language witnesses instances = do
       vec'wit = wire'vals bn254'g1 witnesses circuit
       proof = zkprove qap ekey vec'wit
   when verbose $ info'io 18 ["Prover returns"] [show out]
-
   -- zk-verify
   let verified = zkverify proof vkey (vec'fromWmap instances)
   when verbose $ do
@@ -423,23 +357,25 @@ zktest verbose language witnesses instances = do
       ["Statement", "Verified"]
       [show . w'val $ instances ~> "return", show verified]
   pure verified
+
 {-# INLINEABLE zktest #-}
-
 -----------------------
-
 -- | Helpers
-decode'file :: forall proxy a. (Store a) => proxy a -> FilePath -> IO a
-decode'file _ f =
-  do
-    bytes <- B.readFile f
-    let decoded = decode bytes :: Either PeekException a
-    case decoded of
-      Right a -> pure a
-      Left e ->
-        die . unlines $
-          [ "Error, failed to decode file: " ++ f,
-            "Found invalid bytes at offset " ++ show (peekExBytesFromEnd e)
-          ]
+decode'file ::
+     forall proxy a. (Store a)
+  => proxy a
+  -> FilePath
+  -> IO a
+decode'file _ f = do
+  bytes <- B.readFile f
+  let decoded = decode bytes :: Either PeekException a
+  case decoded of
+    Right a -> pure a
+    Left e ->
+      die . unlines $
+      [ "Error, failed to decode file: " ++ f
+      , "Found invalid bytes at offset " ++ show (peekExBytesFromEnd e)
+      ]
 
 read'input :: (Num a) => FilePath -> IO (Wmap a)
 read'input f = do
@@ -448,20 +384,19 @@ read'input f = do
   case decoded of
     Right inputs ->
       pure . wmap'fromList $ second (fromIntegral . int) <$> toList inputs
-    Left e ->
-      die . unlines $ ["Error, failed to read inputs from: " ++ f, e]
+    Left e -> die . unlines $ ["Error, failed to read inputs from: " ++ f, e]
 
 int :: String -> Integer
-int str = case readMaybe str of
-  Just a -> a
-  _ -> int'from'str str
+int str =
+  case readMaybe str of
+    Just a -> a
+    _      -> int'from'str str
 
 decode'bytes ::
-  forall proxy a.
-  (Store a) =>
-  proxy a ->
-  B.ByteString ->
-  Either PeekException a
+     forall proxy a. (Store a)
+  => proxy a
+  -> B.ByteString
+  -> Either PeekException a
 decode'bytes _ bytes = decode bytes
 
 instance Pretty EvaluationKey

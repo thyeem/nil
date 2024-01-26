@@ -5,17 +5,9 @@ path := ${HOME}/.local/bin
 build:
 	stack build
 
-.PHONY: release
-release:
-	stack build $(ghc) $(opts) $(release)
-
 .PHONY: install
 install:
-	make release
-	make deploy
-
-.PHONY: deploy
-deploy:
+	make build
 	cp -f $(shell stack path --local-install-root)/bin/$(bin) app
 	/usr/bin/strip app/$(bin)
 	mkdir -p $(path)
@@ -27,17 +19,9 @@ clean:
 	git clean -xdf
 	stack clean --full
 
-.PHONY: test
-test:
-	stack test
-
 .PHONY: doc
 doc:
-	stack haddock
-
-.PHONY: opendoc
-opendoc:
-	open $(shell /usr/bin/find dist-newstyle -name "index.html")
+	stack haddock --open $(bin)
 
 .PHONY: guide
 guide:
